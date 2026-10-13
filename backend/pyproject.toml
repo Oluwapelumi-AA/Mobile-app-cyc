@@ -12,6 +12,10 @@ dependencies = [
     "fastapi>=0.115,<1.0",
     "uvicorn[standard]>=0.30,<1.0",
     "pydantic-settings>=2.6,<3.0",
+    # ISO 639 / 3166 / 15924 data for language, country and script validation.
+    "pycountry>=24.6",
+    # IANA tz database for zoneinfo; Windows has no system copy.
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,9 @@
 
 from fastapi import FastAPI
 
+from app.api.v1.router import api_router
+from app.core.config import settings
+
 app = FastAPI(
     title="The Light App API",
     description="Backend API for the CYC Christian community platform.",
@@ -23,3 +26,6 @@ async def root():
         "message": "Welcome to The Light App API",
         "docs": "/docs",
     }
+
+
+app.include_router(api_router, prefix=settings.api_v1_prefix)
