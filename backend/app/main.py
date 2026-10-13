@@ -8,7 +8,19 @@ app = FastAPI(
 )
 
 
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "message": "Welcome to The Light App API",
+        "docs": "/docs",
+    }
+
+
 @app.get("/health", tags=["Health"])
-def health_check():
+async def health_check():
     """Return the API health status."""
-    return {"status": "ok"}
+    return {
+        "status": "healthy",
+        "service": "the-light-app-api",
+        "version": "0.1.0",
+    }
