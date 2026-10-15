@@ -5,7 +5,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core.security import hash_password
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    hash_password,
+)
 from app.db.session import Base, get_db
 from app.main import app
 from app.models.user import User
@@ -155,3 +159,79 @@ def test_login_rejects_inactive_account(client, test_db):
 
     assert response.status_code == 403
     assert response.json()["detail"] == "This account is inactive"
+
+def test_me_returns_authenticated_user(client, test_db):
+    user = User(
+        email="protected@example.com",
+        password_hash=hash_password("Strong-Password-123!"),
+    )
+    test_db.add(user)
+    test_db.commit()
+    test_db.refresh(user)
+
+    token = create_access_token(str(user.id))
+
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == str(user.id)
+    assert data["email"] == "protected@example.com"
+    assert "password_hash" not in data
+
+
+def test_me_rejects_missing_token(client):
+    response = client.get("/api/v1/auth/me")
+
+    assert response.status_code == 401
+
+
+def test_me_rejects_invalid_token(client):
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": "Bearer invalid.token.value"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_me_rejects_refresh_token(client, test_db):
+    user = User(
+        email="refresh@example.com",
+        password_hash=hash_password("Strong-Password-123!"),
+    )
+    test_db.add(user)
+    test_db.commit()
+    test_db.refresh(user)
+
+    token = create_refresh_token(str(user.id))
+
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_me_rejects_inactive_user(client, test_db):
+    user = User(
+        email="inactive-protected@example.com",
+        password_hash=hash_password("Strong-Password-123!"),
+        is_active=False,
+    )
+    test_db.add(user)
+    test_db.commit()
+    test_db.refresh(user)
+
+    token = create_access_token(str(user.id))
+
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
