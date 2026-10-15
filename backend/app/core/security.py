@@ -1,6 +1,8 @@
 
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Literal
+from uuid import UUID
 
 import jwt
 from pwdlib import PasswordHash
@@ -30,6 +32,11 @@ def verify_password(
         return False
 
     return password_hash.verify(plain_password, stored_hash)
+
+
+def hash_refresh_token(token: str) -> str:
+    """Hash a refresh token before storing it in the database."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _validate_secret_key() -> None:
@@ -64,8 +71,11 @@ def create_access_token(subject: str) -> str:
     )
 
 
-def create_refresh_token(subject: str) -> str:
-    """Create a longer-lived JWT refresh token."""
+def create_refresh_token(
+    subject: str,
+    session_id: UUID,
+) -> str:
+    """Create a refresh token linked to a persistent session."""
     _validate_secret_key()
 
     if not subject.strip():
@@ -78,6 +88,7 @@ def create_refresh_token(subject: str) -> str:
     payload = {
         "sub": subject,
         "type": "refresh",
+        "sid": str(session_id),
         "exp": expires_at,
     }
 
@@ -109,5 +120,17 @@ def decode_token(
 
     if payload.get("type") != expected_type:
         raise jwt.InvalidTokenError("Incorrect token type")
+
+    if expected_type == "refresh":
+        session_id = payload.get("sid")
+        if not isinstance(session_id, str):
+            raise jwt.InvalidTokenError("Missing refresh session ID")
+
+        try:
+            UUID(session_id)
+        except ValueError:
+            raise jwt.InvalidTokenError(
+                "Invalid refresh session ID"
+            ) from None
 
     return payload

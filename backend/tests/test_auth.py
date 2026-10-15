@@ -1,3 +1,5 @@
+import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +14,7 @@ from app.core.security import (
 )
 from app.db.session import Base, get_db
 from app.main import app
+from app.models.refresh_session import RefreshSession
 from app.models.user import User
 
 
@@ -207,7 +210,7 @@ def test_me_rejects_refresh_token(client, test_db):
     test_db.commit()
     test_db.refresh(user)
 
-    token = create_refresh_token(str(user.id))
+    token = create_refresh_token(str(user.id), uuid.uuid4())
 
     response = client.get(
         "/api/v1/auth/me",
@@ -232,6 +235,162 @@ def test_me_rejects_inactive_user(client, test_db):
     response = client.get(
         "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+
+
+
+
+
+
+def test_refresh_rotates_tokens(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "rotate@example.com",
+            "password": "Strong-Password-123!",
+        },
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "rotate@example.com",
+            "password": "Strong-Password-123!",
+        },
+    )
+    old_refresh = login_response.json()["refresh_token"]
+
+    response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": old_refresh},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["access_token"]
+    assert data["refresh_token"]
+    assert data["refresh_token"] != old_refresh
+
+
+def test_refresh_rejects_reuse_of_rotated_token(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "reuse@example.com",
+            "password": "Strong-Password-123!",
+        },
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "reuse@example.com",
+            "password": "Strong-Password-123!",
+        },
+    )
+    old_refresh = login_response.json()["refresh_token"]
+
+    first_refresh = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": old_refresh},
+    )
+    assert first_refresh.status_code == 200
+
+    replay_response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": old_refresh},
+    )
+
+    assert replay_response.status_code == 401
+
+
+def test_logout_revokes_refresh_token(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "logout@example.com",
+            "password": "Strong-Password-123!",
+        },
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "logout@example.com",
+            "password": "Strong-Password-123!",
+        },
+    )
+    refresh_token = login_response.json()["refresh_token"]
+
+    logout_response = client.post(
+        "/api/v1/auth/logout",
+        json={"refresh_token": refresh_token},
+    )
+
+    assert logout_response.status_code == 204
+
+    refresh_response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    assert refresh_response.status_code == 401
+
+
+def test_refresh_rejects_expired_session(client, test_db):
+    user = User(
+        email="expired-session@example.com",
+        password_hash=hash_password("Strong-Password-123!"),
+    )
+    test_db.add(user)
+    test_db.commit()
+    test_db.refresh(user)
+
+    session_id = uuid.uuid4()
+    from app.core.security import create_refresh_token, hash_refresh_token
+
+    token = create_refresh_token(str(user.id), session_id)
+    session = RefreshSession(
+        id=session_id,
+        user_id=user.id,
+        token_hash=hash_refresh_token(token),
+        expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+    test_db.add(session)
+    test_db.commit()
+
+    response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": token},
+    )
+
+    assert response.status_code == 401
+
+
+def test_refresh_rejects_inactive_user(client, test_db):
+    user = User(
+        email="inactive-refresh@example.com",
+        password_hash=hash_password("Strong-Password-123!"),
+        is_active=False,
+    )
+    test_db.add(user)
+    test_db.commit()
+    test_db.refresh(user)
+
+    session_id = uuid.uuid4()
+    from app.core.security import create_refresh_token, hash_refresh_token
+
+    token = create_refresh_token(str(user.id), session_id)
+    session = RefreshSession(
+        id=session_id,
+        user_id=user.id,
+        token_hash=hash_refresh_token(token),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+    )
+    test_db.add(session)
+    test_db.commit()
+
+    response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": token},
     )
 
     assert response.status_code == 401
