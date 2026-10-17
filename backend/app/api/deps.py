@@ -16,13 +16,11 @@ from app.services.avatar_storage import (
     UnconfiguredAvatarStorage,
 )
 from app.services.profiles import (
-    InMemoryProfileRepository,
     ProfileRepository,
+    SqlAlchemyProfileRepository,
 )
 
 bearer_scheme = HTTPBearer(auto_error=False)
-
-_profile_repository = InMemoryProfileRepository()
 
 
 def get_current_user(
@@ -69,9 +67,9 @@ def get_current_user_id(
     return current_user.id
 
 
-def get_profile_repository() -> ProfileRepository:
-    """Provide the profile repository to API dependencies."""
-    return _profile_repository
+def get_profile_repository(db: Session = Depends(get_db)) -> ProfileRepository:
+    """Provide the database-backed profile repository to API dependencies."""
+    return SqlAlchemyProfileRepository(db)
 
 
 def get_avatar_storage() -> AvatarStorage:

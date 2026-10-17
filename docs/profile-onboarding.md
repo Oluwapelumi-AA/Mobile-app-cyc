@@ -1,9 +1,10 @@
 # Profiles and onboarding
 
 Status: schemas, validation, onboarding rules, API routes and the avatar
-storage interface are implemented and tested. Persistence is an in-memory
-stand-in and auth is a placeholder dependency, both waiting on the shared
-identity contract below. Avatar uploads do not work yet: no storage provider
+storage interface are implemented and tested. Profiles are stored in the
+`user_profiles` table (migration `7b3c9e2a1f40`, after Elijah's reactions
+migration) and the routes use Elijah's bearer-token auth through
+`get_current_user_id()`. Avatar uploads do not work yet: no storage provider
 is configured, so those endpoints return 503.
 
 ## Profile fields
@@ -70,9 +71,10 @@ the profile. A provider adapter implements `AvatarStorage` in
 variables. Still to decide: provider, public vs signed URLs, image resizing,
 moderation, and deleting old objects.
 
-## Shared identity contract (to agree with Elijah)
+## Shared identity contract (agreed with Elijah, 2026-10-17)
 
-Proposal:
+As implemented: `users` holds `account_role` as user/moderator/admin and
+`is_active`/`is_verified` flags; the rest matches this proposal.
 
 1. **Primary key:** `users.id` is a UUID (`UserId` in `app/core/identity.py`).
 2. **`User` (auth owns):** id, email, password hash, email verified flag,

@@ -17,6 +17,8 @@ dependencies = [
     "alembic>=1.13,<2.0",
     "pwdlib[argon2]>=0.2,<1.0",
     "PyJWT>=2.9,<3.0",
+    # Required by pydantic EmailStr in the auth schemas.
+    "email-validator>=2.0,<3.0",
     "pycountry>=24.6",
     "tzdata>=2024.1",
 ]
