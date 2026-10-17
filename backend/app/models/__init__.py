@@ -5,6 +5,12 @@ from app.models.community import (
     CommunityRole,
     CommunityVisibility,
 )
+from app.models.event import (
+    Event,
+    EventRegistration,
+    EventStatus,
+    RegistrationStatus,
+)
 from app.models.post import Comment, Post
 from app.models.reaction import Reaction
 from app.models.refresh_session import RefreshSession
@@ -19,8 +25,12 @@ __all__ = [
     "CommunityMembership",
     "CommunityRole",
     "CommunityVisibility",
+    "Event",
+    "EventRegistration",
+    "EventStatus",
     "Post",
     "Reaction",
+    "RegistrationStatus",
     "RefreshSession",
     "User",
     "UserProfile",
