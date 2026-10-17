@@ -8,13 +8,16 @@ name = "the-light-app-api"
 version = "0.1.0"
 description = "Backend API for The Light App — CYC"
 requires-python = ">=3.11"
+
 dependencies = [
     "fastapi>=0.115,<1.0",
     "uvicorn[standard]>=0.30,<1.0",
     "pydantic-settings>=2.6,<3.0",
-    # ISO 639 / 3166 / 15924 data for language, country and script validation.
+    "sqlalchemy>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    "pwdlib[argon2]>=0.2,<1.0",
+    "PyJWT>=2.9,<3.0",
     "pycountry>=24.6",
-    # IANA tz database for zoneinfo; Windows has no system copy.
     "tzdata>=2024.1",
 ]
 

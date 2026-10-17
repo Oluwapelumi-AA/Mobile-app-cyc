@@ -1,7 +1,22 @@
+
 from fastapi import APIRouter
 
-from app.api.v1 import onboarding, profiles
+from app.api.v1.auth import router as auth_router
+from app.api.v1 import onboarding, profiles, reactions
 
-api_router = APIRouter()
-api_router.include_router(profiles.router)
-api_router.include_router(onboarding.router)
+router = APIRouter()
+
+router.include_router(auth_router)
+router.include_router(profiles.router)
+router.include_router(onboarding.router)
+router.include_router(reactions.router)
+
+
+@router.get("/health", tags=["Health"])
+async def versioned_health_check():
+    """Return the versioned API health status."""
+    return {
+        "status": "healthy",
+        "service": "the-light-app-api",
+        "version": "0.1.0",
+    }
