@@ -3,16 +3,21 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_avatar_storage, get_current_user_id, get_profile_repository
+from app.api.deps import get_avatar_storage, get_current_user_id
 from app.core.config import settings
+from app.core.security import create_access_token
+from app.db.session import Base, get_db
 from app.main import app
+from app.models import User, UserProfile
 from app.schemas.avatar import AvatarUploadIntent
 from app.services.avatar_storage import (
     AvatarObjectInvalid,
     build_avatar_object_key,
 )
-from app.services.profiles import InMemoryProfileRepository
 
 PROFILE = "/api/v1/profiles/me"
 ONBOARDING = "/api/v1/onboarding/me"
@@ -40,17 +45,50 @@ class FakeAvatarStorage:
 
 
 @pytest.fixture
-def user_id():
-    return uuid.uuid4()
+def session_factory():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(engine, "connect")
+    def enable_foreign_keys(dbapi_connection, _record):
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+    Base.metadata.create_all(bind=engine)
+    factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    def override_get_db():
+        db = factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    yield factory
+    app.dependency_overrides.clear()
+    engine.dispose()
+
+
+def create_user(session_factory, email="profile-user@example.com"):
+    with session_factory() as db:
+        user = User(email=email, password_hash="test-password-hash")
+        db.add(user)
+        db.commit()
+        return user.id
 
 
 @pytest.fixture
-def client(user_id):
-    repository = InMemoryProfileRepository()
+def user_id(session_factory):
+    return create_user(session_factory)
+
+
+@pytest.fixture
+def client(session_factory, user_id):
     app.dependency_overrides[get_current_user_id] = lambda: user_id
-    app.dependency_overrides[get_profile_repository] = lambda: repository
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+    return TestClient(app)
 
 
 @pytest.fixture
@@ -67,7 +105,7 @@ def profile(client):
     return response.json()
 
 
-def test_requests_without_auth_are_rejected():
+def test_requests_without_auth_are_rejected(session_factory):
     response = TestClient(app).get(PROFILE)
 
     assert response.status_code == 401
@@ -214,3 +252,48 @@ def test_avatar_confirm_rejects_other_users_keys(client, profile, fake_storage, 
 
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "invalid_avatar_key"
+
+
+def test_profile_routes_accept_a_real_access_token(session_factory, user_id):
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {create_access_token(str(user_id))}"}
+
+    created = client.post(PROFILE, json={"display_name": "Grace"}, headers=headers)
+    assert created.status_code == 201
+    assert created.json()["user_id"] == str(user_id)
+    assert client.get(PROFILE, headers=headers).status_code == 200
+
+    bad = client.get(PROFILE, headers={"Authorization": "Bearer not-a-token"})
+    assert bad.status_code == 401
+
+
+def test_profile_and_onboarding_are_stored_in_the_database(client, session_factory, user_id):
+    client.post(PROFILE, json={"display_name": "Grace", "language_code": "yo", "country_code": "ng"})
+    client.post(f"{ONBOARDING}/steps/profile_basics/complete")
+    client.post(f"{ONBOARDING}/steps/language/complete")
+    client.post(f"{ONBOARDING}/complete")
+
+    with session_factory() as db:
+        row = db.get(UserProfile, user_id)
+        assert row.display_name == "Grace"
+        assert row.country_code == "NG"
+        assert row.onboarding_steps["language"] == "completed"
+        assert row.onboarding_steps["avatar"] == "skipped"
+        assert row.onboarding_completed_at is not None
+
+    status = client.get(ONBOARDING).json()
+    assert status["is_complete"] is True
+
+
+def test_profiles_are_separate_per_user(client, session_factory, profile):
+    other_id = create_user(session_factory, email="other@example.com")
+    app.dependency_overrides[get_current_user_id] = lambda: other_id
+
+    assert client.get(PROFILE).status_code == 404
+
+
+def test_deleting_a_user_deletes_their_profile(client, session_factory, user_id, profile):
+    with session_factory() as db:
+        db.delete(db.get(User, user_id))
+        db.commit()
+        assert db.get(UserProfile, user_id) is None
