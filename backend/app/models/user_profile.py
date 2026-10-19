@@ -32,6 +32,13 @@ class UserProfile(Base):
     language_code: Mapped[str | None] = mapped_column(String(35), nullable=True)
     country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The member's home CYC branch, if they picked one.
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("branches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # Step name -> status, e.g. {"profile_basics": "completed", ...}.
     onboarding_steps: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(

@@ -3,14 +3,20 @@ from fastapi import APIRouter
 
 from app.api.v1.auth import router as auth_router
 from app.api.v1 import (
+    admin,
+    branches,
     communities,
     events,
+    locales,
     meetings,
+    moderation,
+    notifications,
     onboarding,
     posts,
     profiles,
     reactions,
     resources,
+    search,
     video_webhooks,
 )
 
@@ -27,6 +33,12 @@ router.include_router(meetings.router)
 router.include_router(video_webhooks.router)
 router.include_router(resources.categories_router)
 router.include_router(resources.router)
+router.include_router(notifications.router)
+router.include_router(moderation.router)
+router.include_router(admin.router)
+router.include_router(search.router)
+router.include_router(branches.router)
+router.include_router(locales.router)
 
 
 @router.get("/health", tags=["Health"])

@@ -51,6 +51,34 @@ class Settings(BaseSettings):
     # Largest audio, video or document file for the resource library.
     resource_max_upload_bytes: int = 500 * 1024 * 1024
 
+    # Push notifications. "fake" records sends for development and tests;
+    # "none" turns push off. Real providers plug in through
+    # app/services/push_provider.py.
+    push_provider: str = "fake"
+    # Notification emails: "fake" (development and tests), "none" or "smtp".
+    email_backend: str = "fake"
+    email_from: str = "The Light App <no-reply@thelightapp.invalid>"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    # "starttls" (port 587), "ssl" (port 465) or "none".
+    smtp_security: str = "starttls"
+    smtp_timeout_seconds: int = 10
+    # The notification worker (python -m app.workers.notifications).
+    notification_worker_interval_seconds: int = 15
+    # Push and email jobs are retried with growing waits, then marked failed.
+    notification_max_attempts: int = 5
+    # Notifications older than this are deleted by the worker.
+    notification_retention_days: int = 90
+    # How long before an event starts people with a spot are reminded.
+    event_reminder_minutes_before: int = 60
+
+    # Languages the API writes notifications and emails in (each needs a
+    # catalog in app/i18n). Everyone else gets DEFAULT_LANGUAGE.
+    supported_languages: list[str] = ["en", "fr", "es", "pt"]
+    default_language: str = "en"
+
     @model_validator(mode="after")
     def validate_security_settings(self):
         if self.access_token_expire_minutes <= 0:
@@ -72,6 +100,25 @@ class Settings(BaseSettings):
         if self.resource_max_upload_bytes <= 0:
             raise ValueError("RESOURCE_MAX_UPLOAD_BYTES must be positive")
 
+        for name in (
+            "notification_worker_interval_seconds",
+            "notification_max_attempts",
+            "notification_retention_days",
+            "event_reminder_minutes_before",
+            "smtp_timeout_seconds",
+        ):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name.upper()} must be positive")
+
+        if self.smtp_security not in {"starttls", "ssl", "none"}:
+            raise ValueError("SMTP_SECURITY must be starttls, ssl or none")
+
+        if self.email_backend == "smtp" and not self.smtp_host:
+            raise ValueError("SMTP_HOST is required when EMAIL_BACKEND=smtp")
+
+        if self.default_language not in self.supported_languages:
+            raise ValueError("DEFAULT_LANGUAGE must be one of SUPPORTED_LANGUAGES")
+
         if self.storage_backend == "s3" and not self.storage_bucket:
             raise ValueError("STORAGE_BUCKET is required when STORAGE_BACKEND=s3")
 
@@ -80,6 +127,18 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "VIDEO_PROVIDER=fake is for development only; "
                     "choose a real provider or none in production"
+                )
+
+            if self.push_provider == "fake":
+                raise ValueError(
+                    "PUSH_PROVIDER=fake is for development only; "
+                    "choose a real provider or none in production"
+                )
+
+            if self.email_backend == "fake":
+                raise ValueError(
+                    "EMAIL_BACKEND=fake is for development only; "
+                    "use smtp or none in production"
                 )
 
             if len(self.secret_key) < 32:

@@ -4,7 +4,8 @@
   belong to. Hidden posts and comments answer 404, like hidden communities.
 - Writing a post or comment needs membership of the community.
 - Only the author edits. The author, community moderators and above, or
-  app-wide moderators and admins can delete.
+  app-wide moderators and admins can delete. When someone else deletes it,
+  the author is told and it goes in the audit log with the removed text.
 
 Reactions (owned by the auth/reactions workstream) point at posts and comments
 by ``target_type`` + ``target_id`` without a foreign key, so deleting content
@@ -28,7 +29,7 @@ from app.schemas.post import (
     PostRead,
     PostUpdate,
 )
-from app.services import pagination
+from app.services import audit, notifications, pagination
 from app.services.communities import (
     get_visible_community,
     is_platform_moderator,
@@ -177,11 +178,60 @@ def update_post(
     return post_read(db, post)
 
 
+def remove_post(db: Session, actor_id: UserId, post: Post, **audit_data) -> None:
+    """A moderator removes someone's post. No commit."""
+    audit.record(
+        db,
+        actor_id,
+        "post.removed",
+        "post",
+        post.id,
+        community_id=post.community_id,
+        data={"author_id": post.author_id, "body": post.body, **audit_data},
+    )
+    notifications.content_removed(
+        db, "post", post.author_id, post.community_id, actor_id, {"post_id": post.id}
+    )
+    delete_posts(db, post_id=post.id)
+
+
+def remove_comment(db: Session, actor_id: UserId, comment: Comment, **audit_data) -> None:
+    """A moderator removes someone's comment. No commit."""
+    community_id = db.scalar(select(Post.community_id).where(Post.id == comment.post_id))
+    audit.record(
+        db,
+        actor_id,
+        "comment.removed",
+        "comment",
+        comment.id,
+        community_id=community_id,
+        data={
+            "author_id": comment.author_id,
+            "post_id": comment.post_id,
+            "body": comment.body,
+            **audit_data,
+        },
+    )
+    notifications.content_removed(
+        db,
+        "comment",
+        comment.author_id,
+        community_id,
+        actor_id,
+        {"post_id": comment.post_id, "comment_id": comment.id},
+    )
+    _delete_reactions(db, "comment", [comment.id])
+    db.delete(comment)
+
+
 def delete_post(db: Session, user_id: UserId, post_id: uuid.UUID) -> None:
     post, membership = _visible_post(db, user_id, post_id)
-    if post.author_id != user_id and not _can_moderate(db, user_id, membership):
+    if post.author_id == user_id:
+        delete_posts(db, post_id=post.id)
+    elif _can_moderate(db, user_id, membership):
+        remove_post(db, user_id, post)
+    else:
         raise Forbidden("not_allowed", "You can't delete this post.")
-    delete_posts(db, post_id=post.id)
     db.commit()
 
 
@@ -195,6 +245,8 @@ def create_comment(
     require_role(membership, CommunityRole.MEMBER)
     comment = Comment(post_id=post.id, author_id=user_id, body=data.body)
     db.add(comment)
+    db.flush()
+    notifications.comment_added(db, post, comment)
     db.commit()
     db.refresh(comment)
     return comment
@@ -248,11 +300,24 @@ def update_comment(
 
 def delete_comment(db: Session, user_id: UserId, comment_id: uuid.UUID) -> None:
     comment, membership = _visible_comment(db, user_id, comment_id)
-    if comment.author_id != user_id and not _can_moderate(db, user_id, membership):
+    if comment.author_id == user_id:
+        _delete_reactions(db, "comment", [comment.id])
+        db.delete(comment)
+    elif _can_moderate(db, user_id, membership):
+        remove_comment(db, user_id, comment)
+    else:
         raise Forbidden("not_allowed", "You can't delete this comment.")
-    _delete_reactions(db, "comment", [comment.id])
-    db.delete(comment)
     db.commit()
+
+
+def visible_post(db: Session, user_id: UserId, post_id: uuid.UUID):
+    """The post and the user's membership, or 404 if they can't see it."""
+    return _visible_post(db, user_id, post_id)
+
+
+def visible_comment(db: Session, user_id: UserId, comment_id: uuid.UUID):
+    """The comment and the user's membership, or 404 if they can't see it."""
+    return _visible_comment(db, user_id, comment_id)
 
 
 # Reactions hook

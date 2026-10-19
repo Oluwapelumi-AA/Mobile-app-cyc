@@ -36,6 +36,27 @@ The initial foundation will cover:
 
 Detailed setup commands will be added as the implementation progresses.
 
+## Notification worker
+
+Push notifications, notification emails and event reminders are sent by a
+separate process that runs next to the API with the same settings:
+
+```bash
+python -m app.workers.notifications          # keeps running
+python -m app.workers.notifications --once   # one round, e.g. from cron
+```
+
+## The first admin
+
+App admins manage branches and account roles, and app moderators and admins
+review reports and suspend accounts (`/api/v1/admin`, `/api/v1/moderation`).
+Only an admin can make someone else an admin, so set the first one in the
+database after they sign up:
+
+```sql
+UPDATE users SET account_role = 'admin' WHERE email = 'you@example.com';
+```
+
 ## Security
 
 - Never commit secrets, passwords, tokens, or production credentials.

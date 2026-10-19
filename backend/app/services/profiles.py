@@ -4,6 +4,7 @@ API code works with ``ProfileRecord``; ``SqlAlchemyProfileRepository`` maps it
 to the ``user_profiles`` table.
 """
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Protocol
@@ -24,6 +25,7 @@ _PROFILE_FIELDS = (
     "language_code",
     "country_code",
     "timezone",
+    "branch_id",
 )
 
 
@@ -40,6 +42,8 @@ class ProfileRecord:
     language_code: str | None = None
     country_code: str | None = None
     timezone: str | None = None
+    # Set through PUT /branches/{id}/membership, not the profile endpoints.
+    branch_id: uuid.UUID | None = None
     onboarding: OnboardingProgress = field(default_factory=OnboardingProgress)
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)

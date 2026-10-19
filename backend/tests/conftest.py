@@ -6,6 +6,8 @@ os.environ.setdefault("SECRET_KEY", "test-only-secret-key-not-for-production-use
 # Tests never reach a real video provider or bucket, whatever .env says.
 os.environ["VIDEO_PROVIDER"] = "fake"
 os.environ["STORAGE_BACKEND"] = "none"
+os.environ["PUSH_PROVIDER"] = "fake"
+os.environ["EMAIL_BACKEND"] = "fake"
 
 
 import pytest  # noqa: E402
