@@ -28,3 +28,7 @@ class NotFound(DomainError):
 
 class Conflict(DomainError):
     status_code = 409
+
+
+class ServiceUnavailable(DomainError):
+    status_code = 503
