@@ -19,6 +19,17 @@ from app.models.meeting import (
     RecordingStatus,
     VideoWebhookReceipt,
 )
+from app.models.notification import (
+    DeliveryChannel,
+    DeliveryStatus,
+    DevicePlatform,
+    Notification,
+    NotificationCategory,
+    NotificationDelivery,
+    NotificationDevice,
+    NotificationPreference,
+    NotificationType,
+)
 from app.models.post import Comment, Post
 from app.models.reaction import Reaction
 from app.models.resource import (
@@ -41,6 +52,9 @@ __all__ = [
     "CommunityMembership",
     "CommunityRole",
     "CommunityVisibility",
+    "DeliveryChannel",
+    "DeliveryStatus",
+    "DevicePlatform",
     "Event",
     "EventRegistration",
     "EventStatus",
@@ -48,6 +62,12 @@ __all__ = [
     "MeetingKind",
     "MeetingRecording",
     "MeetingStatus",
+    "Notification",
+    "NotificationCategory",
+    "NotificationDelivery",
+    "NotificationDevice",
+    "NotificationPreference",
+    "NotificationType",
     "Post",
     "Reaction",
     "RecordingStatus",

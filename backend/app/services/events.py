@@ -44,7 +44,7 @@ from app.schemas.event import (
     EventUpdate,
     RegistrationRead,
 )
-from app.services import pagination
+from app.services import notifications, pagination
 from app.services.communities import (
     get_visible_community,
     is_platform_moderator,
@@ -420,10 +420,14 @@ def update_event(
             setattr(event, name, changes[name] or None)
     if "online_url" in changes:
         event.online_url = str(changes["online_url"]) if changes["online_url"] else None
+    rescheduled = starts_at != _utc(event.starts_at)
     event.starts_at, event.ends_at, event.timezone = starts_at, ends_at, timezone
     if "capacity" in changes:
         event.capacity = changes["capacity"]
-        _fill_open_spots(db, event)
+        promoted = _fill_open_spots(db, event)
+        notifications.event_spots_confirmed(db, event, promoted)
+    if rescheduled:
+        notifications.event_rescheduled(db, event, user_id)
     db.commit()
     db.refresh(event)
     return event_read(db, user_id, event, membership)
@@ -437,6 +441,7 @@ def cancel_event(db: Session, user_id: UserId, event_id: uuid.UUID) -> EventRead
         raise EVENT_CANCELLED
     event.status = EventStatus.CANCELLED.value
     event.cancelled_at = _now()
+    notifications.event_cancelled(db, event, user_id)
     db.commit()
     db.refresh(event)
     return event_read(db, user_id, event, membership)
@@ -486,8 +491,10 @@ def _registration_read(
     )
 
 
-def _fill_open_spots(db: Session, event: Event) -> None:
-    """Move people from the waitlist into free spots, oldest first. No commit."""
+def _fill_open_spots(db: Session, event: Event) -> list[UserId]:
+    """Move people from the waitlist into free spots, oldest first. No commit.
+
+    Returns who got a spot."""
     db.flush()
     waitlist = select(EventRegistration).where(
         EventRegistration.event_id == event.id,
@@ -497,10 +504,13 @@ def _fill_open_spots(db: Session, event: Event) -> None:
         registered = _registration_counts(db, [event.id]).get(event.id, {}).get(REGISTERED, 0)
         free = event.capacity - registered
         if free <= 0:
-            return
+            return []
         waitlist = waitlist.limit(free)
+    promoted = []
     for registration in db.scalars(waitlist):
         registration.status = REGISTERED
+        promoted.append(registration.user_id)
+    return promoted
 
 
 def _ensure_open(event: Event) -> None:
@@ -562,7 +572,8 @@ def cancel_registration(db: Session, user_id: UserId, event_id: uuid.UUID) -> No
         )
     db.delete(registration)
     if event.status == EventStatus.SCHEDULED.value:
-        _fill_open_spots(db, event)
+        promoted = _fill_open_spots(db, event)
+        notifications.event_spots_confirmed(db, event, promoted)
     db.commit()
 
 

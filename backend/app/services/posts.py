@@ -28,7 +28,7 @@ from app.schemas.post import (
     PostRead,
     PostUpdate,
 )
-from app.services import pagination
+from app.services import notifications, pagination
 from app.services.communities import (
     get_visible_community,
     is_platform_moderator,
@@ -195,6 +195,8 @@ def create_comment(
     require_role(membership, CommunityRole.MEMBER)
     comment = Comment(post_id=post.id, author_id=user_id, body=data.body)
     db.add(comment)
+    db.flush()
+    notifications.comment_added(db, post, comment)
     db.commit()
     db.refresh(comment)
     return comment

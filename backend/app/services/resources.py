@@ -59,7 +59,7 @@ from app.schemas.resource import (
     ResourceSummary,
     ResourceUpdate,
 )
-from app.services import pagination
+from app.services import notifications, pagination
 from app.services.communities import (
     get_visible_community,
     is_platform_moderator,
@@ -614,6 +614,7 @@ def publish_resource(db: Session, user_id: UserId, resource_id: uuid.UUID) -> Re
         resource.status = PUBLISHED
         # Keep the first publication date when a resource is republished.
         resource.published_at = resource.published_at or _now()
+        notifications.resource_published(db, resource, user_id)
         db.commit()
         db.refresh(resource)
     return _resource_read(db, user_id, resource, True)

@@ -33,7 +33,7 @@ from app.schemas.community import (
     CommunityRead,
     CommunityUpdate,
 )
-from app.services import pagination
+from app.services import notifications, pagination
 from app.services.errors import Conflict, Forbidden, NotFound
 
 ROLE_RANK = {
@@ -339,7 +339,9 @@ def change_member_role(
         )
     if new_role != CommunityRole.OWNER:
         _ensure_not_last_owner(db, target)
-    target.role = new_role.value
+    if target.role != new_role.value:
+        target.role = new_role.value
+        notifications.member_role_changed(db, target, user_id)
     db.commit()
     db.refresh(target)
     return target
@@ -360,4 +362,5 @@ def remove_member(
     _ensure_outranks(actor, target)
     _ensure_not_last_owner(db, target)
     db.delete(target)
+    notifications.member_removed(db, community_id, target_user_id, user_id)
     db.commit()

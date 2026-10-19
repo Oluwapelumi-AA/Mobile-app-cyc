@@ -56,7 +56,7 @@ from app.schemas.meeting import (
     RecordingPlayback,
     RecordingRead,
 )
-from app.services import pagination
+from app.services import notifications, pagination
 from app.services.communities import (
     get_visible_community,
     is_platform_moderator,
@@ -415,6 +415,7 @@ def start_meeting(
         meeting.provider_room_id = room.room_id
         meeting.status = LIVE
         meeting.started_at = _now()
+        notifications.meeting_live(db, meeting, user_id)
         db.commit()
         db.refresh(meeting)
     return meeting_read(db, user_id, meeting, membership)

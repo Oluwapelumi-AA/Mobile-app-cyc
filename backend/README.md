@@ -36,6 +36,16 @@ The initial foundation will cover:
 
 Detailed setup commands will be added as the implementation progresses.
 
+## Notification worker
+
+Push notifications, notification emails and event reminders are sent by a
+separate process that runs next to the API with the same settings:
+
+```bash
+python -m app.workers.notifications          # keeps running
+python -m app.workers.notifications --once   # one round, e.g. from cron
+```
+
 ## Security
 
 - Never commit secrets, passwords, tokens, or production credentials.
