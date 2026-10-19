@@ -22,6 +22,7 @@ class CommunityCreate(BaseModel):
     name: CommunityName
     description: CommunityDescription | None = None
     visibility: CommunityVisibility = CommunityVisibility.PUBLIC
+    branch_id: UUID | None = None
 
 
 class CommunityUpdate(BaseModel):
@@ -30,6 +31,8 @@ class CommunityUpdate(BaseModel):
     name: CommunityName | None = None
     description: CommunityDescription | None = None
     visibility: CommunityVisibility | None = None
+    # Null takes the community out of its branch.
+    branch_id: UUID | None = None
 
 
 class CommunityRead(BaseModel):
@@ -40,6 +43,7 @@ class CommunityRead(BaseModel):
     description: str | None
     visibility: CommunityVisibility
     created_by: UUID | None
+    branch_id: UUID | None
     member_count: int
     # The caller's role, or null when they are not a member.
     my_role: CommunityRole | None

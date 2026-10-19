@@ -6,6 +6,7 @@ owned by the auth workstream.
 """
 
 import unicodedata
+import uuid
 from datetime import datetime
 from typing import Annotated, Self
 
@@ -100,5 +101,6 @@ class ProfileRead(BaseModel):
     language_code: str | None
     country_code: str | None
     timezone: str | None
+    branch_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime

@@ -121,6 +121,13 @@ def _visible_event(
     return event, membership
 
 
+def visible_event(
+    db: Session, user_id: UserId, event_id: uuid.UUID
+) -> tuple[Event, CommunityMembership | None]:
+    """The event and the user's membership, or 404 if they can't see it."""
+    return _visible_event(db, user_id, event_id)
+
+
 def _can_manage(
     event_community_id: uuid.UUID | None,
     membership_role: str | None,

@@ -12,17 +12,19 @@ that rolled back.
 - The person who caused a notification never gets it.
 - A ``dedupe_key`` makes a notification happen once per person, e.g. one
   "live now" per meeting.
+- Titles and bodies are ``app.i18n.Text`` messages, written in each
+  recipient's profile language (English when it has no catalog).
 """
 
 import uuid
 from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.identity import UserId
+from app.i18n import LocalTime, Text, best_language, render
 from app.models.community import Community, CommunityMembership
 from app.models.event import Event, EventRegistration, RegistrationStatus
 from app.models.meeting import Meeting, MeetingKind
@@ -89,11 +91,27 @@ def _preview(text: str | None) -> str | None:
     return text[: PREVIEW_LENGTH - 1].rstrip() + "…"
 
 
-def display_name(db: Session, user_id: UserId | None) -> str:
+SOMEONE = Text("common.someone")
+
+
+def display_name(db: Session, user_id: UserId | None) -> str | Text:
     if user_id is None:
-        return "Someone"
+        return SOMEONE
     name = db.scalar(select(UserProfile.display_name).where(UserProfile.user_id == user_id))
-    return name or "Someone"
+    return name or SOMEONE
+
+
+def languages_for(db: Session, user_ids: list[UserId]) -> dict[UserId, str]:
+    """Each user's notification language, from their profile."""
+    tags: dict[UserId, str | None] = dict.fromkeys(user_ids)
+    for chunk in _chunks(user_ids):
+        rows = db.execute(
+            select(UserProfile.user_id, UserProfile.language_code).where(
+                UserProfile.user_id.in_(chunk)
+            )
+        )
+        tags.update(rows.all())
+    return {user_id: best_language(tag) for user_id, tag in tags.items()}
 
 
 # Creating notifications
@@ -160,8 +178,8 @@ def notify(
     db: Session,
     recipients: Iterable[UserId],
     type: NotificationType,
-    title: str,
-    body: str | None = None,
+    title: str | Text,
+    body: str | Text | None = None,
     data: dict | None = None,
     actor_id: UserId | None = None,
     dedupe_key: str | None = None,
@@ -187,18 +205,24 @@ def notify(
 
     channels = _channels_for(db, user_ids, category)
     with_devices = _users_with_devices(db, user_ids)
+    languages = languages_for(db, user_ids)
+    rendered: dict[str, tuple[str, str | None]] = {}
     data = {key: str(value) for key, value in (data or {}).items() if value is not None}
     now = _now()
     rows: list = []
     for user_id in user_ids:
+        language = languages[user_id]
+        if language not in rendered:
+            rendered[language] = (render(title, language), render(body, language))
+        title_text, body_text = rendered[language]
         notification = Notification(
             id=uuid.uuid4(),
             user_id=user_id,
             actor_id=actor_id,
             type=type.value,
             category=category.value,
-            title=title,
-            body=body,
+            title=title_text,
+            body=body_text,
             data=data,
             dedupe_key=dedupe_key,
             created_at=now,
@@ -234,7 +258,7 @@ def comment_added(db: Session, post: Post, comment: Comment) -> None:
         db,
         [post.author_id],
         NotificationType.COMMENT_ON_POST,
-        title=f"{name} commented on your post",
+        title=Text("notification.comment_on_post.title", name=name),
         body=_preview(comment.body),
         data={
             "community_id": post.community_id,
@@ -259,14 +283,14 @@ def member_role_changed(
         db,
         [membership.user_id],
         NotificationType.COMMUNITY_ROLE_CHANGED,
-        title=f"You are now {_article(membership.role)} {membership.role} of {community}",
+        title=Text(
+            "notification.community_role_changed.title",
+            role=Text(f"role.{membership.role}"),
+            community=community,
+        ),
         data={"community_id": membership.community_id, "role": membership.role},
         actor_id=actor_id,
     )
-
-
-def _article(word: str) -> str:
-    return "an" if word[:1].lower() in "aeiou" else "a"
 
 
 def member_removed(
@@ -277,8 +301,44 @@ def member_removed(
         db,
         [user_id],
         NotificationType.COMMUNITY_REMOVED,
-        title=f"You were removed from {community}",
+        title=Text("notification.community_removed.title", community=community),
         data={"community_id": community_id},
+        actor_id=actor_id,
+    )
+
+
+def member_banned(
+    db: Session, community_id: uuid.UUID, user_id: UserId, actor_id: UserId
+) -> None:
+    community = _community_name(db, community_id)
+    notify(
+        db,
+        [user_id],
+        NotificationType.COMMUNITY_BANNED,
+        title=Text("notification.community_banned.title", community=community),
+        body=Text("notification.community_banned.body"),
+        data={"community_id": community_id},
+        actor_id=actor_id,
+    )
+
+
+def content_removed(
+    db: Session,
+    kind: str,
+    owner_id: UserId,
+    community_id: uuid.UUID,
+    actor_id: UserId,
+    data: dict,
+) -> None:
+    """Tell an author a moderator removed their ``kind`` ("post"/"comment")."""
+    community = _community_name(db, community_id)
+    notify(
+        db,
+        [owner_id],
+        NotificationType.CONTENT_REMOVED,
+        title=Text(f"notification.content_removed.title.{kind}", community=community),
+        body=Text("notification.content_removed.body"),
+        data={"community_id": community_id, "kind": kind, **data},
         actor_id=actor_id,
     )
 
@@ -301,18 +361,14 @@ def event_spots_confirmed(db: Session, event: Event, user_ids: list[UserId]) -> 
         db,
         user_ids,
         NotificationType.EVENT_SPOT_CONFIRMED,
-        title=f"You have a spot at {event.title}",
-        body="A place opened up and you're off the waitlist.",
+        title=Text("notification.event_spot_confirmed.title", event=event.title),
+        body=Text("notification.event_spot_confirmed.body"),
         data=_event_data(event),
     )
 
 
-def _local_start(event: Event) -> str:
-    starts_at = event.starts_at
-    if starts_at.tzinfo is None:
-        starts_at = starts_at.replace(tzinfo=UTC)
-    local = starts_at.astimezone(ZoneInfo(event.timezone))
-    return f"{local:%a %d %b %Y, %H:%M} ({event.timezone})"
+def _local_start(event: Event) -> LocalTime:
+    return LocalTime(event.starts_at, event.timezone)
 
 
 def event_rescheduled(db: Session, event: Event, actor_id: UserId) -> None:
@@ -320,8 +376,8 @@ def event_rescheduled(db: Session, event: Event, actor_id: UserId) -> None:
         db,
         _event_people(db, event.id, confirmed_only=False),
         NotificationType.EVENT_RESCHEDULED,
-        title=f"{event.title} has a new time",
-        body=f"It now starts {_local_start(event)}.",
+        title=Text("notification.event_rescheduled.title", event=event.title),
+        body=Text("notification.event_rescheduled.body", start=_local_start(event)),
         data=_event_data(event),
         actor_id=actor_id,
     )
@@ -332,7 +388,7 @@ def event_cancelled(db: Session, event: Event, actor_id: UserId) -> None:
         db,
         _event_people(db, event.id, confirmed_only=False),
         NotificationType.EVENT_CANCELLED,
-        title=f"{event.title} was cancelled",
+        title=Text("notification.event_cancelled.title", event=event.title),
         data=_event_data(event),
         actor_id=actor_id,
         dedupe_key=f"event_cancelled:{event.id}",
@@ -352,8 +408,8 @@ def event_reminder(db: Session, event: Event) -> int:
         db,
         _event_people(db, event.id, confirmed_only=True),
         NotificationType.EVENT_REMINDER,
-        title=f"{event.title} starts soon",
-        body=f"Starts {_local_start(event)}.",
+        title=Text("notification.event_reminder.title", event=event.title),
+        body=Text("notification.event_reminder.body", start=_local_start(event)),
         data=_event_data(event),
         dedupe_key=event_reminder_key(event),
     )
@@ -379,8 +435,8 @@ def meeting_live(db: Session, meeting: Meeting, actor_id: UserId) -> None:
         db,
         recipients,
         NotificationType.MEETING_LIVE,
-        title=f"{meeting.title} is live",
-        body=f"The {what} has started. Join now.",
+        title=Text("notification.meeting_live.title", meeting=meeting.title),
+        body=Text(f"notification.meeting_live.body.{what}"),
         data={
             "meeting_id": meeting.id,
             "community_id": meeting.community_id,
@@ -408,7 +464,11 @@ def resource_published(db: Session, resource: Resource, actor_id: UserId) -> Non
         db,
         recipients,
         NotificationType.RESOURCE_PUBLISHED,
-        title=f"New in {community}: {resource.title}",
+        title=Text(
+            "notification.resource_published.title",
+            community=community,
+            resource=resource.title,
+        ),
         body=_preview(resource.summary),
         data={"resource_id": resource.id, "community_id": resource.community_id},
         actor_id=actor_id,

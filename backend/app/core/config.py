@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     # How long before an event starts people with a spot are reminded.
     event_reminder_minutes_before: int = 60
 
+    # Languages the API writes notifications and emails in (each needs a
+    # catalog in app/i18n). Everyone else gets DEFAULT_LANGUAGE.
+    supported_languages: list[str] = ["en", "fr", "es", "pt"]
+    default_language: str = "en"
+
     @model_validator(mode="after")
     def validate_security_settings(self):
         if self.access_token_expire_minutes <= 0:
@@ -110,6 +115,9 @@ class Settings(BaseSettings):
 
         if self.email_backend == "smtp" and not self.smtp_host:
             raise ValueError("SMTP_HOST is required when EMAIL_BACKEND=smtp")
+
+        if self.default_language not in self.supported_languages:
+            raise ValueError("DEFAULT_LANGUAGE must be one of SUPPORTED_LANGUAGES")
 
         if self.storage_backend == "s3" and not self.storage_bucket:
             raise ValueError("STORAGE_BUCKET is required when STORAGE_BACKEND=s3")

@@ -41,9 +41,13 @@ def list_communities(
     limit: Limit = DEFAULT_PAGE_SIZE,
     cursor: Cursor = None,
     mine: bool = False,
+    branch_id: UUID | None = None,
 ):
-    """Newest first. ``mine=true`` lists only communities you belong to."""
-    items, next_cursor = communities.list_communities(db, user_id, limit, cursor, mine)
+    """Newest first. ``mine=true`` lists only communities you belong to;
+    ``branch_id`` only one branch's."""
+    items, next_cursor = communities.list_communities(
+        db, user_id, limit, cursor, mine, branch_id
+    )
     return Page(items=items, next_cursor=next_cursor)
 
 

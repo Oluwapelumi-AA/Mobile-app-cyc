@@ -29,7 +29,8 @@ class NotificationCategory(str, Enum):
 
     # Comments (and later reactions) on your posts.
     SOCIAL = "social"
-    # Your role in a community changed, or you were removed.
+    # Your role in a community changed, you were removed or banned, or a
+    # moderator removed something you wrote.
     COMMUNITY = "community"
     # Event spots, reminders, changes and cancellations.
     EVENTS = "events"
@@ -43,6 +44,8 @@ class NotificationType(str, Enum):
     COMMENT_ON_POST = "comment_on_post"
     COMMUNITY_ROLE_CHANGED = "community_role_changed"
     COMMUNITY_REMOVED = "community_removed"
+    COMMUNITY_BANNED = "community_banned"
+    CONTENT_REMOVED = "content_removed"
     EVENT_SPOT_CONFIRMED = "event_spot_confirmed"
     EVENT_RESCHEDULED = "event_rescheduled"
     EVENT_CANCELLED = "event_cancelled"
@@ -55,6 +58,8 @@ CATEGORY_OF_TYPE: dict[NotificationType, NotificationCategory] = {
     NotificationType.COMMENT_ON_POST: NotificationCategory.SOCIAL,
     NotificationType.COMMUNITY_ROLE_CHANGED: NotificationCategory.COMMUNITY,
     NotificationType.COMMUNITY_REMOVED: NotificationCategory.COMMUNITY,
+    NotificationType.COMMUNITY_BANNED: NotificationCategory.COMMUNITY,
+    NotificationType.CONTENT_REMOVED: NotificationCategory.COMMUNITY,
     NotificationType.EVENT_SPOT_CONFIRMED: NotificationCategory.EVENTS,
     NotificationType.EVENT_RESCHEDULED: NotificationCategory.EVENTS,
     NotificationType.EVENT_CANCELLED: NotificationCategory.EVENTS,

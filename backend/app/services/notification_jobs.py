@@ -21,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app import i18n
 from app.core.config import settings
 from app.models.event import Event, EventStatus
 from app.models.notification import (
@@ -49,10 +50,8 @@ DEFAULT_BATCH_SIZE = 100
 FIRST_RETRY_DELAY = timedelta(minutes=1)
 MAX_RETRY_DELAY = timedelta(hours=1)
 
-EMAIL_FOOTER = (
-    "\n\n—\nYou're getting this email from The Light App. "
-    "You can change which emails you get in the app under Settings > Notifications."
-)
+def email_footer(language: str) -> str:
+    return "\n\n—\n" + i18n.message("email.footer", language)
 
 
 def _now() -> datetime:
@@ -129,9 +128,12 @@ def _send_email(db: Session, notification: Notification, sender: EmailSender) ->
     text = notification.title
     if notification.body:
         text += "\n\n" + notification.body
+    language = notifications.languages_for(db, [notification.user_id])[notification.user_id]
     try:
         sender.send(
-            EmailMessage(to=email, subject=notification.title, text=text + EMAIL_FOOTER)
+            EmailMessage(
+                to=email, subject=notification.title, text=text + email_footer(language)
+            )
         )
     except EmailUnavailable:
         raise _Skip("email is off") from None

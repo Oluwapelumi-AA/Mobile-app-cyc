@@ -238,6 +238,16 @@ def _visible_resource(
     return resource, membership, can_manage
 
 
+def visible_resource(db: Session, user_id: UserId, resource_id: uuid.UUID) -> Resource:
+    """The resource, or 404 if the user can't see it."""
+    return _visible_resource(db, user_id, resource_id)[0]
+
+
+def published_and_visible(user_id: UserId):
+    """WHERE clause for published resources the user can see."""
+    return _published_and_visible(user_id)
+
+
 def _managed_resource(
     db: Session, user_id: UserId, resource_id: uuid.UUID
 ) -> Resource:

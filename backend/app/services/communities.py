@@ -11,6 +11,9 @@ Role ranks, highest first: owner, admin, moderator, member.
   actor can only act on members ranked below them and can only grant roles
   below their own. Owners can do anything, except that every community keeps
   at least one owner.
+- Someone banned from a community (app.services.moderation) can't join it.
+- A community can belong to a CYC branch; only active branches can be picked.
+- Role changes, removals and deleting a community go in the audit log.
 """
 
 import uuid
@@ -21,19 +24,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.identity import UserId
+from app.models.branch import Branch
 from app.models.community import (
     Community,
     CommunityMembership,
     CommunityRole,
     CommunityVisibility,
 )
+from app.models.moderation import CommunityBan
 from app.models.user import AccountRole, User
 from app.schemas.community import (
     CommunityCreate,
     CommunityRead,
     CommunityUpdate,
 )
-from app.services import notifications, pagination
+from app.services import audit, notifications, pagination
 from app.services.errors import Conflict, Forbidden, NotFound
 
 ROLE_RANK = {
@@ -44,6 +49,16 @@ ROLE_RANK = {
 }
 
 COMMUNITY_NOT_FOUND = NotFound("community_not_found", "Community not found.")
+BRANCH_NOT_FOUND = NotFound("branch_not_found", "Branch not found.")
+
+
+def check_branch(db: Session, branch_id: uuid.UUID | None) -> None:
+    """A branch someone can pick: it exists and isn't archived."""
+    if branch_id is None:
+        return
+    branch = db.get(Branch, branch_id)
+    if branch is None or not branch.is_active:
+        raise BRANCH_NOT_FOUND
 
 
 def rank(role: str | CommunityRole | None) -> int:
@@ -117,6 +132,7 @@ def _to_read(
             "description": community.description,
             "visibility": community.visibility,
             "created_by": community.created_by,
+            "branch_id": community.branch_id,
             "member_count": member_count,
             "my_role": my_role,
             "created_at": community.created_at,
@@ -133,11 +149,13 @@ def to_read(
 
 
 def create_community(db: Session, user_id: UserId, data: CommunityCreate) -> CommunityRead:
+    check_branch(db, data.branch_id)
     community = Community(
         name=data.name,
         description=data.description or None,
         visibility=data.visibility.value,
         created_by=user_id,
+        branch_id=data.branch_id,
     )
     db.add(community)
     db.flush()
@@ -158,10 +176,12 @@ def list_communities(
     limit: int,
     cursor: str | None,
     mine: bool,
+    branch_id: uuid.UUID | None = None,
 ) -> tuple[list[CommunityRead], str | None]:
     """Newest first: public communities plus private ones the user is in.
 
-    With ``mine``, only communities the user belongs to.
+    With ``mine``, only communities the user belongs to; with ``branch_id``,
+    only that branch's.
     """
     my_ids = select(CommunityMembership.community_id).where(
         CommunityMembership.user_id == user_id
@@ -176,6 +196,8 @@ def list_communities(
                 Community.id.in_(my_ids),
             )
         )
+    if branch_id is not None:
+        statement = statement.where(Community.branch_id == branch_id)
     if cursor:
         statement = statement.where(
             pagination.after_cursor(Community.created_at, Community.id, cursor, newest_first=True)
@@ -213,6 +235,8 @@ def update_community(
         changes["visibility"] = changes["visibility"].value
     if "description" in changes:
         changes["description"] = changes["description"] or None
+    if changes.get("branch_id") is not None and changes["branch_id"] != community.branch_id:
+        check_branch(db, changes["branch_id"])
     for name, value in changes.items():
         setattr(community, name, value)
     db.commit()
@@ -226,6 +250,15 @@ def delete_community(db: Session, user_id: UserId, community_id: uuid.UUID) -> N
 
     community, membership = get_visible_community(db, community_id, user_id)
     require_role(membership, CommunityRole.OWNER)
+    audit.record(
+        db,
+        user_id,
+        "community.deleted",
+        "community",
+        community.id,
+        community_id=community.id,
+        data={"name": community.name},
+    )
     delete_posts(db, community_id=community.id)
     db.execute(
         CommunityMembership.__table__.delete().where(
@@ -236,10 +269,24 @@ def delete_community(db: Session, user_id: UserId, community_id: uuid.UUID) -> N
     db.commit()
 
 
+def is_banned(db: Session, community_id: uuid.UUID, user_id: UserId) -> bool:
+    return (
+        db.scalar(
+            select(CommunityBan.id).where(
+                CommunityBan.community_id == community_id,
+                CommunityBan.user_id == user_id,
+            )
+        )
+        is not None
+    )
+
+
 def join_community(db: Session, user_id: UserId, community_id: uuid.UUID) -> CommunityMembership:
     community, membership = get_visible_community(db, community_id, user_id)
     if membership is not None:
         raise Conflict("already_member", "You are already a member of this community.")
+    if is_banned(db, community.id, user_id):
+        raise Forbidden("banned", "You can't join this community.")
     if community.visibility != CommunityVisibility.PUBLIC.value:
         raise Forbidden("invite_required", "This community is invite only.")
     membership = CommunityMembership(
@@ -340,6 +387,15 @@ def change_member_role(
     if new_role != CommunityRole.OWNER:
         _ensure_not_last_owner(db, target)
     if target.role != new_role.value:
+        audit.record(
+            db,
+            user_id,
+            "member.role_changed",
+            "user",
+            target.user_id,
+            community_id=community_id,
+            data={"from": target.role, "to": new_role.value},
+        )
         target.role = new_role.value
         notifications.member_role_changed(db, target, user_id)
     db.commit()
@@ -361,6 +417,15 @@ def remove_member(
     target = _get_target(db, community_id, target_user_id)
     _ensure_outranks(actor, target)
     _ensure_not_last_owner(db, target)
+    audit.record(
+        db,
+        user_id,
+        "member.removed",
+        "user",
+        target_user_id,
+        community_id=community_id,
+        data={"role": target.role},
+    )
     db.delete(target)
     notifications.member_removed(db, community_id, target_user_id, user_id)
     db.commit()
