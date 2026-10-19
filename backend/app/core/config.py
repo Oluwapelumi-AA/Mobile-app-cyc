@@ -23,6 +23,32 @@ class Settings(BaseSettings):
         "http://localhost:5173",
     ]
 
+    # Video provider for meetings and livestreams. "fake" is a built-in
+    # stand-in for development and tests (it signs its own join tokens and
+    # webhooks); "none" turns video off. Real providers plug in through
+    # app/services/video_provider.py.
+    video_provider: str = "fake"
+    video_server_url: str = "wss://video.local.invalid"
+    # Join tokens are short-lived: a client asks for a new one to rejoin.
+    video_token_ttl_seconds: int = 600
+    # Shared secret the provider signs webhooks with.
+    video_webhook_secret: str = ""
+
+    # Object storage (S3, Cloudflare R2, MinIO, DigitalOcean Spaces, ...).
+    # "none" turns uploads and replays off; "s3" uses the settings below.
+    storage_backend: str = "none"
+    storage_bucket: str = ""
+    storage_region: str = "us-east-1"
+    # Leave empty for AWS; set for R2, MinIO, Spaces and other S3 services.
+    storage_endpoint_url: str = ""
+    storage_access_key_id: str = ""
+    storage_secret_access_key: str = ""
+    # CDN (or public bucket) base URL for public files such as avatars,
+    # e.g. https://cdn.example.com. Empty means the bucket's own URL.
+    storage_public_base_url: str = ""
+    # How long presigned upload and download links stay valid.
+    storage_presign_ttl_seconds: int = 900
+
     @model_validator(mode="after")
     def validate_security_settings(self):
         if self.access_token_expire_minutes <= 0:
@@ -35,7 +61,22 @@ class Settings(BaseSettings):
                 "REFRESH_TOKEN_EXPIRE_DAYS must be positive"
             )
 
+        if self.video_token_ttl_seconds <= 0:
+            raise ValueError("VIDEO_TOKEN_TTL_SECONDS must be positive")
+
+        if self.storage_presign_ttl_seconds <= 0:
+            raise ValueError("STORAGE_PRESIGN_TTL_SECONDS must be positive")
+
+        if self.storage_backend == "s3" and not self.storage_bucket:
+            raise ValueError("STORAGE_BUCKET is required when STORAGE_BACKEND=s3")
+
         if self.environment.lower() in {"production", "prod"}:
+            if self.video_provider == "fake":
+                raise ValueError(
+                    "VIDEO_PROVIDER=fake is for development only; "
+                    "choose a real provider or none in production"
+                )
+
             if len(self.secret_key) < 32:
                 raise ValueError(
                     "SECRET_KEY must contain at least 32 characters "

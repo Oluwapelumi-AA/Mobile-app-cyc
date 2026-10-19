@@ -13,8 +13,9 @@ from app.models.user import User
 from app.core.identity import UserId
 from app.services.avatar_storage import (
     AvatarStorage,
-    UnconfiguredAvatarStorage,
+    ObjectAvatarStorage,
 )
+from app.services.object_storage import ObjectStorage, get_object_storage
 from app.services.profiles import (
     ProfileRepository,
     SqlAlchemyProfileRepository,
@@ -72,6 +73,8 @@ def get_profile_repository(db: Session = Depends(get_db)) -> ProfileRepository:
     return SqlAlchemyProfileRepository(db)
 
 
-def get_avatar_storage() -> AvatarStorage:
+def get_avatar_storage(
+    storage: ObjectStorage = Depends(get_object_storage),
+) -> AvatarStorage:
     """Provide avatar storage to API dependencies."""
-    return UnconfiguredAvatarStorage()
+    return ObjectAvatarStorage(storage)

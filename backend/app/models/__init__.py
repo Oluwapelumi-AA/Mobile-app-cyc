@@ -11,6 +11,14 @@ from app.models.event import (
     EventStatus,
     RegistrationStatus,
 )
+from app.models.meeting import (
+    Meeting,
+    MeetingKind,
+    MeetingRecording,
+    MeetingStatus,
+    RecordingStatus,
+    VideoWebhookReceipt,
+)
 from app.models.post import Comment, Post
 from app.models.reaction import Reaction
 from app.models.refresh_session import RefreshSession
@@ -28,10 +36,16 @@ __all__ = [
     "Event",
     "EventRegistration",
     "EventStatus",
+    "Meeting",
+    "MeetingKind",
+    "MeetingRecording",
+    "MeetingStatus",
     "Post",
     "Reaction",
+    "RecordingStatus",
     "RegistrationStatus",
     "RefreshSession",
     "User",
     "UserProfile",
+    "VideoWebhookReceipt",
 ]
