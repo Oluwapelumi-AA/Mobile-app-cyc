@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     storage_public_base_url: str = ""
     # How long presigned upload and download links stay valid.
     storage_presign_ttl_seconds: int = 900
+    # Largest audio, video or document file for the resource library.
+    resource_max_upload_bytes: int = 500 * 1024 * 1024
 
     @model_validator(mode="after")
     def validate_security_settings(self):
@@ -66,6 +68,9 @@ class Settings(BaseSettings):
 
         if self.storage_presign_ttl_seconds <= 0:
             raise ValueError("STORAGE_PRESIGN_TTL_SECONDS must be positive")
+
+        if self.resource_max_upload_bytes <= 0:
+            raise ValueError("RESOURCE_MAX_UPLOAD_BYTES must be positive")
 
         if self.storage_backend == "s3" and not self.storage_bucket:
             raise ValueError("STORAGE_BUCKET is required when STORAGE_BACKEND=s3")

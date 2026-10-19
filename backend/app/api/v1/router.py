@@ -10,6 +10,7 @@ from app.api.v1 import (
     posts,
     profiles,
     reactions,
+    resources,
     video_webhooks,
 )
 
@@ -24,6 +25,8 @@ router.include_router(posts.router)
 router.include_router(events.router)
 router.include_router(meetings.router)
 router.include_router(video_webhooks.router)
+router.include_router(resources.categories_router)
+router.include_router(resources.router)
 
 
 @router.get("/health", tags=["Health"])

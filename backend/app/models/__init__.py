@@ -21,6 +21,14 @@ from app.models.meeting import (
 )
 from app.models.post import Comment, Post
 from app.models.reaction import Reaction
+from app.models.resource import (
+    Resource,
+    ResourceBookmark,
+    ResourceCategory,
+    ResourceKind,
+    ResourceProgress,
+    ResourceStatus,
+)
 from app.models.refresh_session import RefreshSession
 from app.models.user import AccountRole, User
 from app.models.user_profile import UserProfile
@@ -44,6 +52,12 @@ __all__ = [
     "Reaction",
     "RecordingStatus",
     "RegistrationStatus",
+    "Resource",
+    "ResourceBookmark",
+    "ResourceCategory",
+    "ResourceKind",
+    "ResourceProgress",
+    "ResourceStatus",
     "RefreshSession",
     "User",
     "UserProfile",
