@@ -8,15 +8,15 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
-from app.db.session import get_db
 from app.core.identity import UserId
+from app.db.session import get_db
 from app.schemas.reaction import ReactionCreate, ReactionRead
+from app.services.posts import ensure_can_react
 from app.services.reactions import (
     ReactionNotFound,
     remove_reaction,
     set_reaction,
 )
-
 
 router = APIRouter(prefix="/reactions", tags=["Reactions"])
 
@@ -32,6 +32,8 @@ def react_to_post(
     db: DbSession,
 ) -> ReactionRead:
     """Add or change the current user's reaction to a post."""
+
+    ensure_can_react(db, user_id, "post", post_id)
 
     return set_reaction(
         db=db,
@@ -53,13 +55,15 @@ def unreact_to_post(
 ) -> Response:
     """Remove the current user's reaction to a post."""
 
+    ensure_can_react(db, user_id, "post", post_id)
+
     try:
         remove_reaction(db, user_id, "post", post_id)
     except ReactionNotFound:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="You have not reacted to this post.",
-        )
+        ) from None
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -72,6 +76,8 @@ def react_to_comment(
     db: DbSession,
 ) -> ReactionRead:
     """Add or change the current user's reaction to a comment."""
+
+    ensure_can_react(db, user_id, "comment", comment_id)
 
     return set_reaction(
         db=db,
@@ -93,12 +99,14 @@ def unreact_to_comment(
 ) -> Response:
     """Remove the current user's reaction to a comment."""
 
+    ensure_can_react(db, user_id, "comment", comment_id)
+
     try:
         remove_reaction(db, user_id, "comment", comment_id)
     except ReactionNotFound:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="You have not reacted to this comment.",
-        )
+        ) from None
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)

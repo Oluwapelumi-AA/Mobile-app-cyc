@@ -1,86 +1,69 @@
-﻿import uuid
+﻿
+import uuid
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import func, select
 
-from app.api.deps import get_current_user_id
-from app.db.session import Base, get_db
-from app.main import app
-from app.models import Reaction, User
+from app.models import Reaction
+
+
+COMMUNITIES = "/api/v1/communities"
 
 
 @pytest.fixture
-def reaction_context(tmp_path):
-    # Use a fresh, temporary database for each test.
-    database_file = tmp_path / "reactions_test.db"
-    engine = create_engine(
-        f"sqlite:///{database_file}",
-        connect_args={"check_same_thread": False},
-    )
-    TestSessionLocal = sessionmaker(
-        bind=engine,
-        autoflush=False,
-        autocommit=False,
-    )
+def world(api):
+    """Create a public community with members and one outsider."""
+    ids = {
+        name: api.add_user(name)
+        for name in ("owner", "alice", "bob", "outsider")
+    }
 
-    Base.metadata.create_all(bind=engine)
+    api.act_as(ids["owner"])
+    response = api.client.post(
+        COMMUNITIES,
+        json={"name": "Reaction Test Community"},
+    )
+    assert response.status_code == 201
+    community_id = response.json()["id"]
 
-    # Create two real users because reactions reference users.id.
-    with TestSessionLocal() as db:
-        user_one = User(
-            email="reaction-user-one@example.com",
-            password_hash="test-password-hash",
+    for name in ("alice", "bob"):
+        api.act_as(ids[name])
+        response = api.client.post(
+            f"{COMMUNITIES}/{community_id}/join"
         )
-        user_two = User(
-            email="reaction-user-two@example.com",
-            password_hash="test-password-hash",
-        )
-        db.add_all([user_one, user_two])
-        db.commit()
-        db.refresh(user_one)
-        db.refresh(user_two)
+        assert response.status_code in (200, 201)
 
-        user_one_id = user_one.id
-        user_two_id = user_two.id
+    return {"community_id": community_id, **ids}
 
-    current_user = {"id": user_one_id}
 
-    def override_get_db():
-        db = TestSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user_id] = (
-        lambda: current_user["id"]
+def create_post(api, world):
+    """Create a real post as a community member."""
+    api.act_as(world["alice"])
+    response = api.client.post(
+        f"{COMMUNITIES}/{world['community_id']}/posts",
+        json={"body": "A post for reaction testing"},
     )
-
-    try:
-        with TestClient(app) as client:
-            yield {
-                "client": client,
-                "session_factory": TestSessionLocal,
-                "current_user": current_user,
-                "user_one_id": user_one_id,
-                "user_two_id": user_two_id,
-            }
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-        app.dependency_overrides.pop(get_current_user_id, None)
-        engine.dispose()
+    assert response.status_code == 201
+    return response.json()
 
 
-def test_create_post_reaction(reaction_context):
-    client = reaction_context["client"]
-    user_id = reaction_context["user_one_id"]
-    post_id = uuid.uuid4()
+def create_comment(api, world, post_id):
+    """Create a real comment on an existing post."""
+    api.act_as(world["bob"])
+    response = api.client.post(
+        f"/api/v1/posts/{post_id}/comments",
+        json={"body": "A comment for reaction testing"},
+    )
+    assert response.status_code == 201
+    return response.json()
 
-    response = client.put(
-        f"/api/v1/reactions/posts/{post_id}",
+
+def test_create_post_reaction(api, world):
+    post = create_post(api, world)
+    api.act_as(world["alice"])
+
+    response = api.client.put(
+        f"/api/v1/reactions/posts/{post['id']}",
         json={"reaction_type": "like"},
     )
 
@@ -88,46 +71,49 @@ def test_create_post_reaction(reaction_context):
     body = response.json()
     assert body["reaction_type"] == "like"
     assert body["target_type"] == "post"
-    assert body["target_id"] == str(post_id)
-    assert body["user_id"] == str(user_id)
+    assert body["target_id"] == post["id"]
+    assert body["user_id"] == str(world["alice"])
 
 
-def test_changing_reaction_updates_existing_record(reaction_context):
-    client = reaction_context["client"]
-    post_id = uuid.uuid4()
+def test_changing_reaction_updates_existing_record(api, world):
+    post = create_post(api, world)
+    api.act_as(world["alice"])
+    url = f"/api/v1/reactions/posts/{post['id']}"
 
-    first_response = client.put(
-        f"/api/v1/reactions/posts/{post_id}",
+    first_response = api.client.put(
+        url,
         json={"reaction_type": "like"},
     )
     assert first_response.status_code == 200
 
-    second_response = client.put(
-        f"/api/v1/reactions/posts/{post_id}",
+    second_response = api.client.put(
+        url,
         json={"reaction_type": "love"},
     )
     assert second_response.status_code == 200
     assert second_response.json()["reaction_type"] == "love"
 
-    with reaction_context["session_factory"]() as db:
+    with api.session_factory() as db:
         count = db.scalar(
             select(func.count())
             .select_from(Reaction)
             .where(
                 Reaction.target_type == "post",
-                Reaction.target_id == post_id,
+                Reaction.target_id == uuid.UUID(post["id"]),
+                Reaction.user_id == world["alice"],
             )
         )
 
     assert count == 1
 
 
-def test_create_comment_reaction(reaction_context):
-    client = reaction_context["client"]
-    comment_id = uuid.uuid4()
+def test_create_comment_reaction(api, world):
+    post = create_post(api, world)
+    comment = create_comment(api, world, post["id"])
+    api.act_as(world["alice"])
 
-    response = client.put(
-        f"/api/v1/reactions/comments/{comment_id}",
+    response = api.client.put(
+        f"/api/v1/reactions/comments/{comment['id']}",
         json={"reaction_type": "pray"},
     )
 
@@ -135,63 +121,58 @@ def test_create_comment_reaction(reaction_context):
     body = response.json()
     assert body["reaction_type"] == "pray"
     assert body["target_type"] == "comment"
-    assert body["target_id"] == str(comment_id)
+    assert body["target_id"] == comment["id"]
+    assert body["user_id"] == str(world["alice"])
 
 
-def test_remove_own_reaction(reaction_context):
-    client = reaction_context["client"]
-    post_id = uuid.uuid4()
+def test_remove_own_reaction(api, world):
+    post = create_post(api, world)
+    api.act_as(world["alice"])
+    url = f"/api/v1/reactions/posts/{post['id']}"
 
-    create_response = client.put(
-        f"/api/v1/reactions/posts/{post_id}",
+    create_response = api.client.put(
+        url,
         json={"reaction_type": "celebrate"},
     )
     assert create_response.status_code == 200
 
-    delete_response = client.delete(
-        f"/api/v1/reactions/posts/{post_id}"
-    )
+    delete_response = api.client.delete(url)
     assert delete_response.status_code == 204
 
-    with reaction_context["session_factory"]() as db:
+    with api.session_factory() as db:
         remaining = db.scalar(
             select(Reaction).where(
                 Reaction.target_type == "post",
-                Reaction.target_id == post_id,
-                Reaction.user_id == reaction_context["user_one_id"],
+                Reaction.target_id == uuid.UUID(post["id"]),
+                Reaction.user_id == world["alice"],
             )
         )
 
     assert remaining is None
 
 
-def test_cannot_remove_another_users_reaction(reaction_context):
-    client = reaction_context["client"]
-    post_id = uuid.uuid4()
+def test_cannot_remove_another_users_reaction(api, world):
+    post = create_post(api, world)
+    api.act_as(world["alice"])
+    url = f"/api/v1/reactions/posts/{post['id']}"
 
-    create_response = client.put(
-        f"/api/v1/reactions/posts/{post_id}",
+    create_response = api.client.put(
+        url,
         json={"reaction_type": "love"},
     )
     assert create_response.status_code == 200
 
-    # Switch the test identity to the second user.
-    reaction_context["current_user"]["id"] = (
-        reaction_context["user_two_id"]
-    )
-
-    delete_response = client.delete(
-        f"/api/v1/reactions/posts/{post_id}"
-    )
+    # Bob is a member and can see the post, but cannot remove Alice's reaction.
+    api.act_as(world["bob"])
+    delete_response = api.client.delete(url)
     assert delete_response.status_code == 404
 
-    # The first user's reaction must still exist.
-    with reaction_context["session_factory"]() as db:
+    with api.session_factory() as db:
         remaining = db.scalar(
             select(Reaction).where(
                 Reaction.target_type == "post",
-                Reaction.target_id == post_id,
-                Reaction.user_id == reaction_context["user_one_id"],
+                Reaction.target_id == uuid.UUID(post["id"]),
+                Reaction.user_id == world["alice"],
             )
         )
 
@@ -199,24 +180,62 @@ def test_cannot_remove_another_users_reaction(reaction_context):
     assert remaining.reaction_type == "love"
 
 
-def test_invalid_reaction_type_is_rejected(reaction_context):
-    client = reaction_context["client"]
-    post_id = uuid.uuid4()
+def test_invalid_reaction_type_is_rejected(api, world):
+    post = create_post(api, world)
+    api.act_as(world["alice"])
 
-    response = client.put(
-        f"/api/v1/reactions/posts/{post_id}",
+    response = api.client.put(
+        f"/api/v1/reactions/posts/{post['id']}",
         json={"reaction_type": "dislike"},
     )
 
     assert response.status_code == 422
 
 
-def test_removing_nonexistent_reaction_returns_404(reaction_context):
-    client = reaction_context["client"]
-    post_id = uuid.uuid4()
+def test_removing_nonexistent_reaction_returns_404(api, world):
+    post = create_post(api, world)
+    api.act_as(world["alice"])
 
-    response = client.delete(
-        f"/api/v1/reactions/posts/{post_id}"
+    response = api.client.delete(
+        f"/api/v1/reactions/posts/{post['id']}"
     )
 
     assert response.status_code == 404
+
+
+def test_cannot_react_to_nonexistent_post(api, world):
+    api.act_as(world["alice"])
+
+    response = api.client.put(
+        f"/api/v1/reactions/posts/{uuid.uuid4()}",
+        json={"reaction_type": "like"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_non_member_cannot_react_to_post(api, world):
+    post = create_post(api, world)
+    api.act_as(world["outsider"])
+
+    response = api.client.put(
+        f"/api/v1/reactions/posts/{post['id']}",
+        json={"reaction_type": "like"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "membership_required"
+
+
+def test_non_member_cannot_react_to_comment(api, world):
+    post = create_post(api, world)
+    comment = create_comment(api, world, post["id"])
+    api.act_as(world["outsider"])
+
+    response = api.client.put(
+        f"/api/v1/reactions/comments/{comment['id']}",
+        json={"reaction_type": "love"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "membership_required"
