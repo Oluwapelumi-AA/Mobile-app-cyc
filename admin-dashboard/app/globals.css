@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
+/* CYC admin design tokens */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f5f3f1;
+  --foreground: #121212;
 }
 
 @theme inline {
@@ -10,17 +11,58 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Brand */
+  --color-brand: #860000;
+  --color-brand-dark: #650000;
+  --color-brand-soft: #f6e6e6;
+  --color-brand-tint: #e8caca;
+
+  /* Surfaces & text */
+  --color-canvas: #f5f3f1;
+  --color-line: #ece8e5;
+  --color-ink: #121212;
+  --color-muted: #6b6662;
+  --color-faint: #9a9490;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
 }
 
 body {
+  min-height: 100vh;
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #860000;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #e8caca;
+  color: #650000;
+}
+
+/* Quiet scrollbars for the sidebar and wide tables */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #ddd6d1 transparent;
 }
