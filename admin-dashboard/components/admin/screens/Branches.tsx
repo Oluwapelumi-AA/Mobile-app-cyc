@@ -113,7 +113,7 @@ export default function Branches() {
                   <Th>Branch</Th>
                   <Th>Location</Th>
                   <Th>Members</Th>
-                  <Th>Communities</Th>
+                  <Th>Departments</Th>
                   <Th>Contact</Th>
                   <Th>Status</Th>
                   <Th>Created</Th>

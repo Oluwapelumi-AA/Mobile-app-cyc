@@ -172,7 +172,7 @@ export default function Overview() {
     },
     {
       icon: "community" as const,
-      label: "Communities",
+      label: "Departments",
       value: live ? formatNumber(overview.communities) : "36",
       delta: live ? undefined : 3,
       note: live ? `${formatNumber(overview.branches)} branches` : "4 new this month",
@@ -356,7 +356,7 @@ export default function Overview() {
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <LinkRow icon="flag" title="Manage reports" subtitle="Review and take action" onClick={() => navigate("reports")} />
             <LinkRow icon="user" title="View users" subtitle="Manage accounts" onClick={() => navigate("users")} />
-            <LinkRow icon="community" title="Manage communities" subtitle="View and moderate" onClick={() => navigate("communities")} />
+            <LinkRow icon="community" title="Manage departments" subtitle="View and moderate" onClick={() => navigate("communities")} />
             <LinkRow icon="cap" title="Manage courses" subtitle="Create and track courses" onClick={() => navigate("courses")} />
           </div>
           {allSections ? (

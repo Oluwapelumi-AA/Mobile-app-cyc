@@ -118,7 +118,7 @@ export default function Live() {
           <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
             <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search live or video..." />
             <SelectField label="Type" value={kind} onChange={setKind} className="md:w-[106px]" options={[{ value: "all", label: "All types" }, { value: "Live", label: "Live" }, { value: "Video", label: "Video" }]} />
-            <SelectField label="Community" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All communities" }, ...communities.map((c) => ({ value: c, label: c }))]} />
+            <SelectField label="Department" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All departments" }, ...communities.map((c) => ({ value: c, label: c }))]} />
             <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[116px]" options={[{ value: "all", label: "All statuses" }, ...["Live now", "Scheduled", "Published", "Ended", "Draft"].map((s) => ({ value: s, label: s }))]} />
             <DateRangeChip days={Number(range)} />
           </div>
@@ -131,7 +131,7 @@ export default function Live() {
                   <Th>Title</Th>
                   <Th>Type</Th>
                   <Th>Speaker/Host</Th>
-                  <Th>Community</Th>
+                  <Th>Department</Th>
                   <Th>Status</Th>
                   <Th>Date</Th>
                   <Th sortable>Views</Th>

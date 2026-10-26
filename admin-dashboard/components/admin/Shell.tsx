@@ -6,12 +6,12 @@ import { CycLogo, Icon, type IconName } from "./icons";
 import { Avatar, cx } from "./ui";
 
 export const NAV: { key: PageKey; label: string; icon: IconName; suffix?: string; search: string }[] = [
-  { key: "overview", label: "Overview", icon: "grid", search: "Search users, communities, posts, courses…" },
-  { key: "reports", label: "Reports and moderation", icon: "flag", search: "Search users, communities, posts, reports…" },
-  { key: "users", label: "Users", icon: "user", search: "Search users, communities, posts, courses…" },
-  { key: "communities", label: "Communities", icon: "community", search: "Search users, communities, posts, courses…" },
-  { key: "posts", label: "Posts and comments", icon: "message", search: "Search users, communities, posts, comments…" },
-  { key: "events", label: "Events", icon: "calendar", search: "Search users, communities, posts, events…" },
+  { key: "overview", label: "Overview", icon: "grid", search: "Search users, departments, posts, courses…" },
+  { key: "reports", label: "Reports and moderation", icon: "flag", search: "Search users, departments, posts, reports…" },
+  { key: "users", label: "Users", icon: "user", search: "Search users, departments, posts, courses…" },
+  { key: "communities", label: "Departments", icon: "community", search: "Search users, departments, posts, courses…" },
+  { key: "posts", label: "Posts and comments", icon: "message", search: "Search users, departments, posts, comments…" },
+  { key: "events", label: "Events", icon: "calendar", search: "Search users, departments, posts, events…" },
   { key: "live", label: "Live and video", icon: "video", search: "Search live sessions, videos, titles, speakers…" },
   { key: "resources", label: "Spiritual resources", icon: "book", search: "Search resources, authors, categories…" },
   { key: "courses", label: "Courses and quizzes", icon: "cap", search: "Search courses, lessons, quizzes, students…" },

@@ -46,7 +46,7 @@ const APP_SETTINGS: { key: string; title: string; hint: string; on: boolean }[] 
   { key: "moderatePosts", title: "Moderate new posts", hint: "Require approval for new posts and comments.", on: false },
   { key: "live", title: "Enable live streaming", hint: "Allow users to create and join live sessions.", on: true },
   { key: "courses", title: "Enable courses and quizzes", hint: "Allow access to courses, quizzes and certificates.", on: true },
-  { key: "communities", title: "Enable communities", hint: "Allow users to create and join communities.", on: true },
+  { key: "communities", title: "Enable departments", hint: "Allow users to create and join departments.", on: true },
 ];
 
 const ROLES = [
@@ -54,7 +54,7 @@ const ROLES = [
   ["Admin", "Access to most features", "5"],
   ["Moderator", "Can moderate content", "12"],
   ["Instructor", "Can create courses", "8"],
-  ["Community Leader", "Can manage communities", "18"],
+  ["Department Leader", "Can manage departments", "18"],
   ["User", "Standard access", "2,249"],
 ];
 

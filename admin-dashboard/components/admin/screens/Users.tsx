@@ -183,7 +183,7 @@ export default function Users() {
             <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
               <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search users..." />
               <SelectField label="Role" value={role} onChange={setRole} className="md:w-[106px]" options={[{ value: "all", label: "All roles" }, { value: "Member", label: "Member" }, { value: "Moderator", label: "Moderator" }, { value: "Admin", label: "Admin" }]} />
-              <SelectField label="Community" value="all" onChange={() => {}} className="md:w-[132px]" options={[{ value: "all", label: "All communities" }]} />
+              <SelectField label="Department" value="all" onChange={() => {}} className="md:w-[132px]" options={[{ value: "all", label: "All departments" }]} />
               <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[106px]" options={[{ value: "all", label: "All status" }, ...["Active", "Pending", "Muted", "Suspended", "Banned"].map((s) => ({ value: s, label: s }))]} />
               <DateRangeChip />
               <ExportButton onClick={() => downloadCsv("cyc-users.csv", filtered.map((u) => ({ name: u.name, email: u.email, role: u.role, status: u.status, joined: u.joined, last_active: u.lastActive ?? "" })))} />
@@ -196,7 +196,7 @@ export default function Users() {
                     <Th className="w-10"><Checkbox label="Select all" checked={sel.all} onChange={sel.toggleAll} /></Th>
                     <Th sortable>User</Th>
                     <Th>Role</Th>
-                    <Th>Communities</Th>
+                    <Th>Departments</Th>
                     <Th sortable>Status</Th>
                     <Th sortable>Joined</Th>
                     <Th sortable>Last active</Th>
@@ -371,7 +371,7 @@ function UserPanel({
 
       <div className="mt-5 grid grid-cols-3 divide-x divide-line border-y border-line py-3 text-center">
         {[
-          [user.communities, "Communities"],
+          [user.communities, "Departments"],
           [user.posts, "Posts"],
           [user.comments, "Comments"],
         ].map(([v, l]) => (
@@ -390,7 +390,7 @@ function UserPanel({
           tabs={[
             { key: "overview", label: "Overview" },
             { key: "activity", label: "Activity" },
-            { key: "communities", label: "Communities" },
+            { key: "communities", label: "Departments" },
             { key: "reports", label: "Reports" },
           ]}
         />

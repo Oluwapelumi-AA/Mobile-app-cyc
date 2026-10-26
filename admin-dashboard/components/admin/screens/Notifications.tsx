@@ -41,7 +41,7 @@ import {
 const TYPE_META: Record<NotificationRow["type"], { icon: IconName; tone: Tone; color: string; tile: string }> = {
   Live: { icon: "megaphone", tone: "red", color: "#c0262d", tile: "bg-brand-soft text-brand" },
   Course: { icon: "cap", tone: "purple", color: "#9333ea", tile: "bg-violet-50 text-violet-600" },
-  Community: { icon: "community", tone: "teal", color: "#0d9488", tile: "bg-teal-50 text-teal-600" },
+  Department: { icon: "community", tone: "teal", color: "#0d9488", tile: "bg-teal-50 text-teal-600" },
   Event: { icon: "calendar", tone: "red", color: "#e11d48", tile: "bg-rose-50 text-rose-600" },
   Security: { icon: "shield", tone: "gray", color: "#64748b", tile: "bg-slate-100 text-slate-600" },
   Resource: { icon: "fileText", tone: "red", color: "#ea580c", tile: "bg-orange-50 text-orange-600" },
@@ -114,7 +114,7 @@ export default function Notifications() {
         subtitle="Send and manage in-app, email and push notifications."
         action={
           <div className="flex items-center gap-3">
-            <SampleTag reason="Members' inbox notifications exist in the API, but admin broadcasts (send to all / a community) need a new endpoint." />
+            <SampleTag reason="Members' inbox notifications exist in the API, but admin broadcasts (send to all / a department) need a new endpoint." />
             <PrimaryButton onClick={() => setComposeOpen(true)}>New notification</PrimaryButton>
           </div>
         }
@@ -283,7 +283,7 @@ export default function Notifications() {
           </label>
           <div className="grid grid-cols-2 gap-3">
             <SelectField label="Type" value={draft.type} onChange={(v) => setDraft({ ...draft, type: v as NotificationRow["type"] })} options={Object.keys(TYPE_META).map((t) => ({ value: t, label: t }))} />
-            <SelectField label="Audience" value={draft.audience} onChange={(v) => setDraft({ ...draft, audience: v })} options={["All users", "Community members", "Registered attendees", "Students", "Youth"].map((a) => ({ value: a, label: a }))} />
+            <SelectField label="Audience" value={draft.audience} onChange={(v) => setDraft({ ...draft, audience: v })} options={["All users", "Department members", "Registered attendees", "Students", "Youth"].map((a) => ({ value: a, label: a }))} />
           </div>
           <p className="rounded-xl bg-amber-50 px-3 py-2 text-[13px] text-amber-900">Preview only: delivering this needs an admin broadcast endpoint in the API.</p>
         </div>

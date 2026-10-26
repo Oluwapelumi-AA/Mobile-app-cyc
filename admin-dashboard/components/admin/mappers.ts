@@ -59,7 +59,7 @@ export function mapReport(r: ApiReport): ReportRow {
     id: r.id,
     title: snapshotTitle(r.snapshot, `${reason} report`),
     targetType: r.target_type === "user" ? "User profile" : titleCase(r.target_type),
-    community: r.community_id ? `Community ${shortId(r.community_id)}` : "App-wide",
+    community: r.community_id ? `Department ${shortId(r.community_id)}` : "App-wide",
     reason,
     reporter: r.reporter_id ? `User #${shortId(r.reporter_id)}` : "Anonymous",
     status: r.status === "actioned" ? "Resolved" : r.status === "dismissed" ? "Dismissed" : r.reviewed_at ? "Under review" : "New",
@@ -121,7 +121,7 @@ export function mapCommunity(c: ApiCommunity): CommunityRow {
     id: c.id,
     name: c.name,
     description: c.description ?? "",
-    type: c.visibility === "private" ? "Private group" : "Community",
+    type: c.visibility === "private" ? "Private group" : "Department",
     category: "Other",
     members: c.member_count,
     posts: null,
@@ -198,7 +198,7 @@ export function mapMeeting(m: ApiMeeting): VideoRow {
     subtitle: m.description ?? (m.kind === "livestream" ? "Livestream" : "Meeting"),
     kind: m.status === "ended" && m.kind === "meeting" ? "Video" : "Live",
     host: "—",
-    community: m.community_id ? `Community ${shortId(m.community_id)}` : "CYC Global",
+    community: m.community_id ? `Department ${shortId(m.community_id)}` : "CYC Global",
     status: m.status === "live" ? "Live now" : m.status === "ended" ? "Ended" : m.status === "scheduled" ? "Scheduled" : "Draft",
     date: m.started_at ?? m.scheduled_start_at ?? m.created_at,
     views: null,
@@ -317,9 +317,12 @@ const VERB: Record<string, AuditRow["action"]> = {
   role_changed: "Updated",
 };
 
+// Communities are called "departments" in the CYC UI.
+const nounLabel = (noun: string) => (noun === "community" ? "department" : noun);
+
 export function auditSentence(a: ApiAudit) {
   const [noun, verb = ""] = a.action.split(".");
-  const target = `${titleCase(noun)} #${shortId(a.target_id)}`;
+  const target = `${titleCase(nounLabel(noun))} #${shortId(a.target_id)}`;
   const extra =
     typeof a.data?.reason === "string"
       ? ` — ${a.data.reason}`
@@ -334,7 +337,7 @@ export function auditSentence(a: ApiAudit) {
 export function mapAudit(a: ApiAudit): AuditRow {
   const [noun, verb = ""] = a.action.split(".");
   const action = VERB[verb] ?? titleCase(verb || a.action);
-  const moduleName = titleCase(noun === "member" ? "community" : noun);
+  const moduleName = titleCase(noun === "member" ? "department" : nounLabel(noun));
   return {
     id: a.id,
     at: a.created_at,

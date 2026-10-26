@@ -39,7 +39,7 @@ type TabKey = "all" | "Post" | "Comment" | "Flagged" | "Deleted";
 
 export default function Posts() {
   const { globalSearch, navigate } = useAdmin();
-  // There is no admin-wide posts list in the API yet (only per-community feeds),
+  // There is no admin-wide posts list in the API yet (only per-department feeds),
   // so this screen runs on sample data until one is added.
   const data = useLiveList<never, ContentRow>(null, (x) => x, sampleContent);
   const [tab, setTab] = useState<TabKey>("all");
@@ -91,7 +91,7 @@ export default function Posts() {
       <PageHeader
         title="Posts and comments"
         subtitle="Moderate posts and comments across the platform."
-        action={<SampleTag reason="The API has no platform-wide posts list yet (only per-community feeds). Add GET /admin/posts to make this live." />}
+        action={<SampleTag reason="The API has no platform-wide posts list yet (only per-department feeds). Add GET /admin/posts to make this live." />}
       />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_370px]">
@@ -114,7 +114,7 @@ export default function Posts() {
           <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
             <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search content..." />
             <SelectField label="Type" value={kind} onChange={setKind} className="md:w-[106px]" options={[{ value: "all", label: "All types" }, { value: "Post", label: "Posts" }, { value: "Comment", label: "Comments" }]} />
-            <SelectField label="Community" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All communities" }, ...communities.map((c) => ({ value: c, label: c }))]} />
+            <SelectField label="Department" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All departments" }, ...communities.map((c) => ({ value: c, label: c }))]} />
             <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[106px]" options={[{ value: "all", label: "All status" }, ...["Active", "Flagged", "Under review", "Deleted"].map((s) => ({ value: s, label: s }))]} />
             <DateRangeChip days={Number(range)} />
           </div>
@@ -126,7 +126,7 @@ export default function Posts() {
                   <Th className="w-10"><Checkbox label="Select all" checked={sel.all} onChange={sel.toggleAll} /></Th>
                   <Th>Content</Th>
                   <Th>Author</Th>
-                  <Th>Community</Th>
+                  <Th>Department</Th>
                   <Th>Type</Th>
                   <Th sortable>Status</Th>
                   <Th>Date</Th>

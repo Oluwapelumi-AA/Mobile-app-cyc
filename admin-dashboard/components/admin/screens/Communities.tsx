@@ -82,7 +82,7 @@ export default function Communities() {
 
   const setCommunityStatus = (c: CommunityRow, s: CommunityRow["status"]) => {
     if (!sample) {
-      toast.error("Community status changes need an admin endpoint in the API.");
+      toast.error("Department status changes need an admin endpoint in the API.");
       return;
     }
     data.setItems((rows) => rows.map((r) => (r.id === c.id ? { ...r, status: s } : r)));
@@ -92,8 +92,8 @@ export default function Communities() {
   return (
     <>
       <PageHeader
-        title="Communities"
-        subtitle="Manage communities, groups and chapters."
+        title="Departments"
+        subtitle="Manage departments, groups and chapters."
         action={sample ? <SampleTag reason={data.error} /> : null}
       />
 
@@ -104,18 +104,18 @@ export default function Communities() {
               value={tab}
               onChange={(k) => { setTab(k); paged.setPage(1); }}
               tabs={[
-                { key: "all", label: "All communities", count: items.length },
+                { key: "all", label: "All departments", count: items.length },
                 { key: "Active", label: "Active", count: count("Active") },
                 { key: "Inactive", label: "Inactive", count: count("Inactive") },
                 { key: "Pending", label: "Pending", count: count("Pending") },
                 { key: "Archived", label: "Archived", count: count("Archived") },
               ]}
             />
-            <PrimaryButton className="mb-3 self-start md:self-auto" onClick={() => setCreateOpen(true)}>Create community</PrimaryButton>
+            <PrimaryButton className="mb-3 self-start md:self-auto" onClick={() => setCreateOpen(true)}>Create department</PrimaryButton>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
-            <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search communities..." />
+            <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search departments..." />
             <SelectField label="Type" value={type} onChange={setType} className="md:w-[116px]" options={[{ value: "all", label: "All types" }, ...types.map((t) => ({ value: t, label: t }))]} />
             <SelectField label="Category" value={category} onChange={setCategory} className="md:w-[132px]" options={[{ value: "all", label: "All categories" }, ...cats.map((t) => ({ value: t, label: t }))]} />
             <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[116px]" options={[{ value: "all", label: "All statuses" }, ...["Active", "Inactive", "Pending", "Archived"].map((s) => ({ value: s, label: s }))]} />
@@ -127,7 +127,7 @@ export default function Communities() {
               <thead>
                 <tr>
                   <Th className="w-10"><Checkbox label="Select all" checked={sel.all} onChange={sel.toggleAll} /></Th>
-                  <Th>Community</Th>
+                  <Th>Department</Th>
                   <Th>Type</Th>
                   <Th>Members</Th>
                   <Th>Posts</Th>
@@ -170,26 +170,26 @@ export default function Communities() {
                     </Td>
                   </tr>
                 ))}
-                {data.mode !== "loading" && filtered.length === 0 ? <EmptyRow cols={8} title="No communities found" /> : null}
+                {data.mode !== "loading" && filtered.length === 0 ? <EmptyRow cols={8} title="No departments found" /> : null}
               </tbody>
             </Table>
           </div>
-          <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}–${paged.to} of ${filtered.length} communities`} />
+          <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}–${paged.to} of ${filtered.length} departments`} />
         </Card>
 
         <div className="space-y-5">
           <Card className="p-5">
-            <CardHeader title="Community overview" />
+            <CardHeader title="Department overview" />
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniStat icon="community" value={String(items.length)} label="Total communities" delta={sample ? 12 : undefined} />
-              <MiniStat icon="check" tone="green" value={String(count("Active"))} label="Active communities" delta={sample ? 8 : undefined} />
-              <MiniStat icon="clock" value={String(count("Inactive"))} label="Inactive communities" delta={sample ? -29 : undefined} goodWhenUp={false} />
+              <MiniStat icon="community" value={String(items.length)} label="Total departments" delta={sample ? 12 : undefined} />
+              <MiniStat icon="check" tone="green" value={String(count("Active"))} label="Active departments" delta={sample ? 8 : undefined} />
+              <MiniStat icon="clock" value={String(count("Inactive"))} label="Inactive departments" delta={sample ? -29 : undefined} goodWhenUp={false} />
               <MiniStat icon="hourglass" value={String(count("Pending"))} label="Pending approval" />
             </div>
           </Card>
 
           <Card className="p-5">
-            <CardHeader title="Communities by category" />
+            <CardHeader title="Departments by category" />
             <div className="mt-4 flex flex-col items-center gap-5 sm:flex-row xl:flex-col 2xl:flex-row">
               <Donut segments={catSegments} />
               <DonutLegend segments={catSegments} />
@@ -211,26 +211,26 @@ export default function Communities() {
                 ))}
               </ul>
             ) : (
-              <p className="mt-4 text-sm text-muted">Community changes appear in the audit log.</p>
+              <p className="mt-4 text-sm text-muted">Department changes appear in the audit log.</p>
             )}
           </Card>
 
           <Card className="p-5">
             <CardHeader title="Quick actions" />
             <div className="mt-4 grid grid-cols-2 gap-2.5">
-              <QuickTile primary icon="plus" label="Create community" onClick={() => setCreateOpen(true)} />
+              <QuickTile primary icon="plus" label="Create department" onClick={() => setCreateOpen(true)} />
               <QuickTile icon="message" label="Manage categories" />
               <QuickTile icon="clock" label="Review pending" onClick={() => setTab("Pending")} />
-              <QuickTile icon="settings" label="Community settings" onClick={() => navigate("settings")} />
+              <QuickTile icon="settings" label="Department settings" onClick={() => navigate("settings")} />
             </div>
           </Card>
         </div>
       </div>
 
-      <Modal open={createOpen} title="Create community" onClose={() => setCreateOpen(false)}>
+      <Modal open={createOpen} title="Create department" onClose={() => setCreateOpen(false)}>
         <p className="text-sm leading-6 text-ink/80">
-          Communities are created by members and leaders in the CYC app (<code>POST /communities</code>), which makes the
-          creator its owner. Ask the community leader to create it in the app, then manage it from here.
+          Departments are created by members and leaders in the CYC app (<code>POST /communities</code>), which makes the
+          creator its owner. Ask the department leader to create it in the app, then manage it from here.
         </p>
       </Modal>
       {toast.element}

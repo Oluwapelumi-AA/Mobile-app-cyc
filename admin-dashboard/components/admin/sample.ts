@@ -110,7 +110,7 @@ export const sampleUsers: UserRow[] = userSeed.map(([name, role, communities, st
 
 export const sampleUserActivity = [
   { icon: "message" as const, text: "Commented on “Prayer and Fasting”", at: ago(2 * MIN) },
-  { icon: "community" as const, text: "Joined community “Faith & Growth”", at: ago(1 * HOUR) },
+  { icon: "community" as const, text: "Joined department “Faith & Growth”", at: ago(1 * HOUR) },
   { icon: "badgeCheck" as const, text: "Completed course “Discipleship Foundations”", at: ago(2 * DAY) },
 ];
 
@@ -130,17 +130,17 @@ export type CommunityRow = {
 
 export const sampleCommunities: CommunityRow[] = [
   { id: "c1", name: "Youth", description: "A space for young adults to grow in faith.", type: "Group", category: "Youth", members: 1245, posts: 320, status: "Active", createdAt: ago(15 * DAY) },
-  { id: "c2", name: "Faith & Growth", description: "Discipleship and spiritual growth.", type: "Community", category: "Bible Study", members: 982, posts: 218, status: "Active", createdAt: ago(20 * DAY) },
-  { id: "c3", name: "Prayer", description: "A community for prayer requests.", type: "Community", category: "Prayer", members: 856, posts: 410, status: "Active", createdAt: ago(24 * DAY) },
+  { id: "c2", name: "Faith & Growth", description: "Discipleship and spiritual growth.", type: "Department", category: "Bible Study", members: 982, posts: 218, status: "Active", createdAt: ago(20 * DAY) },
+  { id: "c3", name: "Prayer", description: "A department for prayer requests.", type: "Department", category: "Prayer", members: 856, posts: 410, status: "Active", createdAt: ago(24 * DAY) },
   { id: "c4", name: "Bible Study", description: "Weekly scripture discussions.", type: "Chapter", category: "Bible Study", members: 426, posts: 156, status: "Active", createdAt: ago(27 * DAY) },
-  { id: "c5", name: "Music & Worship", description: "Worship and creative ministry.", type: "Community", category: "Music & Worship", members: 610, posts: 190, status: "Active", createdAt: ago(30 * DAY) },
-  { id: "c6", name: "Volunteering", description: "Opportunities to serve.", type: "Community", category: "Outreach", members: 214, posts: 98, status: "Inactive", createdAt: ago(35 * DAY) },
+  { id: "c5", name: "Music & Worship", description: "Worship and creative ministry.", type: "Department", category: "Music & Worship", members: 610, posts: 190, status: "Active", createdAt: ago(30 * DAY) },
+  { id: "c6", name: "Volunteering", description: "Opportunities to serve.", type: "Department", category: "Outreach", members: 214, posts: 98, status: "Inactive", createdAt: ago(35 * DAY) },
   { id: "c7", name: "Leadership Talk", description: "Discussions on leadership.", type: "Group", category: "Leadership", members: 389, posts: 142, status: "Active", createdAt: ago(37 * DAY) },
-  { id: "c8", name: "Testimonies", description: "Share and celebrate testimonies.", type: "Community", category: "Other", members: 522, posts: 276, status: "Active", createdAt: ago(40 * DAY) },
-  { id: "c9", name: "Mental Health", description: "Faith, wellness and support.", type: "Community", category: "Other", members: 305, posts: 120, status: "Pending", createdAt: ago(43 * DAY) },
+  { id: "c8", name: "Testimonies", description: "Share and celebrate testimonies.", type: "Department", category: "Other", members: 522, posts: 276, status: "Active", createdAt: ago(40 * DAY) },
+  { id: "c9", name: "Mental Health", description: "Faith, wellness and support.", type: "Department", category: "Other", members: 305, posts: 120, status: "Pending", createdAt: ago(43 * DAY) },
   { id: "c10", name: "Outreach", description: "Community outreach initiatives.", type: "Group", category: "Outreach", members: 198, posts: 84, status: "Active", createdAt: ago(45 * DAY) },
   { id: "c11", name: "Young Adults", description: "Faith in everyday life.", type: "Group", category: "Youth", members: 344, posts: 101, status: "Active", createdAt: ago(50 * DAY) },
-  { id: "c12", name: "Women of Faith", description: "Fellowship and mentorship.", type: "Community", category: "Leadership", members: 276, posts: 88, status: "Inactive", createdAt: ago(55 * DAY) },
+  { id: "c12", name: "Women of Faith", description: "Fellowship and mentorship.", type: "Department", category: "Leadership", members: 276, posts: 88, status: "Inactive", createdAt: ago(55 * DAY) },
 ];
 
 export const communityCategories = [
@@ -154,11 +154,11 @@ export const communityCategories = [
 ];
 
 export const sampleCommunityActivity = [
-  { text: "New community “Testimonies” created", at: ago(5 * MIN) },
+  { text: "New department “Testimonies” created", at: ago(5 * MIN) },
   { text: "25 new members joined “Youth”", at: ago(1 * HOUR) },
-  { text: "Community “Volunteering” set to inactive", at: ago(3 * HOUR) },
+  { text: "Department “Volunteering” set to inactive", at: ago(3 * HOUR) },
   { text: "New post in “Faith & Growth”", at: ago(5 * HOUR) },
-  { text: "Community “Mental Health” submitted for approval", at: ago(1 * DAY) },
+  { text: "Department “Mental Health” submitted for approval", at: ago(1 * DAY) },
 ];
 
 /* ---------------- Posts & comments ---------------- */
@@ -350,7 +350,7 @@ export type NotificationRow = {
   id: string;
   title: string;
   body: string;
-  type: "Live" | "Course" | "Community" | "Event" | "Security" | "Resource" | "System" | "Newsletter" | "Update";
+  type: "Live" | "Course" | "Department" | "Event" | "Security" | "Resource" | "System" | "Newsletter" | "Update";
   audience: string;
   status: "Sent" | "Scheduled" | "Draft";
   createdBy: string;
@@ -360,7 +360,7 @@ export type NotificationRow = {
 export const sampleNotifications: NotificationRow[] = [
   { id: "n1", title: "Upcoming Live Session", body: "Join us for Sunday Worship Live tomorrow at 10 AM.", type: "Live", audience: "All users", status: "Sent", createdBy: "Daniel Kim", date: ago(1 * DAY) },
   { id: "n2", title: "New Course Available", body: "Our new course “Growing in Faith” is now live!", type: "Course", audience: "All users", status: "Sent", createdBy: "Grace Williams", date: ago(3 * DAY) },
-  { id: "n3", title: "Community Update", body: "New discussions in your communities.", type: "Community", audience: "Community members", status: "Scheduled", createdBy: "James Carter", date: ahead(1 * DAY) },
+  { id: "n3", title: "Department Update", body: "New discussions in your departments.", type: "Department", audience: "Department members", status: "Scheduled", createdBy: "James Carter", date: ahead(1 * DAY) },
   { id: "n4", title: "Event Reminder", body: "Don't forget! Prayer Night starts in 1 hour.", type: "Event", audience: "Registered attendees", status: "Sent", createdBy: "Fatima Bello", date: ago(5 * DAY) },
   { id: "n5", title: "Account Security", body: "We noticed a new login to your account.", type: "Security", audience: "Specific users", status: "Sent", createdBy: "System", date: ago(7 * DAY) },
   { id: "n6", title: "New Sermon Published", body: "Check out this week's sermon: The Power of Prayer.", type: "Resource", audience: "All users", status: "Sent", createdBy: "Tolu Adebayo", date: ago(9 * DAY) },
@@ -396,7 +396,7 @@ export const sampleAudit: AuditRow[] = [
   { id: "a6", at: ago(3 * DAY), actor: "Sarah Johnson", actorRole: "Admin", action: "Updated", module: "Course", details: "Updated course details ‘Christian Living’", ip: "192.168.1.24", status: "Success", category: "admin" },
   { id: "a7", at: ago(3 * DAY + 5 * HOUR), actor: "Michael Chen", actorRole: "System", action: "System", module: "System", details: "User login from new device (john.doe@gmail.com)", ip: "192.168.1.30", status: "Success", category: "system" },
   { id: "a8", at: ago(4 * DAY), actor: "Fatima Bello", actorRole: "Admin", action: "Suspended", module: "User", details: "Suspended user (ID: #1092) for violation", ip: "192.168.1.24", status: "Success", category: "admin" },
-  { id: "a9", at: ago(5 * DAY), actor: "Luciana Mensah", actorRole: "Moderator", action: "Edited", module: "Community", details: "Updated community details “Youth”", ip: "192.168.1.18", status: "Success", category: "content" },
+  { id: "a9", at: ago(5 * DAY), actor: "Luciana Mensah", actorRole: "Moderator", action: "Edited", module: "Department", details: "Updated department details “Youth”", ip: "192.168.1.18", status: "Success", category: "content" },
   { id: "a10", at: ago(6 * DAY), actor: "System", actorRole: "System", action: "Login", module: "Auth", details: "Successful login (admin@cyc.org)", ip: "192.168.1.12", status: "Success", category: "system" },
   { id: "a11", at: ago(6 * DAY + 2 * HOUR), actor: "Peter Obi", actorRole: "Member", action: "Login", module: "Auth", details: "Failed login attempt (wrong password)", ip: "10.0.0.41", status: "Failed", category: "user" },
   { id: "a12", at: ago(7 * DAY), actor: "Esther Nwosu", actorRole: "Member", action: "Created", module: "Post", details: "Created post in “Prayer”", ip: "10.0.0.17", status: "Success", category: "user" },
