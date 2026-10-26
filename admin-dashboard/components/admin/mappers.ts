@@ -317,8 +317,8 @@ const VERB: Record<string, AuditRow["action"]> = {
   role_changed: "Updated",
 };
 
-// Communities are called "departments" in the CYC UI.
-const nounLabel = (noun: string) => (noun === "community" ? "department" : noun);
+// Communities are called "departments" and branches "chapters" in the CYC UI.
+const nounLabel = (noun: string) => (noun === "community" ? "department" : noun === "branch" ? "chapter" : noun);
 
 export function auditSentence(a: ApiAudit) {
   const [noun, verb = ""] = a.action.split(".");

@@ -93,7 +93,7 @@ export default function Communities() {
     <>
       <PageHeader
         title="Departments"
-        subtitle="Manage departments, groups and chapters."
+        subtitle="Manage departments and groups."
         action={sample ? <SampleTag reason={data.error} /> : null}
       />
 

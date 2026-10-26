@@ -15,7 +15,7 @@ export const NAV: { key: PageKey; label: string; icon: IconName; suffix?: string
   { key: "live", label: "Live and video", icon: "video", search: "Search live sessions, videos, titles, speakers…" },
   { key: "resources", label: "Spiritual resources", icon: "book", search: "Search resources, authors, categories…" },
   { key: "courses", label: "Courses and quizzes", icon: "cap", search: "Search courses, lessons, quizzes, students…" },
-  { key: "branches", label: "Branches", icon: "branch", suffix: "(admins only)", search: "Search branches, cities, countries…" },
+  { key: "branches", label: "Chapters", icon: "branch", suffix: "(admins only)", search: "Search chapters, cities, countries…" },
 ];
 
 export const NAV_SECONDARY: typeof NAV = [

@@ -175,7 +175,7 @@ export default function Overview() {
       label: "Departments",
       value: live ? formatNumber(overview.communities) : "36",
       delta: live ? undefined : 3,
-      note: live ? `${formatNumber(overview.branches)} branches` : "4 new this month",
+      note: live ? `${formatNumber(overview.branches)} chapters` : "4 new this month",
       trend: [3, 4, 3, 5, 4, 5, 6, 7, 8],
     },
     {
@@ -365,7 +365,7 @@ export default function Overview() {
               <LinkRow icon="calendar" title="Events" subtitle="Plan and publish events" onClick={() => navigate("events")} />
               <LinkRow icon="video" title="Live and video" subtitle="Broadcasts and recordings" onClick={() => navigate("live")} />
               <LinkRow icon="book" title="Spiritual resources" subtitle="Sermons and devotionals" onClick={() => navigate("resources")} />
-              <LinkRow icon="branch" title="Branches" subtitle="Chapters worldwide" onClick={() => navigate("branches")} />
+              <LinkRow icon="branch" title="Chapters" subtitle="CYC chapters worldwide" onClick={() => navigate("branches")} />
               <LinkRow icon="bell" title="Notifications" subtitle="Send announcements" onClick={() => navigate("notifications")} />
               <LinkRow icon="file" title="Audit log" subtitle="Track admin actions" onClick={() => navigate("audit")} />
               <LinkRow icon="settings" title="Settings" subtitle="Platform preferences" onClick={() => navigate("settings")} />
