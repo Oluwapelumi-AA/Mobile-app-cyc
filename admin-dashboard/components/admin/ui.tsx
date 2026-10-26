@@ -446,6 +446,90 @@ export function MiniStat({
   );
 }
 
+/** KPI card: label + icon on top, big number, delta/note and a sparkline. */
+export function StatCard({
+  icon,
+  label,
+  value,
+  delta,
+  goodWhenUp,
+  note,
+  trend,
+}: {
+  icon: IconName;
+  label: string;
+  value: string;
+  delta?: number;
+  goodWhenUp?: boolean;
+  note: string;
+  trend?: number[];
+}) {
+  return (
+    <Card className="flex flex-col gap-4 p-5 transition hover:shadow-[0_8px_24px_-12px_rgba(134,0,0,0.25)]">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] font-medium text-muted">{label}</p>
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand">
+          <Icon name={icon} size={18} />
+        </span>
+      </div>
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[28px] font-bold leading-none tracking-tight text-ink tabular-nums">{value}</p>
+          <p className="mt-2.5 flex flex-wrap items-center gap-2 text-[12px] text-muted">
+            {delta !== undefined ? <Delta value={delta} goodWhenUp={goodWhenUp} /> : null}
+            <span className="truncate">{note}</span>
+          </p>
+        </div>
+        {trend ? <Sparkline data={trend} className="h-10 w-20 shrink-0" /> : null}
+      </div>
+    </Card>
+  );
+}
+
+/** Ring gauge with a percentage in the middle. */
+export function Ring({ value, label }: { value: number; label: string }) {
+  const r = 52;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <div className="relative mx-auto h-[150px] w-[150px]">
+      <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90" aria-hidden="true">
+        <circle cx="60" cy="60" r={r} fill="none" stroke="#f6e6e6" strokeWidth="9" />
+        <circle
+          cx="60"
+          cy="60"
+          r={r}
+          fill="none"
+          stroke="#860000"
+          strokeWidth="9"
+          strokeLinecap="round"
+          strokeDasharray={`${(pct / 100) * c} ${c}`}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[30px] font-bold leading-none tracking-tight text-ink tabular-nums">{pct}%</span>
+        <span className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Labelled percentage bar. */
+export function Meter({ label, value, color }: { label: string; value: number; color: string }) {
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[12.5px] text-muted">{label}</span>
+        <span className="text-[15px] font-semibold text-ink tabular-nums">{pct}%</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-canvas">
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Filters                                                             */
 /* ------------------------------------------------------------------ */
