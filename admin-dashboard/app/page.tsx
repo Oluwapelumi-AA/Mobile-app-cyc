@@ -102,7 +102,7 @@ export default function Home() {
     setSearch("");
     setMenuOpen(false);
     if (window.location.hash !== `#${key}`) window.history.pushState(null, "", `#${key}`);
-    window.scrollTo({ top: 0 });
+    document.getElementById("main-scroll")?.scrollTo({ top: 0 });
   }, []);
 
   /* ---------- session ---------- */

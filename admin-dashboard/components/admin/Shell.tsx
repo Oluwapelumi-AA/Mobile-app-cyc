@@ -45,13 +45,13 @@ function NavButton({
       className={cx(
         "group relative flex w-full items-center gap-3 py-3 text-left text-[13px] transition",
         "rounded-l-full pl-5 pr-4",
-        active ? "bg-canvas font-semibold text-brand" : "text-white/80 hover:bg-canvas hover:text-brand",
+        active ? "bg-white font-semibold text-brand" : "text-white/80 hover:bg-white hover:text-brand",
       )}
     >
       {active ? (
         <>
-          <span aria-hidden className="pointer-events-none absolute -top-5 right-0 h-5 w-5 bg-[radial-gradient(circle_at_0_0,transparent_19.5px,var(--color-canvas)_20px)]" />
-          <span aria-hidden className="pointer-events-none absolute -bottom-5 right-0 h-5 w-5 bg-[radial-gradient(circle_at_0_100%,transparent_19.5px,var(--color-canvas)_20px)]" />
+          <span aria-hidden className="pointer-events-none absolute -top-5 right-0 h-5 w-5 bg-[radial-gradient(circle_at_0_0,transparent_19.5px,#fff_20px)]" />
+          <span aria-hidden className="pointer-events-none absolute -bottom-5 right-0 h-5 w-5 bg-[radial-gradient(circle_at_0_100%,transparent_19.5px,#fff_20px)]" />
         </>
       ) : null}
       <Icon name={item.icon} size={21} className={active ? "text-brand" : "text-white/80 group-hover:text-brand"} />
@@ -102,7 +102,7 @@ export function Sidebar({
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="scroll-thin flex h-full flex-col overflow-y-auto bg-[linear-gradient(180deg,#9a0a0a_0%,#860000_40%,#6e0000_100%)] pb-5 pl-4 pt-6 [scrollbar-color:rgba(255,255,255,0.25)_transparent]">
+        <div className="scroll-thin flex h-full flex-col overflow-y-auto bg-brand pb-5 pl-4 pt-6 [scrollbar-color:rgba(255,255,255,0.25)_transparent]">
           <div className="mb-7 flex items-center gap-3 pl-1 pr-4">
             <CycLogo size={42} />
             <div className="min-w-0">
@@ -279,10 +279,14 @@ export function Topbar({
 
 export function ShellFrame({ sidebar, children }: { sidebar: ReactNode; children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-canvas text-ink">
+    <div className="min-h-screen bg-brand text-ink">
       {sidebar}
-      <div className="min-h-screen lg:pl-[240px]">
-        <div className="mx-auto max-w-[1680px] px-4 pb-10 pt-3 sm:px-6 lg:pl-7 lg:pr-7">{children}</div>
+      {/* White page inset in the brand-coloured frame; it scrolls, the frame stays put. */}
+      <div
+        id="main-scroll"
+        className="fixed inset-2 overflow-y-auto rounded-[22px] bg-white sm:inset-3 sm:rounded-[28px] lg:left-[240px]"
+      >
+        <div className="mx-auto max-w-[1680px] px-4 pb-10 pt-4 sm:px-6 lg:px-8">{children}</div>
       </div>
     </div>
   );

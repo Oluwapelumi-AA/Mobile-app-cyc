@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { api, downloadCsv, matches, useAdmin, useDirectory, useLiveList } from "../data";
 import { Modal, useConfirm, useToast } from "../dialogs";
+import { Icon } from "../icons";
 import { type ApiReport, mapReport, withNames } from "../mappers";
 import { type ReportRow, sampleReports } from "../sample";
 import {
@@ -17,14 +18,16 @@ import {
   ExportButton,
   LinkRow,
   LoadingRows,
-  MiniStat,
+  Meter,
   Pagination,
   RED_RAMP,
   RangeSelect,
+  Ring,
   RowMenu,
   SampleTag,
   SearchField,
   SelectField,
+  StatCard,
   StatusBadge,
   Table,
   Tabs,
@@ -32,7 +35,6 @@ import {
   Th,
   Thumb,
   type Tone,
-  PageHeader,
   formatDateTime,
   timeAgo,
   usePaged,
@@ -47,7 +49,7 @@ export function reasonTone(reason: string): Tone {
 type TabKey = "all" | "New" | "Under review" | "Resolved" | "Dismissed";
 
 export default function Reports() {
-  const { globalSearch } = useAdmin();
+  const { globalSearch, navigate } = useAdmin();
   const data = useLiveList<ApiReport, ReportRow>("moderation/reports?status=any&limit=100", mapReport, sampleReports);
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
@@ -128,16 +130,46 @@ export default function Reports() {
   ];
 
   const sample = data.mode === "sample";
+  const pending = count("New");
+  const reviewing = count("Under review");
+  const closed = count("Resolved") + count("Dismissed");
+  const exportCsv = () =>
+    downloadCsv(
+      "cyc-reports.csv",
+      filtered.map((r) => ({ title: r.title, target: r.targetType, community: r.community, reason: r.reason, reported_by: r.reporter, status: r.status, created_at: r.createdAt })),
+    );
+  const pct = (part: number) => (items.length ? Math.round((part / items.length) * 100) : 0);
 
   return (
     <>
-      <PageHeader
-        title="Reports and moderation"
-        subtitle="Review and manage reported content to keep the community safe."
-        action={sample ? <SampleTag reason={data.error} /> : null}
-      />
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-[12px] font-medium uppercase tracking-[0.14em] text-muted">Trust and safety</p>
+          <h1 className="mt-1.5 text-[26px] font-bold leading-tight tracking-tight text-ink">Reports and moderation</h1>
+          <p className="mt-1 text-[13.5px] text-muted">Review reported content and keep the community safe.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {sample ? <SampleTag reason={data.error} /> : null}
+          <ExportButton onClick={exportCsv} />
+          <button
+            type="button"
+            onClick={() => { setTab("New"); paged.setPage(1); }}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-brand-dark"
+          >
+            <Icon name="flag" size={16} />
+            Review pending ({pending})
+          </button>
+        </div>
+      </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_370px]">
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon="flag" label="Total reports" value={String(items.length)} delta={sample ? 18 : undefined} goodWhenUp={false} note="In the selected period" trend={[3, 4, 5, 4, 6, 5, 7, 6, 8]} />
+        <StatCard icon="clock" label="Pending review" value={String(pending)} delta={sample ? 12 : undefined} goodWhenUp={false} note="Not yet opened" trend={[2, 3, 2, 4, 3, 4, 5, 4, 5]} />
+        <StatCard icon="eye" label="Under review" value={String(reviewing)} note="Being looked at" trend={[1, 2, 2, 3, 2, 3, 3, 4, 3]} />
+        <StatCard icon="checkCircle" label="Closed" value={String(closed)} delta={sample ? 24 : undefined} note={`${count("Resolved")} resolved · ${count("Dismissed")} dismissed`} trend={[2, 3, 4, 4, 5, 6, 6, 7, 8]} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
         <Card className="p-4 sm:p-5">
           <div className="border-b border-line">
             <Tabs tabs={tabs} value={tab} onChange={(k) => { setTab(k); paged.setPage(1); }} />
@@ -149,14 +181,6 @@ export default function Reports() {
             <SelectField label="Department" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All departments" }, ...communities.map((c) => ({ value: c, label: c }))]} />
             <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[106px]" options={[{ value: "all", label: "All status" }, ...["New", "Under review", "Resolved", "Dismissed"].map((s) => ({ value: s, label: s }))]} />
             <DateRangeChip days={Number(range)} />
-            <ExportButton
-              onClick={() =>
-                downloadCsv(
-                  "cyc-reports.csv",
-                  filtered.map((r) => ({ title: r.title, target: r.targetType, community: r.community, reason: r.reason, reported_by: r.reporter, status: r.status, created_at: r.createdAt })),
-                )
-              }
-            />
           </div>
 
           {sel.selected.size > 0 ? (
@@ -180,47 +204,58 @@ export default function Reports() {
                 <tr>
                   <Th className="w-10"><Checkbox label="Select all" checked={sel.all} onChange={sel.toggleAll} /></Th>
                   <Th>Content</Th>
-                  <Th>Type</Th>
+                  <Th>Reason</Th>
                   <Th>Reported by</Th>
                   <Th sortable>Status</Th>
-                  <Th>Date</Th>
+                  <Th>Reported</Th>
                   <Th className="text-center">Actions</Th>
                 </tr>
               </thead>
               <tbody>
                 {data.mode === "loading" ? <LoadingRows cols={7} /> : null}
-                {paged.slice.map((r) => (
-                  <tr key={r.id} className="hover:bg-canvas/40">
-                    <Td><Checkbox label={`Select ${r.title}`} checked={sel.selected.has(r.id)} onChange={(v) => sel.toggle(r.id, v)} /></Td>
-                    <Td>
-                      <button type="button" onClick={() => setDetail(r)} className="flex items-center gap-3 text-left">
-                        <Thumb seed={r.id} width={40} height={40} rounded="rounded-md" />
-                        <span className="min-w-0">
-                          <span className="block max-w-[190px] truncate font-medium text-ink hover:text-brand">{r.title}</span>
-                          <span className="block truncate text-[11.5px] text-muted">{r.targetType} · {r.community}</span>
-                        </span>
-                      </button>
-                    </Td>
-                    <Td><Badge tone={reasonTone(r.reason)}>{r.reason}</Badge></Td>
-                    <Td className="whitespace-nowrap">{r.reporter}</Td>
-                    <Td><StatusBadge status={r.status} /></Td>
-                    <Td className="whitespace-nowrap text-ink/70">{timeAgo(r.createdAt)}</Td>
-                    <Td className="text-center">
-                      <RowMenu
-                        actions={[
-                          { label: "View details", icon: "eye", onSelect: () => setDetail(r) },
-                          ...(r.status === "New" || r.status === "Under review"
-                            ? [
-                                { label: "Mark resolved", icon: "check" as const, onSelect: () => askResolve(r, "actioned") },
-                                { label: "Remove content", icon: "trash" as const, danger: true, onSelect: () => askResolve(r, "actioned", true) },
-                                { label: "Dismiss", icon: "x" as const, onSelect: () => askResolve(r, "dismissed") },
-                              ]
-                            : []),
-                        ]}
-                      />
-                    </Td>
-                  </tr>
-                ))}
+                {paged.slice.map((r) => {
+                  const open = r.status === "New" || r.status === "Under review";
+                  return (
+                    <tr key={r.id} className={r.status === "New" ? "row-urgent" : undefined}>
+                      <Td><Checkbox label={`Select ${r.title}`} checked={sel.selected.has(r.id)} onChange={(v) => sel.toggle(r.id, v)} /></Td>
+                      <Td>
+                        <button type="button" onClick={() => setDetail(r)} className="flex items-center gap-3 text-left">
+                          <Thumb seed={r.id} width={40} height={40} rounded="rounded-lg" />
+                          <span className="min-w-0">
+                            <span className="block max-w-[200px] truncate font-semibold text-ink hover:text-brand">{r.title}</span>
+                            <span className="block truncate text-[11.5px] text-muted">{r.targetType} · {r.community}</span>
+                          </span>
+                        </button>
+                      </Td>
+                      <Td><Badge tone={reasonTone(r.reason)}>{r.reason}</Badge></Td>
+                      <Td className="whitespace-nowrap">{r.reporter}</Td>
+                      <Td><StatusBadge status={r.status} /></Td>
+                      <Td className="whitespace-nowrap text-ink/70">{timeAgo(r.createdAt)}</Td>
+                      <Td>
+                        <div className="flex items-center justify-center gap-1">
+                          {open ? (
+                            <>
+                              <button type="button" title="Mark resolved" aria-label={`Mark ${r.title} resolved`} onClick={() => askResolve(r, "actioned")} className="flex h-8 w-8 items-center justify-center rounded-lg text-emerald-700 hover:bg-emerald-50">
+                                <Icon name="check" size={16} />
+                              </button>
+                              <button type="button" title="Dismiss" aria-label={`Dismiss ${r.title}`} onClick={() => askResolve(r, "dismissed")} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-canvas hover:text-ink">
+                                <Icon name="x" size={16} />
+                              </button>
+                            </>
+                          ) : null}
+                          <RowMenu
+                            actions={[
+                              { label: "View details", icon: "eye", onSelect: () => setDetail(r) },
+                              ...(open
+                                ? [{ label: "Remove content", icon: "trash" as const, danger: true, onSelect: () => askResolve(r, "actioned", true) }]
+                                : []),
+                            ]}
+                          />
+                        </div>
+                      </Td>
+                    </tr>
+                  );
+                })}
                 {data.mode !== "loading" && filtered.length === 0 ? (
                   <EmptyRow cols={7} title="No reports match" hint="Try another tab or clear the filters." />
                 ) : null}
@@ -237,30 +272,30 @@ export default function Reports() {
 
         <div className="space-y-5">
           <Card className="p-5">
-            <CardHeader title="Reports overview" action={<RangeSelect value={range} onChange={setRange} />} />
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniStat icon="flag" value={String(items.length)} label="Total reports" delta={sample ? 18 : undefined} goodWhenUp={false} />
-              <MiniStat icon="clock" value={String(count("New"))} label="Pending review" delta={sample ? 12 : undefined} goodWhenUp={false} />
-              <MiniStat icon="check" tone="green" value={String(count("Resolved"))} label="Resolved" delta={sample ? 24 : undefined} />
-              <MiniStat icon="x" value={String(count("Dismissed"))} label="Dismissed" delta={sample ? -5 : undefined} />
+            <CardHeader title="Resolution rate" subtitle="Reports closed so far" action={<RangeSelect value={range} onChange={setRange} />} />
+            <div className="my-5">
+              <Ring value={pct(closed)} label="Closed" />
+            </div>
+            <div className="space-y-4">
+              <Meter label="Pending review" value={pct(pending)} color="#860000" />
+              <Meter label="Under review" value={pct(reviewing)} color="#c98a8a" />
             </div>
           </Card>
 
           <Card className="p-5">
-            <CardHeader title="Reports by type" />
-            <div className="mt-4 flex flex-col items-center gap-5 sm:flex-row xl:flex-col 2xl:flex-row">
+            <CardHeader title="Reports by reason" />
+            <div className="mt-4 flex flex-col items-center gap-5">
               <Donut segments={byType} />
               <DonutLegend segments={byType} />
             </div>
           </Card>
 
           <Card className="p-5">
-            <CardHeader title="Moderation actions" />
+            <CardHeader title="Moderation shortcuts" />
             <div className="mt-4 space-y-2.5">
-              <LinkRow icon="flag" title="Review pending reports" subtitle={`${count("New")} reports waiting for review`} onClick={() => { setTab("New"); paged.setPage(1); }} />
-              <LinkRow icon="users" title="Manage flagged users" subtitle="Suspend or reinstate accounts" onClick={() => { setType("all"); setTab("all"); setSearch("User"); }} />
-              <LinkRow icon="ban" title="Content filters" subtitle="Manage blocked words and links" />
-              <LinkRow icon="settings" title="Moderation settings" subtitle="Configure rules and permissions" />
+              <LinkRow icon="flag" title="Review pending reports" subtitle={`${pending} waiting for review`} onClick={() => { setTab("New"); paged.setPage(1); }} />
+              <LinkRow icon="users" title="Manage flagged users" subtitle="Suspend or reinstate accounts" onClick={() => navigate("users")} />
+              <LinkRow icon="file" title="Audit log" subtitle="See every moderation action" onClick={() => navigate("audit")} />
             </div>
           </Card>
         </div>
