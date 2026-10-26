@@ -146,7 +146,7 @@ export default function Reports() {
           <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
             <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search reports..." />
             <SelectField label="Type" value={type} onChange={setType} className="md:w-[108px]" options={[{ value: "all", label: "All types" }, ...reasons.map((r) => ({ value: r, label: r }))]} />
-            <SelectField label="Community" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All communities" }, ...communities.map((c) => ({ value: c, label: c }))]} />
+            <SelectField label="Department" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All departments" }, ...communities.map((c) => ({ value: c, label: c }))]} />
             <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[106px]" options={[{ value: "all", label: "All status" }, ...["New", "Under review", "Resolved", "Dismissed"].map((s) => ({ value: s, label: s }))]} />
             <DateRangeChip days={Number(range)} />
             <ExportButton
@@ -197,7 +197,7 @@ export default function Reports() {
                         <Thumb seed={r.id} width={40} height={40} rounded="rounded-md" />
                         <span className="min-w-0">
                           <span className="block max-w-[190px] truncate font-medium text-ink hover:text-brand">{r.title}</span>
-                          <span className="block truncate text-[13px] text-muted">{r.targetType} · {r.community}</span>
+                          <span className="block truncate text-[11.5px] text-muted">{r.targetType} · {r.community}</span>
                         </span>
                       </button>
                     </Td>

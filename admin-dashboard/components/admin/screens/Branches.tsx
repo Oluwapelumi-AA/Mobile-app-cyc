@@ -58,17 +58,17 @@ export default function Branches() {
     ask({
       title: b.active ? `Archive ${b.name}` : `Restore ${b.name}`,
       message: b.active
-        ? "Members stay in the branch, but it is hidden from sign-up and branch pickers."
-        : "The branch becomes visible again.",
+        ? "Members stay in the chapter, but it is hidden from sign-up and chapter pickers."
+        : "The chapter becomes visible again.",
       confirmLabel: b.active ? "Archive" : "Restore",
       danger: b.active,
       onConfirm: async () => {
         try {
           if (data.mode === "live") await api(`branches/${b.id}/${b.active ? "archive" : "restore"}`, { method: "POST" });
           data.setItems((rows) => rows.map((r) => (r.id === b.id ? { ...r, active: !b.active } : r)));
-          toast.success(b.active ? "Branch archived." : "Branch restored.");
+          toast.success(b.active ? "Chapter archived." : "Chapter restored.");
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : "Could not update the branch.");
+          toast.error(err instanceof Error ? err.message : "Could not update the chapter.");
         }
       },
     });
@@ -79,12 +79,12 @@ export default function Branches() {
   return (
     <>
       <PageHeader
-        title="Branches"
-        subtitle="Manage CYC branches and chapters around the world."
+        title="Chapters"
+        subtitle="Manage CYC chapters around the world."
         action={
           <div className="flex items-center gap-3">
             {sample ? <SampleTag reason={data.error} /> : null}
-            <PrimaryButton onClick={() => toast.success("The add-branch form is the next piece to wire (POST /branches).")}>Add branch</PrimaryButton>
+            <PrimaryButton onClick={() => toast.success("The add-chapter form is the next piece to wire (POST /branches).")}>Add chapter</PrimaryButton>
           </div>
         }
       />
@@ -96,24 +96,24 @@ export default function Branches() {
               value={tab}
               onChange={(k) => { setTab(k); paged.setPage(1); }}
               tabs={[
-                { key: "all", label: "All branches", count: items.length },
+                { key: "all", label: "All chapters", count: items.length },
                 { key: "active", label: "Active", count: items.filter((b) => b.active).length },
                 { key: "archived", label: "Archived", count: items.filter((b) => !b.active).length },
               ]}
             />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
-            <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search branches..." />
+            <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search chapters..." />
             <SelectField label="Country" value={country} onChange={setCountry} className="md:w-[132px]" options={[{ value: "all", label: "All countries" }, ...countries.map((c) => ({ value: c, label: c }))]} />
           </div>
           <div className="mt-4">
             <Table minWidth={780}>
               <thead>
                 <tr>
-                  <Th>Branch</Th>
+                  <Th>Chapter</Th>
                   <Th>Location</Th>
                   <Th>Members</Th>
-                  <Th>Communities</Th>
+                  <Th>Departments</Th>
                   <Th>Contact</Th>
                   <Th>Status</Th>
                   <Th>Created</Th>
@@ -129,7 +129,7 @@ export default function Branches() {
                         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand"><Icon name="branch" size={20} /></span>
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-ink">{b.name}</p>
-                          <p className="truncate text-[13px] text-muted">{b.timezone}</p>
+                          <p className="truncate text-[11.5px] text-muted">{b.timezone}</p>
                         </div>
                       </div>
                     </Td>
@@ -144,25 +144,25 @@ export default function Branches() {
                     </Td>
                   </tr>
                 ))}
-                {data.mode !== "loading" && filtered.length === 0 ? <EmptyRow cols={8} title="No branches found" /> : null}
+                {data.mode !== "loading" && filtered.length === 0 ? <EmptyRow cols={8} title="No chapters found" /> : null}
               </tbody>
             </Table>
           </div>
-          <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}–${paged.to} of ${filtered.length} branches`} />
+          <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}–${paged.to} of ${filtered.length} chapters`} />
         </Card>
 
         <div className="space-y-5">
           <Card className="p-5">
-            <CardHeader title="Branch overview" />
+            <CardHeader title="Chapter overview" />
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniStat icon="branch" value={String(items.length)} label="Total branches" />
-              <MiniStat icon="check" tone="green" value={String(items.filter((b) => b.active).length)} label="Active branches" />
+              <MiniStat icon="branch" value={String(items.length)} label="Total chapters" />
+              <MiniStat icon="check" tone="green" value={String(items.filter((b) => b.active).length)} label="Active chapters" />
               <MiniStat icon="users" value={formatNumber(totalMembers)} label="Members" />
               <MiniStat icon="globe" value={String(countries.length)} label="Countries" />
             </div>
           </Card>
           <Card className="p-5">
-            <CardHeader title="Largest branches" />
+            <CardHeader title="Largest chapters" />
             <div className="mt-4">
               <BarList items={top.map((b, i) => ({ label: b.name.replace(/^CYC /, ""), value: b.members, color: ["#860000", "#c62828", "#e05a5f", "#ec8a8d", "#f3b3b5"][i], display: formatNumber(b.members) }))} />
             </div>
@@ -172,7 +172,7 @@ export default function Branches() {
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-700"><Icon name="lock" size={19} /></span>
               <div>
                 <h3 className="font-semibold text-ink">Admins only</h3>
-                <p className="mt-1 text-sm leading-6 text-ink/75">Creating, archiving and restoring branches is limited to platform admins. Moderators can view branches but not change them.</p>
+                <p className="mt-1 text-sm leading-6 text-ink/75">Creating, archiving and restoring chapters is limited to platform admins. Moderators can view chapters but not change them.</p>
               </div>
             </div>
           </Card>

@@ -118,7 +118,7 @@ export default function Live() {
           <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
             <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search live or video..." />
             <SelectField label="Type" value={kind} onChange={setKind} className="md:w-[106px]" options={[{ value: "all", label: "All types" }, { value: "Live", label: "Live" }, { value: "Video", label: "Video" }]} />
-            <SelectField label="Community" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All communities" }, ...communities.map((c) => ({ value: c, label: c }))]} />
+            <SelectField label="Department" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All departments" }, ...communities.map((c) => ({ value: c, label: c }))]} />
             <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[116px]" options={[{ value: "all", label: "All statuses" }, ...["Live now", "Scheduled", "Published", "Ended", "Draft"].map((s) => ({ value: s, label: s }))]} />
             <DateRangeChip days={Number(range)} />
           </div>
@@ -131,7 +131,7 @@ export default function Live() {
                   <Th>Title</Th>
                   <Th>Type</Th>
                   <Th>Speaker/Host</Th>
-                  <Th>Community</Th>
+                  <Th>Department</Th>
                   <Th>Status</Th>
                   <Th>Date</Th>
                   <Th sortable>Views</Th>
@@ -148,7 +148,7 @@ export default function Live() {
                         <Thumb seed={v.title} width={64} height={46} duration={v.duration !== "—" ? v.duration : undefined} />
                         <div className="min-w-0">
                           <p className="max-w-[150px] truncate font-semibold text-ink">{v.title}</p>
-                          <p className="line-clamp-2 max-w-[150px] text-[12.5px] leading-snug text-ink/70">{v.subtitle}</p>
+                          <p className="line-clamp-2 max-w-[150px] text-[11px] leading-snug text-ink/70">{v.subtitle}</p>
                         </div>
                       </div>
                     </Td>
@@ -202,7 +202,7 @@ export default function Live() {
                   ] as const).map(([icon, v, l]) => (
                     <div key={l} className="flex items-center gap-2">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand"><Icon name={icon} size={17} /></span>
-                      <span><span className="block font-bold leading-tight text-ink">{v ?? "—"}</span><span className="text-[11px] text-muted">{l}</span></span>
+                      <span><span className="block font-bold leading-tight text-ink">{v ?? "—"}</span><span className="text-[9.5px] text-muted">{l}</span></span>
                     </div>
                   ))}
                 </div>

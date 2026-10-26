@@ -183,7 +183,7 @@ export default function Users() {
             <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
               <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search users..." />
               <SelectField label="Role" value={role} onChange={setRole} className="md:w-[106px]" options={[{ value: "all", label: "All roles" }, { value: "Member", label: "Member" }, { value: "Moderator", label: "Moderator" }, { value: "Admin", label: "Admin" }]} />
-              <SelectField label="Community" value="all" onChange={() => {}} className="md:w-[132px]" options={[{ value: "all", label: "All communities" }]} />
+              <SelectField label="Department" value="all" onChange={() => {}} className="md:w-[132px]" options={[{ value: "all", label: "All departments" }]} />
               <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[106px]" options={[{ value: "all", label: "All status" }, ...["Active", "Pending", "Muted", "Suspended", "Banned"].map((s) => ({ value: s, label: s }))]} />
               <DateRangeChip />
               <ExportButton onClick={() => downloadCsv("cyc-users.csv", filtered.map((u) => ({ name: u.name, email: u.email, role: u.role, status: u.status, joined: u.joined, last_active: u.lastActive ?? "" })))} />
@@ -196,7 +196,7 @@ export default function Users() {
                     <Th className="w-10"><Checkbox label="Select all" checked={sel.all} onChange={sel.toggleAll} /></Th>
                     <Th sortable>User</Th>
                     <Th>Role</Th>
-                    <Th>Communities</Th>
+                    <Th>Departments</Th>
                     <Th sortable>Status</Th>
                     <Th sortable>Joined</Th>
                     <Th sortable>Last active</Th>
@@ -208,7 +208,7 @@ export default function Users() {
                   {paged.slice.map((u) => (
                     <tr
                       key={u.id}
-                      className={cx("cursor-pointer hover:bg-canvas/40", selected?.id === u.id && panelOpen ? "bg-brand-soft/30" : "")}
+                      className={cx("cursor-pointer hover:bg-canvas/40", selected?.id === u.id && panelOpen ? "row-active" : "")}
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest("button,input")) return;
                         setSelectedId(u.id);
@@ -221,7 +221,7 @@ export default function Users() {
                           <Avatar name={u.name} src={u.avatar} size={38} />
                           <div className="min-w-0">
                             <p className="truncate font-medium text-ink">{u.name}</p>
-                            <p className="truncate text-[13px] text-muted">{u.email}</p>
+                            <p className="truncate text-[11.5px] text-muted">{u.email}</p>
                           </div>
                         </div>
                       </Td>
@@ -297,7 +297,7 @@ export default function Users() {
               >
                 <span>
                   <span className="block font-medium text-ink">{label}</span>
-                  <span className="block text-[13px] text-muted">{hint}</span>
+                  <span className="block text-[11.5px] text-muted">{hint}</span>
                 </span>
                 {roleModal.apiRole === value ? <Icon name="check" className="text-brand" /> : null}
               </button>
@@ -311,7 +311,7 @@ export default function Users() {
           Members create their own accounts in the CYC app. To give someone staff access, find them in this list and use{" "}
           <span className="font-medium text-ink">Change role</span>.
         </p>
-        <p className="mt-3 rounded-xl bg-canvas px-4 py-3 text-[13px] text-muted">
+        <p className="mt-3 rounded-xl bg-canvas px-4 py-3 text-[11.5px] text-muted">
           Inviting users from the dashboard needs a backend endpoint (e.g. <code>POST /admin/users/invite</code>) that doesn&apos;t exist yet.
         </p>
       </Modal>
@@ -371,7 +371,7 @@ function UserPanel({
 
       <div className="mt-5 grid grid-cols-3 divide-x divide-line border-y border-line py-3 text-center">
         {[
-          [user.communities, "Communities"],
+          [user.communities, "Departments"],
           [user.posts, "Posts"],
           [user.comments, "Comments"],
         ].map(([v, l]) => (
@@ -390,7 +390,7 @@ function UserPanel({
           tabs={[
             { key: "overview", label: "Overview" },
             { key: "activity", label: "Activity" },
-            { key: "communities", label: "Communities" },
+            { key: "communities", label: "Departments" },
             { key: "reports", label: "Reports" },
           ]}
         />
@@ -449,7 +449,7 @@ function UserPanel({
         <PanelAction icon="ban" label="Ban user" tone="danger" onClick={onBan} disabled={user.status === "Banned"} />
       </div>
       {user.live ? (
-        <p className="mt-3 text-[12px] text-muted">
+        <p className="mt-3 text-[10.5px] text-muted">
           <Badge tone="gray">Note</Badge> Mute isn&apos;t in the API yet; Ban suspends the account with a “Ban:” reason.
         </p>
       ) : null}

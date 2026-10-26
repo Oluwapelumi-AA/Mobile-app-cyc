@@ -103,10 +103,10 @@ export function PageHeader({
   return (
     <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h1 className="text-[30px] font-extrabold leading-tight tracking-[-0.02em] text-ink sm:text-[36px]">
+        <h1 className="text-[24px] font-extrabold leading-tight tracking-[-0.02em] text-ink sm:text-[28px]">
           {title}
         </h1>
-        <p className="mt-1.5 text-[15px] text-ink/80 sm:text-base">{subtitle}</p>
+        <p className="mt-1.5 text-[13px] text-ink/80 sm:text-base">{subtitle}</p>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -186,7 +186,7 @@ export function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3 text-[15px] font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3 text-[13px] font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60",
         className,
       )}
     >
@@ -274,7 +274,7 @@ export function Badge({
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[12.5px] font-medium leading-none",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium leading-none",
         toneClasses[tone],
         className,
       )}
@@ -329,7 +329,7 @@ export function SampleTag({ reason }: { reason?: string }) {
   return (
     <span
       title={reason || "The live API returned no data, so sample records are shown."}
-      className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800"
+      className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-wide text-amber-800"
     >
       <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
       Sample data
@@ -339,7 +339,7 @@ export function SampleTag({ reason }: { reason?: string }) {
 
 export function LiveTag() {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-wide text-emerald-800">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
       Live
     </span>
@@ -404,12 +404,12 @@ export function KpiCard({
       <div className="min-w-0 flex-1">
         <p className="text-sm leading-snug text-ink/80">{label}</p>
         <div className="mt-1 flex flex-wrap items-center gap-2">
-          <span className="text-[26px] font-bold leading-none tracking-tight text-ink">
+          <span className="text-[23px] font-bold leading-none tracking-tight text-ink">
             {value}
           </span>
           {delta !== undefined ? <Delta value={delta} goodWhenUp={goodWhenUp} /> : null}
         </div>
-        {note ? <p className="mt-2 text-[13px] leading-snug text-muted">{note}</p> : null}
+        {note ? <p className="mt-2 text-[11.5px] leading-snug text-muted">{note}</p> : null}
       </div>
       {trend ? <Sparkline data={trend} className="hidden h-9 w-16 shrink-0 self-end sm:block" /> : null}
     </Card>
@@ -440,7 +440,7 @@ export function MiniStat({
           <span className="text-xl font-bold leading-tight text-ink">{value}</span>
           {delta !== undefined ? <Delta value={delta} goodWhenUp={goodWhenUp} /> : null}
         </div>
-        <p className="truncate text-[12.5px] text-muted">{label}</p>
+        <p className="truncate text-[11px] text-muted">{label}</p>
       </div>
     </div>
   );
@@ -474,7 +474,7 @@ export function Tabs<K extends string>({
             onClick={() => onChange(tab.key)}
             className={cx(
               "relative shrink-0 whitespace-nowrap pb-3.5 pt-1 transition",
-              size === "sm" ? "px-1.5 text-[13.5px]" : "px-3 text-[15px]",
+              size === "sm" ? "px-1.5 text-[12px]" : "px-3 text-[13px]",
               active ? "font-semibold text-brand" : "text-ink/70 hover:text-ink",
             )}
           >
@@ -513,7 +513,7 @@ export function SearchField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-10 w-full rounded-xl border border-line bg-white pl-10 pr-3 text-[13.5px] text-ink outline-none placeholder:text-faint focus:border-brand/50 focus:ring-4 focus:ring-brand-soft"
+        className="h-10 w-full rounded-xl border border-line bg-white pl-10 pr-3 text-[12px] text-ink outline-none placeholder:text-faint focus:border-brand/50 focus:ring-4 focus:ring-brand-soft"
       />
     </label>
   );
@@ -538,7 +538,7 @@ export function SelectField({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10 w-full cursor-pointer appearance-none truncate rounded-xl border border-line bg-white pl-3 pr-8 text-[13.5px] text-ink outline-none focus:border-brand/50 focus:ring-4 focus:ring-brand-soft"
+        className="h-10 w-full cursor-pointer appearance-none truncate rounded-xl border border-line bg-white pl-3 pr-8 text-[12px] text-ink outline-none focus:border-brand/50 focus:ring-4 focus:ring-brand-soft"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -592,7 +592,7 @@ export function DateRangeChip({ days = 30 }: { days?: number }) {
     return `${fmt(start, !sameYear)} – ${fmt(end, true)}`;
   }, [days]);
   return (
-    <span className="col-span-2 inline-flex h-10 min-w-0 items-center gap-2 rounded-xl border border-line bg-white px-3 text-[13.5px] text-ink md:col-auto">
+    <span className="col-span-2 inline-flex h-10 min-w-0 items-center gap-2 rounded-xl border border-line bg-white px-3 text-[12px] text-ink md:col-auto">
       <Icon name="calendar" size={16} className="shrink-0" />
       <span className="truncate whitespace-nowrap">{label}</span>
     </span>
@@ -604,7 +604,7 @@ export function ExportButton({ onClick }: { onClick?: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 text-[13.5px] font-medium text-ink hover:bg-canvas"
+      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 text-[12px] font-medium text-ink hover:bg-canvas"
     >
       <Icon name="download" size={17} />
       Export
@@ -625,7 +625,7 @@ export function Table({
 }) {
   return (
     <div className="scroll-thin overflow-x-auto">
-      <table className="w-full border-separate border-spacing-0 text-left" style={{ minWidth }}>
+      <table className="data-table w-full text-left" style={{ minWidth }}>
         {children}
       </table>
     </div>
@@ -644,7 +644,7 @@ export function Th({
   return (
     <th
       className={cx(
-        "whitespace-nowrap bg-canvas/70 px-2.5 py-3 text-[13px] font-medium text-ink/70 first:rounded-l-xl last:rounded-r-xl",
+        "whitespace-nowrap bg-canvas/70 px-2.5 py-3 text-[11.5px] font-medium text-ink/70 first:rounded-l-xl last:rounded-r-xl",
         className,
       )}
     >
@@ -658,7 +658,7 @@ export function Th({
 
 export function Td({ children, className }: { children?: ReactNode; className?: string }) {
   return (
-    <td className={cx("border-b border-line/70 px-2.5 py-3 align-middle text-[13.5px] text-ink/85", className)}>
+    <td className={cx("border-b border-line/70 px-2.5 py-3 align-middle text-[12px] text-ink/85", className)}>
       {children}
     </td>
   );
@@ -726,7 +726,7 @@ export function Pagination({
   }, [page, pages]);
 
   const btn =
-    "flex h-10 min-w-10 items-center justify-center rounded-xl px-2 text-[15px] transition";
+    "flex h-10 min-w-10 items-center justify-center rounded-xl px-2 text-[13px] transition";
 
   return (
     <div className="flex flex-col gap-3 px-1 pt-5 sm:flex-row sm:items-center sm:justify-between">
@@ -766,7 +766,7 @@ export function Pagination({
           <Icon name="chevronRight" size={18} />
         </button>
       </div>
-      <p className="text-[15px] text-ink/70">{summary}</p>
+      <p className="text-[13px] text-ink/70">{summary}</p>
     </div>
   );
 }
@@ -985,7 +985,7 @@ export function Thumb({
       <span className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/40 to-transparent" />
       <Icon name={icon ?? scene.icon} size={typeof height === "number" ? Math.max(16, height * 0.42) : 28} strokeWidth={2} className="relative text-white/90 drop-shadow" />
       {duration ? (
-        <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-px text-[10px] font-medium text-white">
+        <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-px text-[9px] font-medium text-white">
           {duration}
         </span>
       ) : null}
@@ -1086,7 +1086,7 @@ export function Donut({
         ))}
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="text-[28px] font-bold leading-none text-ink">
+        <span className="text-[24.5px] font-bold leading-none text-ink">
           {active ? active.value : formatNumber(segments.reduce((s, x) => s + x.value, 0))}
         </span>
         <span className="mt-1 max-w-[80px] truncate text-xs text-muted">{active ? active.label : centerLabel}</span>
@@ -1201,8 +1201,8 @@ export function LinkRow({
         <Icon name={icon} size={22} />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-semibold text-ink">{title}</span>
-        <span className="block truncate text-[13px] text-muted">{subtitle}</span>
+        <span className="block truncate text-[13px] font-semibold text-ink">{title}</span>
+        <span className="block truncate text-[11.5px] text-muted">{subtitle}</span>
       </span>
       <Icon name="chevronRight" size={18} className="shrink-0 text-ink/70" />
     </button>

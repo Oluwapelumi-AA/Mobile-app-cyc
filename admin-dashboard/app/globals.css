@@ -32,6 +32,8 @@
 
 html {
   min-height: 100%;
+  /* Rem base for the whole dashboard; 14px keeps text and spacing compact. */
+  font-size: 14px;
 }
 
 body {
@@ -61,8 +63,62 @@ textarea:focus-visible {
   color: #650000;
 }
 
-/* Quiet scrollbars for the sidebar and wide tables */
+/* Sidebar and wide tables scroll without a visible scrollbar */
 .scroll-thin {
-  scrollbar-width: thin;
-  scrollbar-color: #ddd6d1 transparent;
+  scrollbar-width: none;
+}
+
+/* Card-style table rows: each row is its own rounded, bordered strip */
+.data-table {
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  margin-top: -8px;
+}
+
+.data-table tbody td {
+  background: #fff;
+  border-top: 1px solid #ece8e5;
+  border-bottom: 1px solid #ece8e5;
+  transition: background-color 150ms, border-color 150ms;
+}
+
+.data-table tbody td:first-child {
+  border-left: 1px solid #ece8e5;
+  border-radius: 12px 0 0 12px;
+}
+
+.data-table tbody td:last-child {
+  border-right: 1px solid #ece8e5;
+  border-radius: 0 12px 12px 0;
+}
+
+.data-table tbody td:only-child {
+  border-radius: 12px;
+}
+
+.data-table tbody tr:hover td {
+  background: #fbf3f3;
+  border-color: #e8caca;
+}
+
+.data-table tbody tr.row-active td {
+  background: #f6e6e6;
+  border-color: #860000;
+}
+
+.data-table tbody tr.row-active td:first-child {
+  box-shadow: inset 4px 0 0 #860000;
+}
+
+/* No visible scrollbars anywhere; scrolling with wheel, touch and keys still works */
+html,
+body,
+* {
+  scrollbar-width: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
