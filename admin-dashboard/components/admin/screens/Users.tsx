@@ -208,7 +208,7 @@ export default function Users() {
                   {paged.slice.map((u) => (
                     <tr
                       key={u.id}
-                      className={cx("cursor-pointer hover:bg-canvas/40", selected?.id === u.id && panelOpen ? "bg-brand-soft/30" : "")}
+                      className={cx("cursor-pointer hover:bg-canvas/40", selected?.id === u.id && panelOpen ? "row-active" : "")}
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest("button,input")) return;
                         setSelectedId(u.id);
@@ -221,7 +221,7 @@ export default function Users() {
                           <Avatar name={u.name} src={u.avatar} size={38} />
                           <div className="min-w-0">
                             <p className="truncate font-medium text-ink">{u.name}</p>
-                            <p className="truncate text-[13px] text-muted">{u.email}</p>
+                            <p className="truncate text-[11.5px] text-muted">{u.email}</p>
                           </div>
                         </div>
                       </Td>
@@ -297,7 +297,7 @@ export default function Users() {
               >
                 <span>
                   <span className="block font-medium text-ink">{label}</span>
-                  <span className="block text-[13px] text-muted">{hint}</span>
+                  <span className="block text-[11.5px] text-muted">{hint}</span>
                 </span>
                 {roleModal.apiRole === value ? <Icon name="check" className="text-brand" /> : null}
               </button>
@@ -311,7 +311,7 @@ export default function Users() {
           Members create their own accounts in the CYC app. To give someone staff access, find them in this list and use{" "}
           <span className="font-medium text-ink">Change role</span>.
         </p>
-        <p className="mt-3 rounded-xl bg-canvas px-4 py-3 text-[13px] text-muted">
+        <p className="mt-3 rounded-xl bg-canvas px-4 py-3 text-[11.5px] text-muted">
           Inviting users from the dashboard needs a backend endpoint (e.g. <code>POST /admin/users/invite</code>) that doesn&apos;t exist yet.
         </p>
       </Modal>
@@ -449,7 +449,7 @@ function UserPanel({
         <PanelAction icon="ban" label="Ban user" tone="danger" onClick={onBan} disabled={user.status === "Banned"} />
       </div>
       {user.live ? (
-        <p className="mt-3 text-[12px] text-muted">
+        <p className="mt-3 text-[10.5px] text-muted">
           <Badge tone="gray">Note</Badge> Mute isn&apos;t in the API yet; Ban suspends the account with a “Ban:” reason.
         </p>
       ) : null}

@@ -179,7 +179,7 @@ export default function Settings() {
                   <CycLogo size={64} />
                   <div className="min-w-0 flex-1">
                     <p className="text-2xl font-extrabold text-ink">{name || "—"}</p>
-                    <p className="text-[15px] text-muted">Community Platform</p>
+                    <p className="text-[13px] text-muted">Community Platform</p>
                   </div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => toast.error("Logo upload needs a settings API.")} className="rounded-xl border border-line px-4 py-2.5 text-sm font-medium hover:bg-canvas">Change logo</button>
@@ -189,7 +189,7 @@ export default function Settings() {
                 <label className="mt-6 block">
                   <span className="mb-1.5 block text-sm font-semibold text-ink">Platform name</span>
                   <input value={name} maxLength={40} onChange={(e) => { setName(e.target.value); setDirty(true); }} className="h-11 w-full rounded-xl border border-line px-3.5 text-sm outline-none focus:border-brand/50 focus:ring-4 focus:ring-brand-soft" />
-                  <span className="mt-1.5 block text-[13px] text-muted">This name will appear across the platform.</span>
+                  <span className="mt-1.5 block text-[11.5px] text-muted">This name will appear across the platform.</span>
                 </label>
                 <label className="mt-5 block">
                   <span className="mb-1.5 block text-sm font-semibold text-ink">Platform description</span>
@@ -204,8 +204,8 @@ export default function Settings() {
                   {APP_SETTINGS.map((s) => (
                     <li key={s.key} className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <p className="text-[15px] font-medium text-ink">{s.title}</p>
-                        <p className="text-[13px] text-muted">{s.hint}</p>
+                        <p className="text-[13px] font-medium text-ink">{s.title}</p>
+                        <p className="text-[11.5px] text-muted">{s.hint}</p>
                       </div>
                       <Toggle label={s.title} checked={toggles[s.key]} onChange={(v) => { setToggles((t) => ({ ...t, [s.key]: v })); setDirty(true); }} />
                     </li>
@@ -214,11 +214,11 @@ export default function Settings() {
               </Card>
 
               <Card className="p-5">
-                <CardHeader title="User roles and permissions" subtitle="Manage roles and access levels." action={<button type="button" onClick={() => setTab("roles")} className="whitespace-nowrap rounded-xl border border-line px-3 py-2 text-[13px] font-medium hover:bg-canvas">Manage roles</button>} />
+                <CardHeader title="User roles and permissions" subtitle="Manage roles and access levels." action={<button type="button" onClick={() => setTab("roles")} className="whitespace-nowrap rounded-xl border border-line px-3 py-2 text-[11.5px] font-medium hover:bg-canvas">Manage roles</button>} />
                 <div className="scroll-thin mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[360px] text-left text-[13px]">
+                  <table className="w-full min-w-[360px] text-left text-[11.5px]">
                     <thead>
-                      <tr className="bg-canvas/70 text-[13px] text-ink/70">
+                      <tr className="bg-canvas/70 text-[11.5px] text-ink/70">
                         <th className="rounded-l-lg px-2 py-2 font-medium">Role</th>
                         <th className="px-2 py-2 font-medium">Description</th>
                         <th className="px-2 py-2 font-medium">Users</th>
@@ -240,15 +240,15 @@ export default function Settings() {
               </Card>
 
               <Card className="p-5">
-                <CardHeader title="Integrations" subtitle="Connect with third-party services." action={<button type="button" onClick={() => setTab("integrations")} className="whitespace-nowrap rounded-xl border border-line px-3 py-2 text-[13px] font-medium hover:bg-canvas">Manage integrations</button>} />
+                <CardHeader title="Integrations" subtitle="Connect with third-party services." action={<button type="button" onClick={() => setTab("integrations")} className="whitespace-nowrap rounded-xl border border-line px-3 py-2 text-[11.5px] font-medium hover:bg-canvas">Manage integrations</button>} />
                 <ul className="mt-4 divide-y divide-line">
                   {INTEGRATIONS.map((i) => (
                     <li key={i.name}>
                       <button type="button" className="flex w-full items-center gap-3 py-2.5 text-left">
                         <Icon name={i.icon} size={24} className={i.tile} />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-[15px] font-medium text-ink">{i.name}</span>
-                          <span className="block text-[13px] text-muted">{i.hint}</span>
+                          <span className="block text-[13px] font-medium text-ink">{i.name}</span>
+                          <span className="block text-[11.5px] text-muted">{i.hint}</span>
                         </span>
                         <StatusBadge status={i.connected ? "Connected" : "Not connected"} />
                         <Icon name="chevronRight" size={18} className="text-ink/60" />
@@ -290,7 +290,7 @@ export default function Settings() {
                 </div>
               ))}
             </div>
-            <div className="mt-3 flex items-center justify-between text-[13px] text-muted">
+            <div className="mt-3 flex items-center justify-between text-[11.5px] text-muted">
               <span>Last checked: {health ? formatDateTime(health.checked) : "—"}</span>
               <button type="button" disabled={checking} onClick={() => void checkHealth()} className="inline-flex items-center gap-1.5 font-medium text-emerald-700 disabled:opacity-50">
                 <Icon name="refresh" size={15} />Refresh

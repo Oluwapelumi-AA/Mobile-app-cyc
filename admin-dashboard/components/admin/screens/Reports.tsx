@@ -197,7 +197,7 @@ export default function Reports() {
                         <Thumb seed={r.id} width={40} height={40} rounded="rounded-md" />
                         <span className="min-w-0">
                           <span className="block max-w-[190px] truncate font-medium text-ink hover:text-brand">{r.title}</span>
-                          <span className="block truncate text-[13px] text-muted">{r.targetType} · {r.community}</span>
+                          <span className="block truncate text-[11.5px] text-muted">{r.targetType} · {r.community}</span>
                         </span>
                       </button>
                     </Td>

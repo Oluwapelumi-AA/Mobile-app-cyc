@@ -129,7 +129,7 @@ export default function Branches() {
                         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand"><Icon name="branch" size={20} /></span>
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-ink">{b.name}</p>
-                          <p className="truncate text-[13px] text-muted">{b.timezone}</p>
+                          <p className="truncate text-[11.5px] text-muted">{b.timezone}</p>
                         </div>
                       </div>
                     </Td>

@@ -202,7 +202,7 @@ export default function Events() {
                           <Thumb seed={e.title} width={52} height={48} />
                           <div className="min-w-0">
                             <p className="max-w-[180px] truncate font-semibold text-ink">{e.title}</p>
-                            <p className="max-w-[180px] truncate text-[13px] text-ink/70">{e.tagline}</p>
+                            <p className="max-w-[180px] truncate text-[11.5px] text-ink/70">{e.tagline}</p>
                           </div>
                         </div>
                       </Td>
@@ -250,7 +250,7 @@ export default function Events() {
               </div>
               <div className="px-2 pb-2 pt-4">
                 <h2 className="text-xl font-bold text-ink">{featured.title}</h2>
-                <p className="mt-1 text-[15px] text-ink/80">{featured.tagline}</p>
+                <p className="mt-1 text-[13px] text-ink/80">{featured.tagline}</p>
                 <div className="mt-4 grid grid-cols-1 gap-3 border-b border-line pb-4 text-sm sm:grid-cols-2">
                   <span className="flex items-start gap-2">
                     <Icon name="calendar" size={18} className="mt-0.5 shrink-0 text-brand" />
@@ -293,7 +293,7 @@ export default function Events() {
                   <Thumb seed={e.title} width={56} height={42} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-ink">{e.title}</p>
-                    <p className="text-[13px] text-ink/70">{eventWhen(e).day} • {eventWhen(e).time.split(" (")[0]}</p>
+                    <p className="text-[11.5px] text-ink/70">{eventWhen(e).day} • {eventWhen(e).time.split(" (")[0]}</p>
                   </div>
                   <StatusBadge status={e.status === "Cancelled" ? "Cancelled" : "Completed"} />
                 </li>

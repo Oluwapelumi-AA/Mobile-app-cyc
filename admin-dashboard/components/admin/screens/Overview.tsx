@@ -222,7 +222,7 @@ export default function Overview() {
               </div>
             }
           />
-          <ul className="mb-2 mt-4 flex flex-wrap gap-x-6 gap-y-1 text-[15px] text-ink/80">
+          <ul className="mb-2 mt-4 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-ink/80">
             {SERIES.map((s) => (
               <li key={s.key} className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
@@ -246,7 +246,7 @@ export default function Overview() {
           <div className="scroll-thin mt-4 overflow-x-auto">
             <table className="w-full min-w-[500px] border-separate border-spacing-0 text-left">
               <thead>
-                <tr className="text-[12.5px] text-ink/70">
+                <tr className="text-[11px] text-ink/70">
                   {["Content", "Type", "Reported by", "Status", "Time"].map((h) => (
                     <th key={h} className="whitespace-nowrap bg-canvas/70 px-2 py-2.5 font-medium first:rounded-l-lg last:rounded-r-lg">
                       {h}
@@ -256,7 +256,7 @@ export default function Overview() {
               </thead>
               <tbody>
                 {reportRows.map((r) => (
-                  <tr key={r.id} className="cursor-pointer text-[13px] hover:bg-canvas/40" onClick={() => navigate("reports")}>
+                  <tr key={r.id} className="cursor-pointer text-[11.5px] hover:bg-canvas/40" onClick={() => navigate("reports")}>
                     <td className="border-b border-line/70 px-2 py-2.5">
                       <div className="flex items-center gap-2.5">
                         <Thumb seed={r.id} width={34} height={34} rounded="rounded-md" />
@@ -312,7 +312,7 @@ export default function Overview() {
           <div className="scroll-thin mt-4 overflow-x-auto">
             <table className="w-full min-w-[560px] border-separate border-spacing-0 text-left">
               <thead>
-                <tr className="text-[12.5px] text-ink/70">
+                <tr className="text-[11px] text-ink/70">
                   {["Admin", "Action", "Details", "Time", ""].map((h) => (
                     <th key={h} className="whitespace-nowrap bg-canvas/70 px-2 py-2.5 font-medium first:rounded-l-lg last:rounded-r-lg">
                       {h}
@@ -322,7 +322,7 @@ export default function Overview() {
               </thead>
               <tbody>
                 {auditRows.map((a) => (
-                  <tr key={a.id} className="text-[13px]">
+                  <tr key={a.id} className="text-[11.5px]">
                     <td className="border-b border-line/70 px-2 py-2.5">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={a.actor} size={30} />
@@ -375,7 +375,7 @@ export default function Overview() {
             type="button"
             aria-expanded={allSections}
             onClick={() => setAllSections((v) => !v)}
-            className="mt-3 flex w-full items-center gap-3 rounded-xl bg-brand-soft/70 px-4 py-3.5 text-left text-[15px] text-ink hover:bg-brand-soft"
+            className="mt-3 flex w-full items-center gap-3 rounded-xl bg-brand-soft/70 px-4 py-3.5 text-left text-[13px] text-ink hover:bg-brand-soft"
           >
             <Icon name="fileText" size={20} />
             <span className="flex-1">{allSections ? "Show fewer sections" : "View all sections"}</span>

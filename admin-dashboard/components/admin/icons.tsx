@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { SVGProps } from "react";
 
 /**
@@ -327,27 +328,16 @@ export function Icon({ name, size = 20, strokeWidth = 1.8, className, ...rest }:
   );
 }
 
-/** The CYC mark: a ring of red petals around a centre dot. */
+/** The CYC crest (public/cyc-crest.png). */
 export function CycLogo({ size = 44 }: { size?: number }) {
-  const petals = Array.from({ length: 8 }, (_, i) => i);
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
-      {petals.map((i) => {
-        const angle = (i / petals.length) * Math.PI * 2 - Math.PI / 2;
-        const cx = 24 + Math.cos(angle) * 15;
-        const cy = 24 + Math.sin(angle) * 15;
-        return (
-          <ellipse
-            key={i}
-            cx={cx}
-            cy={cy}
-            rx={i % 2 ? 5.2 : 6.2}
-            ry={i % 2 ? 5.2 : 6.2}
-            fill={i % 2 ? "#c62828" : "#860000"}
-          />
-        );
-      })}
-      <circle cx="24" cy="24" r="5.5" fill="#860000" />
-    </svg>
+    <Image
+      src="/cyc-crest.png"
+      alt="Christ Youth Club logo"
+      width={size}
+      height={size}
+      className="shrink-0 object-contain"
+      style={{ width: size, height: size }}
+    />
   );
 }

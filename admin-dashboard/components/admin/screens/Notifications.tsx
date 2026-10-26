@@ -169,7 +169,7 @@ export default function Notifications() {
                           </span>
                           <div className="min-w-0">
                             <p className="max-w-[180px] truncate font-semibold text-ink">{n.title}</p>
-                            <p className="line-clamp-2 max-w-[180px] text-[12.5px] leading-snug text-ink/70">{n.body}</p>
+                            <p className="line-clamp-2 max-w-[180px] text-[11px] leading-snug text-ink/70">{n.body}</p>
                           </div>
                         </div>
                       </Td>
@@ -285,7 +285,7 @@ export default function Notifications() {
             <SelectField label="Type" value={draft.type} onChange={(v) => setDraft({ ...draft, type: v as NotificationRow["type"] })} options={Object.keys(TYPE_META).map((t) => ({ value: t, label: t }))} />
             <SelectField label="Audience" value={draft.audience} onChange={(v) => setDraft({ ...draft, audience: v })} options={["All users", "Department members", "Registered attendees", "Students", "Youth"].map((a) => ({ value: a, label: a }))} />
           </div>
-          <p className="rounded-xl bg-amber-50 px-3 py-2 text-[13px] text-amber-900">Preview only: delivering this needs an admin broadcast endpoint in the API.</p>
+          <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900">Preview only: delivering this needs an admin broadcast endpoint in the API.</p>
         </div>
       </Modal>
       {toast.element}

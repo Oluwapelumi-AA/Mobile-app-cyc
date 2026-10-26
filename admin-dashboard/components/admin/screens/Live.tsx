@@ -148,7 +148,7 @@ export default function Live() {
                         <Thumb seed={v.title} width={64} height={46} duration={v.duration !== "—" ? v.duration : undefined} />
                         <div className="min-w-0">
                           <p className="max-w-[150px] truncate font-semibold text-ink">{v.title}</p>
-                          <p className="line-clamp-2 max-w-[150px] text-[12.5px] leading-snug text-ink/70">{v.subtitle}</p>
+                          <p className="line-clamp-2 max-w-[150px] text-[11px] leading-snug text-ink/70">{v.subtitle}</p>
                         </div>
                       </div>
                     </Td>
@@ -202,7 +202,7 @@ export default function Live() {
                   ] as const).map(([icon, v, l]) => (
                     <div key={l} className="flex items-center gap-2">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand"><Icon name={icon} size={17} /></span>
-                      <span><span className="block font-bold leading-tight text-ink">{v ?? "—"}</span><span className="text-[11px] text-muted">{l}</span></span>
+                      <span><span className="block font-bold leading-tight text-ink">{v ?? "—"}</span><span className="text-[9.5px] text-muted">{l}</span></span>
                     </div>
                   ))}
                 </div>

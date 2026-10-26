@@ -146,7 +146,7 @@ export default function Communities() {
                         <Thumb seed={c.name} width={56} height={46} />
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-ink">{c.name}</p>
-                          <p className="line-clamp-2 max-w-[200px] text-[13px] leading-snug text-ink/70">{c.description || "—"}</p>
+                          <p className="line-clamp-2 max-w-[200px] text-[11.5px] leading-snug text-ink/70">{c.description || "—"}</p>
                         </div>
                       </div>
                     </Td>

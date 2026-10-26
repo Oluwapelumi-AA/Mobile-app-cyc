@@ -156,7 +156,7 @@ export default function Posts() {
                         )}
                         <div className="min-w-0">
                           <p className="max-w-[200px] truncate font-medium text-ink">{c.title}</p>
-                          <p className="max-w-[200px] truncate text-[13px] text-ink/70">{c.excerpt}</p>
+                          <p className="max-w-[200px] truncate text-[11.5px] text-ink/70">{c.excerpt}</p>
                         </div>
                       </div>
                     </Td>
@@ -229,7 +229,7 @@ export default function Posts() {
                     <p className="font-semibold leading-snug text-ink">{preview.title}</p>
                     <StatusBadge status={preview.status} />
                   </div>
-                  <p className="mt-1 text-[13px] text-muted">
+                  <p className="mt-1 text-[11.5px] text-muted">
                     by {preview.author} • {formatDate(preview.createdAt)}
                   </p>
                 </div>

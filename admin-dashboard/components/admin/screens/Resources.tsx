@@ -165,7 +165,7 @@ export default function Resources() {
                         <Thumb seed={r.title} width={64} height={50} />
                         <div className="min-w-0">
                           <p className="max-w-[170px] truncate font-semibold text-ink">{r.title}</p>
-                          <p className="line-clamp-2 max-w-[170px] text-[12.5px] leading-snug text-ink/70">{r.summary}</p>
+                          <p className="line-clamp-2 max-w-[170px] text-[11px] leading-snug text-ink/70">{r.summary}</p>
                         </div>
                       </div>
                     </Td>
@@ -222,7 +222,7 @@ export default function Resources() {
               <CardHeader title="Resource preview" action={<button type="button" className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-canvas">Edit</button>} />
               <Thumb seed={preview.title} icon="cross" width="100%" height={120} rounded="rounded-xl" className="mt-4" />
               <h3 className="mt-3 text-lg font-bold text-ink">{preview.title}</h3>
-              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ink/75">
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ink/75">
                 <span className="flex items-center gap-1"><Icon name="fileText" size={15} />{preview.type}</span>
                 <span className="flex items-center gap-1"><Icon name="user" size={15} />{preview.author}</span>
                 <span className="flex items-center gap-1"><Icon name="calendar" size={15} />{formatDate(preview.date)}</span>

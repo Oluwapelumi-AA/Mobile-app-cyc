@@ -3,6 +3,7 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ALL_NAV, ShellFrame, Sidebar, Topbar } from "../components/admin/Shell";
+import { Icon } from "../components/admin/icons";
 import { AdminContext, type AdminOverview, type PageKey, api } from "../components/admin/data";
 import Audit from "../components/admin/screens/Audit";
 import Branches from "../components/admin/screens/Branches";
@@ -49,6 +50,32 @@ async function readError(response: Response, fallback: string) {
 
 type Me = { name: string; email: string; avatar: string | null; role: string };
 
+function BrandPanel() {
+  return (
+    <section className="relative hidden aspect-[3/4] w-[280px] shrink-0 flex-col justify-end overflow-hidden rounded-[20px] bg-[radial-gradient(circle_at_50%_36%,#b3121b_0%,#860000_32%,#3a0000_68%,#120000_100%)] p-5 shadow-[24px_0_60px_-10px_rgba(134,0,0,0.35)] md:flex">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_36%,rgba(255,214,140,0.25)_0%,transparent_38%)]" />
+      <div className="pointer-events-none absolute -left-10 top-6 h-40 w-40 rounded-full bg-[#ff4d4d]/20 blur-3xl" />
+      <div className="pointer-events-none absolute -right-12 bottom-24 h-40 w-40 rounded-full bg-[#f5b942]/15 blur-3xl" />
+      <Image
+        src="/cyc-crest.png"
+        alt="Christ Youth Club logo"
+        width={180}
+        height={180}
+        priority
+        className="absolute left-1/2 top-[36%] h-[180px] w-[180px] -translate-x-1/2 -translate-y-1/2 object-contain drop-shadow-[0_18px_30px_rgba(0,0,0,0.55)]"
+      />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/85 to-transparent" />
+      <div className="relative">
+        <p className="flex items-center gap-2 text-xl font-semibold tracking-tight text-white">
+          Christ Youth Club
+          <span className="rounded-md border border-white/70 px-1.5 py-0.5 text-[11px] font-bold leading-none">CYC</span>
+        </p>
+        <p className="mt-1.5 text-xs text-white/65">Working together with Christ.</p>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [me, setMe] = useState<Me | null>(null);
@@ -58,6 +85,7 @@ export default function Home() {
   const [signingIn, setSigningIn] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [page, setPage] = useState<PageKey>(pageFromHash);
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -169,7 +197,7 @@ export default function Home() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-canvas px-5">
         <div className="text-center">
-          <div className="mx-auto w-fit animate-pulse"><Image src="/cyc-logo.png" alt="Christ Youth Club logo" width={112} height={75} priority className="h-[75px] w-[112px] object-contain" /></div>
+          <div className="mx-auto w-fit animate-pulse"><Image src="/cyc-crest.png" alt="Christ Youth Club logo" width={96} height={96} priority className="h-24 w-24 object-contain" /></div>
           <p className="mt-4 text-sm text-muted">Checking your session…</p>
         </div>
       </main>
@@ -177,84 +205,77 @@ export default function Home() {
   }
 
   if (!signedIn) {
+    const fieldClass =
+      "w-full rounded-xl border border-white/10 bg-[#161616] py-2.5 pl-10 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#c0392b]/70 focus:ring-4 focus:ring-[#860000]/30";
     return (
-      <main className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">
-        <div className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-line bg-white shadow-xl md:grid-cols-2">
-          <section className="relative hidden flex-col justify-between overflow-hidden bg-[linear-gradient(160deg,#240000_0%,#650000_45%,#860000_100%)] p-10 text-white md:flex">
-            <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-orange-400/30 blur-3xl" />
-            <div className="absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-red-500/30 blur-3xl" />
-            <div className="relative flex items-center gap-3">
-              <span className="flex h-16 w-24 items-center justify-center rounded-xl bg-white p-1"><Image src="/cyc-logo.png" alt="Christ Youth Club logo" width={96} height={64} priority className="h-full w-full object-contain" /></span>
-              <div>
-                <p className="text-lg font-extrabold">CYC</p>
-                <p className="text-xs text-white/75">Community Admin</p>
-              </div>
-            </div>
-            <div className="relative py-12">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/70">Christian Youth Club International</p>
+      <main
+        className="flex min-h-screen items-center justify-center p-4 sm:p-6"
+        style={{
+          background:
+            "radial-gradient(ellipse at 12% 8%, #6b0000 0%, transparent 50%), radial-gradient(ellipse at 92% 92%, #4a0b0b 0%, transparent 55%), #140d0d",
+        }}
+      >
+        <div className="flex w-full max-w-[760px] items-stretch gap-2 rounded-[28px] border border-white/10 bg-black p-4 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.04)] sm:p-6">
+          <BrandPanel />
 
-              <p className="mt-5 max-w-sm text-sm leading-7 text-white/85">
-                Moderate reports, support members, and manage events, live sessions and resources from one place.
-              </p>
-            </div>
-            <p className="relative text-xs text-white/70">Grow in faith. Stay connected.</p>
-          </section>
+          <section className="relative flex flex-1 items-center justify-center px-2 py-8 sm:px-8">
+            <div className="relative w-full max-w-[290px]">
+              <Image src="/cyc-crest.png" alt="Christ Youth Club logo" width={56} height={56} priority className="mx-auto mb-4 h-14 w-14 object-contain md:hidden" />
+              <h1 className="text-center text-2xl font-semibold tracking-tight text-white">Welcome back</h1>
+              <p className="mt-1.5 text-center text-xs text-white/50">Sign in to the CYC admin dashboard</p>
 
-          <section className="flex items-center justify-center p-7 sm:p-11">
-            <div className="w-full max-w-md">
-              <div className="mb-8 flex items-center gap-3 md:hidden">
-                <Image src="/cyc-logo.png" alt="Christ Youth Club logo" width={88} height={59} priority className="h-[59px] w-[88px] object-contain" />
-                <div>
-                  <p className="text-lg font-extrabold text-ink">CYC</p>
-                  <p className="text-xs text-muted">Community Admin</p>
-                </div>
-              </div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand">Welcome back</p>
-              <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-ink">Sign in to your account</h2>
-              <p className="mt-3 text-sm leading-6 text-muted">
-                Use your administrator or moderator credentials to continue.
-              </p>
-
-              <form onSubmit={handleLogin} className="mt-8 space-y-5">
-                <label className="block">
-                  <span className="mb-2 block text-sm font-semibold text-ink">Email address</span>
+              <form onSubmit={handleLogin} className="mt-7 space-y-3">
+                <label className="relative block">
+                  <span className="sr-only">Email address</span>
+                  <Icon name="mail" size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/45" />
                   <input
                     type="email"
                     autoComplete="username"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="w-full rounded-xl border border-line bg-white px-4 py-3.5 text-sm outline-none placeholder:text-faint focus:border-brand/50 focus:ring-4 focus:ring-brand-soft"
+                    placeholder="Email address"
+                    className={`${fieldClass} pr-3`}
                   />
                 </label>
-                <label className="block">
-                  <span className="mb-2 block text-sm font-semibold text-ink">Password</span>
+                <label className="relative block">
+                  <span className="sr-only">Password</span>
+                  <Icon name="lock" size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/45" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full rounded-xl border border-line bg-white px-4 py-3.5 text-sm outline-none placeholder:text-faint focus:border-brand/50 focus:ring-4 focus:ring-brand-soft"
+                    placeholder="Password"
+                    className={`${fieldClass} pr-10`}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-xl text-white/45 hover:text-white"
+                  >
+                    <Icon name="eye" size={16} />
+                  </button>
                 </label>
                 {error ? (
-                  <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm leading-6 text-red-700">
+                  <div role="alert" className="rounded-xl border border-red-500/30 bg-red-950/60 p-3 text-xs leading-5 text-red-200">
                     {error}
                   </div>
                 ) : null}
                 <button
                   type="submit"
                   disabled={signingIn}
-                  className="flex w-full items-center justify-center rounded-xl bg-brand px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+                  className="!mt-6 flex w-full items-center justify-center rounded-full bg-[linear-gradient(90deg,#860000_0%,#c0392b_100%)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-8px_rgba(192,57,43,0.7)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {signingIn ? "Signing in…" : "Sign in to dashboard"}
+                  {signingIn ? "Signing in…" : "Sign in"}
                 </button>
               </form>
-              <p className="mt-7 text-center text-xs leading-5 text-faint">
-                Access is restricted to authorized accounts. Contact your administrator if you need access.
+
+              <p className="mt-10 text-center text-[11px] leading-5 text-white/45">
+                Forgot password? <span className="text-[#e05a4f]">Ask another admin</span> to reset it.
               </p>
             </div>
           </section>

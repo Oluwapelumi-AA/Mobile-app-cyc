@@ -188,7 +188,7 @@ export default function Audit() {
                         )}
                         <div className="min-w-0">
                           <p className="whitespace-nowrap font-medium text-ink">{a.actor}</p>
-                          <p className="text-[12.5px] text-muted">{a.actorRole}</p>
+                          <p className="text-[11px] text-muted">{a.actorRole}</p>
                         </div>
                       </div>
                     </Td>

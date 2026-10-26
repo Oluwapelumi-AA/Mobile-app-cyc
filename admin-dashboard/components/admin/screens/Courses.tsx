@@ -152,7 +152,7 @@ export default function Courses() {
                             <Thumb seed={c.title} width={64} height={50} />
                             <div className="min-w-0">
                               <p className="max-w-[170px] truncate font-semibold text-ink">{c.title}</p>
-                              <p className="line-clamp-2 max-w-[170px] text-[12.5px] leading-snug text-ink/70">{c.summary}</p>
+                              <p className="line-clamp-2 max-w-[170px] text-[11px] leading-snug text-ink/70">{c.summary}</p>
                             </div>
                           </div>
                         </Td>
@@ -293,7 +293,7 @@ export default function Courses() {
                     <Thumb seed={c.title} width={56} height={44} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium text-ink">{c.title}</span>
-                      <span className="block text-[13px] text-muted">{compactNumber(c.students)} students</span>
+                      <span className="block text-[11.5px] text-muted">{compactNumber(c.students)} students</span>
                     </span>
                     <Icon name="chevronRight" size={18} className="text-ink/70" />
                   </button>
@@ -304,7 +304,7 @@ export default function Courses() {
 
           <Card className="p-5">
             <CardHeader title="Recent quiz attempts" action={<ViewAll onClick={() => setTab("quizzes")} />} />
-            <table className="mt-3 w-full text-left text-[13px]">
+            <table className="mt-3 w-full text-left text-[11.5px]">
               <thead>
                 <tr className="text-ink/70"><th className="pb-2 font-medium">Student</th><th className="pb-2 font-medium">Quiz</th><th className="pb-2 font-medium">Score</th><th className="pb-2 font-medium">Date</th></tr>
               </thead>
