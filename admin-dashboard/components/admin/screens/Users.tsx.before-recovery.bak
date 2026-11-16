@@ -1,0 +1,96 @@
+"use client";
+
+import { type ReactNode, useMemo, useState } from "react";
+import { api, downloadCsv, matches, useAdmin, useLiveList } from "../data";
+import { Modal, useConfirm, useToast } from "../dialogs";
+import { Icon, type IconName } from "../icons";
+import { type ApiUser, mapUser } from "../mappers";
+import { sampleUserActivity, sampleUsers, type UserRow } from "../sample";
+import {
+  Avatar,
+  Badge,
+  Card,
+  Checkbox,
+  DateRangeChip,
+  EmptyRow,
+  ExportButton,
+  LoadingRows,
+  PageHeader,
+  Pagination,
+  PrimaryButton,
+  RowMenu,
+  SampleTag,
+  SearchField,
+  SelectField,
+  StatusBadge,
+  Table,
+  Tabs,
+  Td,
+  Th,
+  cx,
+  formatDate,
+  timeAgo,
+  usePaged,
+  useSelection,
+} from "../ui";
+
+type TabKey = "all" | "Admin" | "Moderator" | "Pending" | "Suspended";
+type MembershipFilter = "all" | "Guest" | "Member";
+
+const shortAssignment = (id: string | null) =>
+  id ? `Assigned · ${id.replace(/-/g, "").slice(-4).toUpperCase()}` : "Not assigned";
+type PanelTab = "overview" | "activity" | "communities" | "reports";
+
+export default function Users() {
+  const { globalSearch } = useAdmin();
+  const data = useLiveList<ApiUser, UserRow>("admin/users?limit=50", mapUser, sampleUsers);
+  const [tab, setTab] = useState<TabKey>("all");
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("all");
+  const [membership, setMembership] = useState<MembershipFilter>("all");
+  const [status, setStatus] = useState("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelTab, setPanelTab] = useState<PanelTab>("overview");
+  const [roleModal, setRoleModal] = useState<UserRow | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const { ask, dialog } = useConfirm();
+  const toast = useToast();
+  const live = data.mode === "live";
+
+  const items = data.items;
+  const filtered = items.filter((u) => {
+    const tabOk =
+      tab === "all" ||
+      (tab === "Admin" && u.role === "Admin") ||
+      (tab === "Moderator" && u.role === "Moderator") ||
+      (tab === "Pending" && u.status === "Pending") ||
+      (tab === "Suspended" && (u.status === "Suspended" || u.status === "Banned"));
+    return (
+      tabOk &&
+      (role === "all" || u.role === role) &&
+      (membership === "all" || u.membershipStatus === membership) &&
+      (status === "all" || u.status === status) &&
+      matches(search || globalSearch, u.name, u.email)
+    );
+  });
+  const paged = usePaged(filtered, 10);
+  const sel = useSelection(paged.slice.map((u) => u.id));
+
+  const selected = useMemo(() => items.find((u) => u.id === selectedId) ?? items[0] ?? null, [items, selectedId]);
+  const counts = {
+    all: items.length,
+    Admin: items.filter((u) => u.role === "Admin").length,
+    Moderator: items.filter((u) => u.role === "Moderator").length,
+    Pending: items.filter((u) => u.status === "Pending").length,
+    Suspended: items.filter((u) => u.status === "Suspended" || u.status === "Banned").length,
+  };
+
+  const patch = (id: string, change: Partial<UserRow>) =>
+    data.setItems((rows) => rows.map((u) => (u.id === id ? { ...u, ...change } : u)));
+
+  async function run(action: () => Promise<unknown>, localChange: Partial<UserRow>, user: UserRow, message: string) {
+    try {
+      if (live) {
+        const updated = (await action()) as ApiUser | undefined;
+        if (updated && typeof updated === "object" && "id" in updated) patch(user.id, mapUser(updated));
