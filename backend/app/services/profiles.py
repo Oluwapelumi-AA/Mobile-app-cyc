@@ -1,3 +1,4 @@
+
 """Profile storage.
 
 API code works with ``ProfileRecord``; ``SqlAlchemyProfileRepository`` maps it
@@ -24,8 +25,11 @@ _PROFILE_FIELDS = (
     "avatar_url",
     "language_code",
     "country_code",
+    "city",
     "timezone",
+    "preferred_chapter_id",
     "branch_id",
+    "department_id",
 )
 
 
@@ -41,9 +45,16 @@ class ProfileRecord:
     avatar_url: str | None = None
     language_code: str | None = None
     country_code: str | None = None
+    city: str | None = None
     timezone: str | None = None
-    # Set through PUT /branches/{id}/membership, not the profile endpoints.
+
+    # Preferred Chapter does not grant official membership.
+    preferred_chapter_id: uuid.UUID | None = None
+
+    # Official Chapter assignment; managed through the membership workflow.
     branch_id: uuid.UUID | None = None
+    department_id: uuid.UUID | None = None
+
     onboarding: OnboardingProgress = field(default_factory=OnboardingProgress)
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)

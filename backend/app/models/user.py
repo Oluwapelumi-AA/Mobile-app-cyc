@@ -21,6 +21,11 @@ class AccountRole(str, Enum):
     ADMIN = "admin"
 
 
+class MembershipStatus(str, Enum):
+    GUEST = "guest"
+    MEMBER = "member"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -61,6 +66,20 @@ class User(Base):
         ),
         default=AccountRole.USER,
         nullable=False,
+    )
+    membership_status: Mapped[MembershipStatus] = mapped_column(
+        SQLAlchemyEnum(
+            MembershipStatus,
+            name="membership_status_enum",
+            native_enum=False,
+            create_constraint=True,
+            values_callable=lambda enum_cls: [
+                status.value for status in enum_cls
+            ],
+        ),
+        default=MembershipStatus.GUEST,
+	server_default="guest",
+	nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

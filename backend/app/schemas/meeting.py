@@ -1,14 +1,21 @@
+
 """Request and response schemas for meetings, livestreams and replays."""
 
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    StringConstraints,
+    model_validator,
+)
 
 from app.models.meeting import MeetingKind, MeetingStatus, RecordingStatus
 from app.schemas.common import UtcDatetime
 from app.services.video_provider import ParticipantRole
+
 
 MeetingTitle = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=3, max_length=200)
@@ -19,10 +26,13 @@ MeetingDescription = Annotated[
 
 
 class MeetingCreate(BaseModel):
-    """Leave out ``community_id`` and ``event_id`` for an app-wide meeting.
+    """Create a Community, Chapter, event-linked or app-wide meeting.
 
-    With ``event_id`` the meeting belongs to that event's community, so
-    ``community_id`` can be left out (if sent it must match).
+    For an event-linked meeting, ownership is inherited from the event.
+    If community_id or chapter_id is supplied, it must match the event.
+
+    A meeting cannot belong directly to both a Community and a Chapter.
+    Leave out community_id, chapter_id and event_id for an app-wide meeting.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -31,14 +41,22 @@ class MeetingCreate(BaseModel):
     title: MeetingTitle
     description: MeetingDescription | None = None
     community_id: UUID | None = None
+    chapter_id: UUID | None = None
     event_id: UUID | None = None
-    # Defaults to the event's start time when linked to an event.
     scheduled_start_at: datetime | None = None
     recording_enabled: bool = False
 
+    @model_validator(mode="after")
+    def validate_ownership(self):
+        if self.community_id is not None and self.chapter_id is not None:
+            raise ValueError(
+                "A meeting cannot belong to both a Community and a Chapter."
+            )
+        return self
+
 
 class MeetingUpdate(BaseModel):
-    """Only the fields sent change. ``recording_enabled`` applies the next
+    """Only the fields sent change. recording_enabled applies the next
     time the meeting goes live."""
 
     model_config = ConfigDict(extra="forbid")
@@ -53,6 +71,7 @@ class MeetingRead(BaseModel):
     id: UUID
     kind: MeetingKind
     community_id: UUID | None
+    chapter_id: UUID | None
     event_id: UUID | None
     created_by: UUID | None
     title: str
@@ -70,8 +89,8 @@ class MeetingRead(BaseModel):
 
 
 class JoinTokenRead(BaseModel):
-    """Pass ``token`` and ``server_url`` to the video SDK. Ask again after
-    ``expires_at`` to rejoin."""
+    """Pass token and server_url to the video SDK. Ask again after
+    expires_at to rejoin."""
 
     meeting_id: UUID
     provider: str

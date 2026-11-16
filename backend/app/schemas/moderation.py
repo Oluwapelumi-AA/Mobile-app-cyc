@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 from app.models.moderation import ReportReason, ReportStatus, ReportTarget
-from app.models.user import AccountRole
+from app.models.user import AccountRole, MembershipStatus
 from app.schemas.common import UtcDatetime
 
 Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)]
@@ -138,15 +138,27 @@ class AdminUserRead(BaseModel):
     email: str
     display_name: str | None
     avatar_url: str | None
+
+    # Platform permissions
     account_role: AccountRole
+
+    # Official CYC membership
+    membership_status: MembershipStatus
+
     is_active: bool
     is_verified: bool
+
+    # Membership assignments
     branch_id: UUID | None
+    department_id: UUID | None
+
+    # User preference only; does not grant membership
+    preferred_chapter_id: UUID | None
+
     # Open reports about this user or what they wrote.
     open_reports: int
     created_at: UtcDatetime
     last_login_at: UtcDatetime | None
-
 
 class AccountRoleUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")

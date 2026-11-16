@@ -1,3 +1,4 @@
+
 """Request and response schemas for events and registrations.
 
 ``starts_at`` and ``ends_at`` may be sent with a UTC offset
@@ -17,6 +18,7 @@ from pydantic import (
     Field,
     StringConstraints,
     UrlConstraints,
+    model_validator,
 )
 
 from app.models.event import EventStatus, RegistrationStatus
@@ -41,8 +43,11 @@ Capacity = Annotated[int, Field(ge=1, le=100_000)]
 class EventCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # Leave out for an app-wide event (platform moderators and admins only).
+    # An event may belong to a Chapter, a legacy Community, or be app-wide.
+    # Only one ownership field may be supplied.
+    chapter_id: UUID | None = None
     community_id: UUID | None = None
+
     title: EventTitle
     description: EventDescription | None = None
     location: EventLocation | None = None
@@ -52,12 +57,22 @@ class EventCreate(BaseModel):
     timezone: TimeZoneId
     capacity: Capacity | None = None
 
+    @model_validator(mode="after")
+    def validate_event_scope(self):
+        if self.chapter_id is not None and self.community_id is not None:
+            raise ValueError(
+                "An event cannot belong to both a Chapter and a Community."
+            )
+        return self
+
 
 class EventUpdate(BaseModel):
     """Only the fields sent change. ``capacity: null`` removes the limit.
 
     Changing ``timezone`` alone keeps the same moment in time; send
     ``starts_at`` and ``ends_at`` with it to move the event.
+
+    Event ownership cannot be changed through this schema.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -74,6 +89,7 @@ class EventUpdate(BaseModel):
 
 class EventRead(BaseModel):
     id: UUID
+    chapter_id: UUID | None
     community_id: UUID | None
     created_by: UUID | None
     title: str

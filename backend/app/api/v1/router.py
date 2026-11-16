@@ -5,7 +5,10 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1 import (
     admin,
     branches,
+    chapters,
+    chapter_management,
     communities,
+    departments,
     events,
     locales,
     meetings,
@@ -38,6 +41,9 @@ router.include_router(moderation.router)
 router.include_router(admin.router)
 router.include_router(search.router)
 router.include_router(branches.router)
+router.include_router(chapters.router)
+router.include_router(chapter_management.router)
+router.include_router(departments.router)
 router.include_router(locales.router)
 
 

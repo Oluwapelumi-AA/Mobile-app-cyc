@@ -1,3 +1,4 @@
+
 """Request and response schemas for user profiles.
 
 Profile data is kept apart from identity and authentication data (email,
@@ -23,6 +24,7 @@ from app.schemas.locale import CountryCode, LanguageCode, TimeZoneId
 
 DISPLAY_NAME_MAX_LENGTH = 50
 BIO_MAX_LENGTH = 300
+CITY_MAX_LENGTH = 100
 
 
 def _reject_control_characters(value: str, allowed: str = "") -> str:
@@ -47,10 +49,17 @@ DisplayName = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=DISPLAY_NAME_MAX_LENGTH),
     AfterValidator(_reject_control_characters),
 ]
+
 Bio = Annotated[
     str,
     StringConstraints(strip_whitespace=True, max_length=BIO_MAX_LENGTH),
     AfterValidator(_reject_control_characters_except_newline),
+]
+
+City = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=CITY_MAX_LENGTH),
+    AfterValidator(_reject_control_characters),
 ]
 
 
@@ -63,16 +72,19 @@ class ProfileCreate(BaseModel):
     bio: Annotated[Bio | None, AfterValidator(_empty_to_none)] = None
     language_code: LanguageCode | None = None
     country_code: CountryCode | None = None
+    city: City | None = None
     timezone: TimeZoneId | None = None
 
 
 class ProfileUpdate(BaseModel):
     """Partial update. Omitted fields are left unchanged.
 
-    ``bio``, ``country_code`` and ``timezone`` may be set to null to clear
-    them. ``display_name`` and ``language_code`` may be changed but not
-    cleared. ``avatar_url`` is not accepted here; it is only set through the
-    avatar upload flow.
+    ``bio``, ``country_code``, ``city`` and ``timezone`` may be set to null
+    to clear them. ``display_name`` and ``language_code`` may be changed but
+    not cleared. ``avatar_url`` is only set through the avatar upload flow.
+
+    Preferred Chapter selection is handled through the Chapter request
+    workflow, not this general profile endpoint.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -81,6 +93,7 @@ class ProfileUpdate(BaseModel):
     bio: Annotated[Bio | None, AfterValidator(_empty_to_none)] = None
     language_code: LanguageCode | None = None
     country_code: CountryCode | None = None
+    city: Annotated[City | None, AfterValidator(_empty_to_none)] = None
     timezone: TimeZoneId | None = None
 
     @model_validator(mode="after")
@@ -100,7 +113,10 @@ class ProfileRead(BaseModel):
     avatar_url: str | None
     language_code: str | None
     country_code: str | None
+    city: str | None = None
     timezone: str | None
+    preferred_chapter_id: uuid.UUID | None = None
     branch_id: uuid.UUID | None = None
+    department_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
