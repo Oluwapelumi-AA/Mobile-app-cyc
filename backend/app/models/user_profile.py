@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime, timezone
 
@@ -31,16 +32,36 @@ class UserProfile(Base):
     avatar_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     language_code: Mapped[str | None] = mapped_column(String(35), nullable=True)
     country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # The member's home CYC branch, if they picked one.
+
+    # User's preferred Chapter; this does not grant membership.
+    preferred_chapter_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("branches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    # Official Chapter assignment; retained for backward compatibility.
     branch_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("branches.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
+
+    # Platform-wide department assignment; NULL means not yet assigned.
+    department_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Step name -> status, e.g. {"profile_basics": "completed", ...}.
     onboarding_steps: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

@@ -35,20 +35,33 @@ const SCREENS: Record<PageKey, () => React.JSX.Element> = {
   settings: Settings,
 };
 
-const isPageKey = (v: string): v is PageKey => v in SCREENS;
+const isPageKey = (value: string): value is PageKey =>
+  Object.prototype.hasOwnProperty.call(SCREENS, value);
 
 function pageFromHash(): PageKey {
   if (typeof window === "undefined") return "overview";
-  const h = window.location.hash.replace(/^#\/?/, "");
-  return isPageKey(h) ? h : "overview";
+  const hash = window.location.hash.replace(/^#\/?/, "");
+  return isPageKey(hash) ? hash : "overview";
 }
 
-async function readError(response: Response, fallback: string) {
+async function readError(response: Response, fallback: string): Promise<string> {
   const body = await response.json().catch(() => null);
   return typeof body?.detail === "string" ? body.detail : fallback;
 }
 
-type Me = { name: string; email: string; avatar: string | null; role: string };
+type Me = {
+  name: string;
+  email: string;
+  avatar: string | null;
+  role: string;
+};
+
+type CoordinatorAssignment = {
+  branch_id: string;
+  branch_name: string;
+};
+
+type DashboardMode = "admin" | "coordinator";
 
 function BrandPanel() {
   return (
@@ -68,7 +81,9 @@ function BrandPanel() {
       <div className="relative">
         <p className="flex items-center gap-2 text-xl font-semibold tracking-tight text-white">
           Christ Youth Club
-          <span className="rounded-md border border-white/70 px-1.5 py-0.5 text-[11px] font-bold leading-none">CYC</span>
+          <span className="rounded-md border border-white/70 px-1.5 py-0.5 text-[11px] font-bold leading-none">
+            CYC
+          </span>
         </p>
         <p className="mt-1.5 text-xs text-white/65">Working together with Christ.</p>
       </div>
@@ -79,6 +94,8 @@ function BrandPanel() {
 export default function Home() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [me, setMe] = useState<Me | null>(null);
+  const [mode, setMode] = useState<DashboardMode | null>(null);
+  const [coordinatorAssignments, setCoordinatorAssignments] = useState<CoordinatorAssignment[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [checkingSession, setCheckingSession] = useState(true);
@@ -90,7 +107,7 @@ export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  /* ---------- routing via URL hash (#users, #events …) ---------- */
+  /* ---------- routing via URL hash (#users, #events, etc.) ---------- */
   useEffect(() => {
     const onHash = () => setPage(pageFromHash());
     window.addEventListener("hashchange", onHash);
@@ -101,53 +118,81 @@ export default function Home() {
     setPage(key);
     setSearch("");
     setMenuOpen(false);
-    if (window.location.hash !== `#${key}`) window.history.pushState(null, "", `#${key}`);
+    if (window.location.hash !== `#${key}`) {
+      window.history.pushState(null, "", `#${key}`);
+    }
     document.getElementById("main-scroll")?.scrollTo({ top: 0 });
   }, []);
 
-  /* ---------- session ---------- */
+  /* ---------- role-based session ---------- */
   const loadSession = useCallback(async () => {
     try {
-      const response = await fetch("/api/admin/overview", { cache: "no-store" });
-      if (response.status === 401 || response.status === 403) {
-        setSignedIn(false);
+      setError("");
+
+      // Identify the authenticated account before loading either dashboard.
+      const account = await api<{ email: string; account_role: string }>("auth/me");
+
+      // Profile fields are only used for the signed-in account display.
+      const profile = await api<{
+        display_name?: string | null;
+        avatar_url?: string | null;
+      }>("profiles/me").catch(() => null);
+
+      setMe({
+        email: account.email,
+        role: account.account_role,
+        name: profile?.display_name || account.email.split("@")[0],
+        avatar: profile?.avatar_url ?? null,
+      });
+
+     
+      // Platform admins retain access to the existing full dashboard.
+      if (account.account_role === "admin") {
+        const overview = await api<AdminOverview>("admin/overview");
+
+        setOverview(overview);
+        setCoordinatorAssignments([]);
+        setMode("admin");
+        setSignedIn(true);
+        setError("");
+        return;
+      }
+
+
+      // A non-admin account can enter this dashboard only when assigned as coordinator.
+      const assignments = await api<CoordinatorAssignment[]>("chapter-coordinator/me");
+
+      if (!Array.isArray(assignments) || assignments.length === 0) {
         setOverview(null);
+        setCoordinatorAssignments([]);
+        setMode(null);
+        setSignedIn(false);
         setError(
-          response.status === 403
-            ? "Your account does not have permission to access the admin dashboard. Contact an administrator."
-            : "",
+          "Your account is not assigned as a chapter coordinator. Please contact a platform administrator.",
         );
         return;
       }
-      if (!response.ok) throw new Error(await readError(response, "Could not load dashboard statistics."));
-      setOverview((await response.json()) as AdminOverview);
+
+      setOverview(null);
+      setCoordinatorAssignments(assignments);
+      setMode("coordinator");
       setSignedIn(true);
       setError("");
-
-      // Who am I — for the avatar menu. Failures here are non-blocking.
-      const [account, profile] = await Promise.allSettled([
-        api<{ email: string; account_role: string }>("auth/me"),
-        api<{ display_name?: string | null; avatar_url?: string | null }>("profiles/me"),
-      ]);
-      const acc = account.status === "fulfilled" ? account.value : null;
-      const prof = profile.status === "fulfilled" ? profile.value : null;
-      if (acc) {
-        setMe({
-          email: acc.email,
-          role: acc.account_role,
-          name: prof?.display_name || acc.email.split("@")[0],
-          avatar: prof?.avatar_url ?? null,
-        });
-      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect to the dashboard API.");
+      setSignedIn(false);
+      setOverview(null);
+      setCoordinatorAssignments([]);
+      setMode(null);
+      setError(
+        err instanceof Error ? err.message : "Could not verify your dashboard permissions.",
+      );
     } finally {
       setCheckingSession(false);
     }
   }, []);
 
   useEffect(() => {
-    // loadSession only sets state after its first `await`, so this doesn't cascade renders.
+    // loadSession performs its state updates after the first awaited request.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSession();
   }, [loadSession]);
@@ -156,13 +201,18 @@ export default function Home() {
     event.preventDefault();
     setSigningIn(true);
     setError("");
+
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password }),
       });
-      if (!response.ok) throw new Error(await readError(response, "Unable to sign in. Check your credentials."));
+
+      if (!response.ok) {
+        throw new Error(await readError(response, "Unable to sign in. Check your credentials."));
+      }
+
       setPassword("");
       await loadSession();
     } catch (err) {
@@ -179,34 +229,50 @@ export default function Home() {
       setSignedIn(false);
       setOverview(null);
       setMe(null);
+      setMode(null);
+      setCoordinatorAssignments([]);
       setPassword("");
       setError("");
       navigate("overview");
     }
   }
 
-  const ctx = useMemo(() => ({ navigate, overview, globalSearch: search }), [navigate, overview, search]);
-  const navItem = ALL_NAV.find((n) => n.key === page) ?? ALL_NAV[0];
+  const ctx = useMemo(
+    () => ({ navigate, overview, globalSearch: search }),
+    [navigate, overview, search],
+  );
+  const navItem = ALL_NAV.find((item) => item.key === page) ?? ALL_NAV[0];
 
   useEffect(() => {
-    document.title = `${navItem.label} | CYC Admin`;
-  }, [navItem.label]);
+    document.title = `${mode === "coordinator" ? "Chapter Coordinator" : navItem.label} | CYC`;
+  }, [mode, navItem.label]);
 
-  /* ---------- states ---------- */
+  /* ---------- loading state ---------- */
   if (checkingSession) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-canvas px-5">
         <div className="text-center">
-          <div className="mx-auto w-fit animate-pulse"><Image src="/cyc-crest.png" alt="Christ Youth Club logo" width={96} height={96} priority className="h-24 w-24 object-contain" /></div>
-          <p className="mt-4 text-sm text-muted">Checking your session…</p>
+          <div className="mx-auto w-fit animate-pulse">
+            <Image
+              src="/cyc-crest.png"
+              alt="Christ Youth Club logo"
+              width={96}
+              height={96}
+              priority
+              className="h-24 w-24 object-contain"
+            />
+          </div>
+          <p className="mt-4 text-sm text-muted">Checking your session...</p>
         </div>
       </main>
     );
   }
 
+  /* ---------- sign-in / access-denied state ---------- */
   if (!signedIn) {
     const fieldClass =
       "w-full rounded-xl border border-white/10 bg-[#161616] py-2.5 pl-10 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#c0392b]/70 focus:ring-4 focus:ring-[#860000]/30";
+
     return (
       <main
         className="flex min-h-screen items-center justify-center p-4 sm:p-6"
@@ -217,42 +283,61 @@ export default function Home() {
       >
         <div className="flex w-full max-w-[760px] items-stretch gap-2 rounded-[28px] border border-white/10 bg-black p-4 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.04)] sm:p-6">
           <BrandPanel />
-
           <section className="relative flex flex-1 items-center justify-center px-2 py-8 sm:px-8">
             <div className="relative w-full max-w-[290px]">
-              <Image src="/cyc-crest.png" alt="Christ Youth Club logo" width={56} height={56} priority className="mx-auto mb-4 h-14 w-14 object-contain md:hidden" />
-              <h1 className="text-center text-2xl font-semibold tracking-tight text-white">Welcome back</h1>
-              <p className="mt-1.5 text-center text-xs text-white/50">Sign in to the CYC admin dashboard</p>
+              <Image
+                src="/cyc-crest.png"
+                alt="Christ Youth Club logo"
+                width={56}
+                height={56}
+                priority
+                className="mx-auto mb-4 h-14 w-14 object-contain md:hidden"
+              />
+              <h1 className="text-center text-2xl font-semibold tracking-tight text-white">
+                Welcome back
+              </h1>
+              <p className="mt-1.5 text-center text-xs text-white/50">
+                Sign in to the CYC management dashboard
+              </p>
 
               <form onSubmit={handleLogin} className="mt-7 space-y-3">
                 <label className="relative block">
                   <span className="sr-only">Email address</span>
-                  <Icon name="mail" size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/45" />
+                  <Icon
+                    name="mail"
+                    size={16}
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/45"
+                  />
                   <input
                     type="email"
                     autoComplete="username"
                     required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(event) => setEmail(event.target.value)}
                     placeholder="Email address"
                     className={`${fieldClass} pr-3`}
                   />
                 </label>
+
                 <label className="relative block">
                   <span className="sr-only">Password</span>
-                  <Icon name="lock" size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/45" />
+                  <Icon
+                    name="lock"
+                    size={16}
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/45"
+                  />
                   <input
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     required
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(event) => setPassword(event.target.value)}
                     placeholder="Password"
                     className={`${fieldClass} pr-10`}
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword((v) => !v)}
+                    onClick={() => setShowPassword((value) => !value)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     aria-pressed={showPassword}
                     className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-xl text-white/45 hover:text-white"
@@ -260,17 +345,22 @@ export default function Home() {
                     <Icon name="eye" size={16} />
                   </button>
                 </label>
+
                 {error ? (
-                  <div role="alert" className="rounded-xl border border-red-500/30 bg-red-950/60 p-3 text-xs leading-5 text-red-200">
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-500/30 bg-red-950/60 p-3 text-xs leading-5 text-red-200"
+                  >
                     {error}
                   </div>
                 ) : null}
+
                 <button
                   type="submit"
                   disabled={signingIn}
                   className="!mt-6 flex w-full items-center justify-center rounded-full bg-[linear-gradient(90deg,#860000_0%,#c0392b_100%)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-8px_rgba(192,57,43,0.7)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {signingIn ? "Signing in…" : "Sign in"}
+                  {signingIn ? "Signing in..." : "Sign in"}
                 </button>
               </form>
 
@@ -283,6 +373,68 @@ export default function Home() {
       </main>
     );
   }
+
+  /* ---------- restricted coordinator landing page ---------- */
+  if (mode === "coordinator") {
+    return (
+      <main className="min-h-screen bg-canvas px-5 py-8 sm:px-8">
+        <div className="mx-auto max-w-4xl">
+          <header className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Image
+                src="/cyc-crest.png"
+                alt="Christ Youth Club logo"
+                width={48}
+                height={48}
+                className="h-12 w-12 object-contain"
+              />
+              <div>
+                <h1 className="text-xl font-bold text-ink">CYC Chapter Dashboard</h1>
+                <p className="text-sm text-muted">Chapter Coordinator</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="rounded-full border border-line bg-white px-5 py-2.5 text-sm font-semibold text-ink hover:bg-canvas"
+            >
+              Sign out
+            </button>
+          </header>
+
+          <section className="mt-10">
+            <h2 className="text-2xl font-bold text-ink">Welcome, {me?.name || "Coordinator"}</h2>
+            <p className="mt-2 text-sm text-muted">
+              You have coordinator access to the following chapters.
+            </p>
+          </section>
+
+          <section className="mt-7 grid gap-4 sm:grid-cols-2">
+            {coordinatorAssignments.map((assignment) => (
+              <article
+                key={assignment.branch_id}
+                className="rounded-2xl border border-line bg-white p-6 shadow-sm"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+                  Assigned Chapter
+                </p>
+                <h3 className="mt-3 text-lg font-bold text-ink">{assignment.branch_name}</h3>
+                <p className="mt-2 break-all text-xs text-muted">
+                  Chapter ID: {assignment.branch_id}
+                </p>
+                <p className="mt-4 text-sm text-muted">
+                  Your chapter management workspace will appear here.
+                </p>
+              </article>
+            ))}
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  // Never render the platform administrator screens without confirmed admin mode.
+  if (mode !== "admin") return null;
 
   const Screen = SCREENS[page];
 
@@ -308,12 +460,6 @@ export default function Home() {
           me={me}
           hasUnread={(overview?.open_reports ?? 0) > 0}
         />
-        {error ? (
-          <div role="alert" className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            <span>{error}</span>
-            <button type="button" onClick={() => void loadSession()} className="font-semibold underline">Retry</button>
-          </div>
-        ) : null}
         <main className="pt-2">
           <Screen key={page} />
         </main>

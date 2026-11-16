@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -40,14 +41,32 @@ class Event(Base):
             "status IN ('scheduled', 'cancelled')",
             name="ck_events_status",
         ),
-        CheckConstraint("ends_at > starts_at", name="ck_events_ends_after_start"),
+        CheckConstraint(
+            "ends_at > starts_at",
+            name="ck_events_ends_after_start",
+        ),
         CheckConstraint(
             "capacity IS NULL OR capacity > 0",
             name="ck_events_capacity_positive",
         ),
+        CheckConstraint(
+            "chapter_id IS NULL OR community_id IS NULL",
+            name="ck_events_single_scope",
+        ),
         # Upcoming lists: soonest first, ties broken by id.
         Index("ix_events_schedule", "starts_at", "id"),
-        Index("ix_events_community_schedule", "community_id", "starts_at", "id"),
+        Index(
+            "ix_events_community_schedule",
+            "community_id",
+            "starts_at",
+            "id",
+        ),
+        Index(
+            "ix_events_chapter_schedule",
+            "chapter_id",
+            "starts_at",
+            "id",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -55,42 +74,65 @@ class Event(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    # Null for app-wide events run by CYC itself.
+
+    # Null for app-wide events or Chapter-owned events.
     community_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("communities.id", ondelete="CASCADE"),
         nullable=True,
     )
+
+    # Null for app-wide events or Community-owned events.
+    chapter_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("branches.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     location: Mapped[str | None] = mapped_column(String(300), nullable=True)
     online_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Stored in UTC. ``timezone`` is the IANA zone the organizer scheduled in,
     # used to show local times.
-    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    ends_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+
     # Null means unlimited.
     capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     status: Mapped[str] = mapped_column(
         String(10),
         default=EventStatus.SCHEDULED.value,
         nullable=False,
     )
+
     cancelled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
         nullable=False,
     )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
@@ -127,32 +169,39 @@ class EventRegistration(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
+
     event_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("events.id", ondelete="CASCADE"),
         nullable=False,
     )
+
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
+
     status: Mapped[str] = mapped_column(String(10), nullable=False)
+
     attended_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
+
     checked_in_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
         nullable=False,
     )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,

@@ -1,5 +1,20 @@
 from app.db.session import Base
-from app.models.branch import Branch
+from app.models.branch import Branch, Chapter
+from app.models.chapter_coverage import ChapterCoverageArea
+from app.models.chapter_management import (
+    BranchCoordinator,
+    ChapterCoordinator,
+    Department,
+)
+from app.models.chapter_access_grant import (
+    ChapterAccessGrant,
+    ChapterAccessGrantItem,
+)
+from app.models.chapter_access_request import (
+    ChapterAccessRequest,
+    ChapterAccessRequestStatus,
+)
+from app.models.chapter_content import ChapterPost, ChapterPostComment
 from app.models.community import (
     Community,
     CommunityMembership,
@@ -50,7 +65,7 @@ from app.models.resource import (
     ResourceStatus,
 )
 from app.models.refresh_session import RefreshSession
-from app.models.user import AccountRole, User
+from app.models.user import AccountRole, MembershipStatus, User
 from app.models.user_profile import UserProfile
 
 __all__ = [
@@ -58,6 +73,16 @@ __all__ = [
     "AccountRole",
     "AuditLog",
     "Branch",
+    "BranchCoordinator",
+    "ChapterPost",
+    "ChapterPostComment",
+    "ChapterCoordinator",
+    "ChapterCoverageArea",
+    "ChapterAccessGrant",
+    "ChapterAccessGrantItem",
+    "ChapterAccessRequest",
+    "ChapterAccessRequestStatus",
+    "Department",
     "Comment",
     "Community",
     "CommunityBan",
@@ -75,6 +100,7 @@ __all__ = [
     "MeetingKind",
     "MeetingRecording",
     "MeetingStatus",
+    "MembershipStatus",
     "Notification",
     "NotificationCategory",
     "NotificationDelivery",

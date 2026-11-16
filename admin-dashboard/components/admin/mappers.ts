@@ -77,17 +77,34 @@ export type ApiUser = {
   email: string;
   display_name: string | null;
   avatar_url: string | null;
+
+  // Platform permissions are independent of CYC membership.
   account_role: "admin" | "moderator" | "user";
+  membership_status: "guest" | "member";
+
   is_active: boolean;
   is_verified: boolean;
+
+  // Official Chapter and Department assignments.
   branch_id: string | null;
+  department_id: string | null;
+
+  // A preference does not grant Chapter membership.
+  preferred_chapter_id: string | null;
+
   open_reports: number;
   created_at: string;
   last_login_at: string | null;
 };
 
 export function mapUser(u: ApiUser): UserRow {
-  const role = u.account_role === "user" ? "Member" : u.account_role === "admin" ? "Admin" : "Moderator";
+  const role: UserRow["role"] =
+    u.account_role === "admin"
+      ? "Admin"
+      : u.account_role === "moderator"
+        ? "Moderator"
+        : "User";
+
   return {
     id: u.id,
     name: u.display_name?.trim() || u.email.split("@")[0],
@@ -95,6 +112,10 @@ export function mapUser(u: ApiUser): UserRow {
     avatar: u.avatar_url,
     role,
     apiRole: u.account_role,
+    membershipStatus: u.membership_status === "member" ? "Member" : "Guest",
+    chapterId: u.branch_id,
+    departmentId: u.department_id,
+    preferredChapterId: u.preferred_chapter_id,
     communities: null,
     status: !u.is_active ? "Suspended" : !u.is_verified ? "Pending" : "Active",
     emailVerified: u.is_verified,

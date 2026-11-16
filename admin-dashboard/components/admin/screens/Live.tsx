@@ -41,7 +41,7 @@ type TabKey = "all" | "Live now" | "Scheduled" | "recorded" | "Draft";
 
 export default function Live() {
   const { globalSearch } = useAdmin();
-  const data = useLiveList<ApiMeeting, VideoRow>("meetings?limit=100", mapMeeting, sampleVideos);
+  const data = useLiveList<ApiMeeting, VideoRow>("meetings?limit=50", mapMeeting, sampleVideos);
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState("all");

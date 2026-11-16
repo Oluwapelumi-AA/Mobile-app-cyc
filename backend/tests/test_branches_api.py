@@ -1,4 +1,4 @@
-import uuid
+﻿import uuid
 
 import pytest
 from sqlalchemy import select
@@ -35,6 +35,27 @@ def create(api, admin_id, **fields):
     assert response.status_code == 201, response.text
     return response.json()
 
+def assign_member(api, admin_id, target_id, branch_id):
+    """Assign a user as an official Chapter Member through the Admin workflow."""
+    api.act_as(admin_id)
+
+    department_response = api.client.post(
+        f"{BRANCHES}/{branch_id}/departments",
+        json={"name": "Test Department"},
+    )
+    assert department_response.status_code == 201, department_response.text
+
+    department_id = department_response.json()["id"]
+
+    response = api.client.patch(
+        f"/api/v1/admin/users/{target_id}/membership",
+        json={
+            "branch_id": str(branch_id),
+            "department_id": department_id,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
 
 def test_admin_creates_and_edits_a_branch(api, world):
     branch = create(api, world["admin"])
@@ -107,43 +128,24 @@ def test_listing_filters_and_order(api, world):
     assert names == ["CYC London"]
 
 
-def test_join_and_leave_a_branch(api, world):
+
+
+def test_self_service_membership_routes_are_removed(api, world):
     lagos = create(api, world["admin"])
-    abuja = create(api, world["admin"], name="CYC Abuja")
-    api.act_as(world["alice"])
-    response = api.client.put(f"{BRANCHES}/{lagos['id']}/membership")
-    assert response.status_code == 200
-    assert response.json()["is_mine"] is True
-    assert response.json()["member_count"] == 1
-    assert api.client.get(PROFILE).json()["branch_id"] == lagos["id"]
 
-    # Picking another replaces it.
-    api.client.put(f"{BRANCHES}/{abuja['id']}/membership")
-    assert api.client.get(f"{BRANCHES}/{lagos['id']}").json()["member_count"] == 0
-    response = api.client.delete(f"{BRANCHES}/{lagos['id']}/membership")
-    assert response.status_code == 404
-    assert response.json()["detail"]["code"] == "not_branch_member"
-    assert api.client.delete(f"{BRANCHES}/{abuja['id']}/membership").status_code == 204
-    assert api.client.get(PROFILE).json()["branch_id"] is None
-
-    # The profile endpoint doesn't set it.
-    response = api.client.patch(PROFILE, json={"branch_id": lagos["id"]})
-    assert response.status_code == 422
-
-
-def test_joining_needs_a_profile_and_an_active_branch(api, world):
-    lagos = create(api, world["admin"])
+    # A user without a profile cannot use the removed join endpoint.
     api.act_as(world["bob"])
     response = api.client.put(f"{BRANCHES}/{lagos['id']}/membership")
-    assert response.json()["detail"]["code"] == "profile_not_found"
+    assert response.status_code == 404
+
+    # A nonexistent Chapter cannot be joined through that endpoint either.
     response = api.client.put(f"{BRANCHES}/{uuid.uuid4()}/membership")
-    assert response.json()["detail"]["code"] == "branch_not_found"
+    assert response.status_code == 404
 
 
 def test_archiving_keeps_members_but_hides_the_branch(api, world):
     lagos = create(api, world["admin"])
-    api.act_as(world["alice"])
-    api.client.put(f"{BRANCHES}/{lagos['id']}/membership")
+    assign_member(api, world["admin"], world["alice"], lagos["id"])
 
     api.act_as(world["admin"])
     response = api.client.post(f"{BRANCHES}/{lagos['id']}/archive")
@@ -187,3 +189,4 @@ def test_communities_in_a_branch(api, world):
         f"{COMMUNITIES}/{community['id']}", json={"branch_id": str(uuid.uuid4())}
     )
     assert response.status_code == 404
+

@@ -38,6 +38,13 @@ from app.models.community import (
     CommunityRole,
     CommunityVisibility,
 )
+from app.models.branch import Chapter
+from app.models.chapter_management import ChapterCoordinator
+from app.models.chapter_access_grant import (
+    ChapterAccessGrant,
+    ChapterAccessGrantItem,
+)
+from app.models.user import MembershipStatus, User
 from app.models.event import Event, EventRegistration, EventStatus, RegistrationStatus
 from app.models.meeting import (
     Meeting,
@@ -113,7 +120,97 @@ def _ensure_not_over(meeting: Meeting) -> None:
         raise MEETING_CANCELLED
 
 
+
 # Access
+
+
+def _is_active_user(db: Session, user_id: UserId) -> bool:
+    user = db.get(User, user_id)
+    return user is not None and user.is_active
+
+
+def _is_chapter_coordinator(
+    db: Session, user_id: UserId, chapter_id: uuid.UUID
+) -> bool:
+    return (
+        db.scalar(
+            select(ChapterCoordinator.id).where(
+                ChapterCoordinator.branch_id == chapter_id,
+                ChapterCoordinator.user_id == user_id,
+            )
+        )
+        is not None
+    )
+
+
+def _is_official_chapter_member(
+    db: Session, user_id: UserId, chapter_id: uuid.UUID
+) -> bool:
+    return (
+        db.scalar(
+            select(User.id)
+            .join(UserProfile, UserProfile.user_id == User.id)
+            .where(
+                User.id == user_id,
+                User.membership_status == MembershipStatus.MEMBER.value,
+                UserProfile.branch_id == chapter_id,
+            )
+        )
+        is not None
+    )
+
+
+def _has_chapter_meeting_grant(
+    db: Session, user_id: UserId, chapter_id: uuid.UUID, meeting_id: uuid.UUID
+) -> bool:
+    user = db.get(User, user_id)
+    if user is None or user.membership_status != MembershipStatus.GUEST.value:
+        return False
+
+    return (
+        db.scalar(
+            select(ChapterAccessGrantItem.id)
+            .join(
+                ChapterAccessGrant,
+                ChapterAccessGrant.id == ChapterAccessGrantItem.grant_id,
+            )
+            .where(
+                ChapterAccessGrant.chapter_id == chapter_id,
+                ChapterAccessGrant.user_id == user_id,
+                ChapterAccessGrantItem.meeting_id == meeting_id,
+            )
+        )
+        is not None
+    )
+
+
+def _chapter_access(
+    db: Session,
+    user_id: UserId,
+    meeting: Meeting,
+) -> tuple[bool, bool, bool]:
+    """Return (can_view, can_host, is_official_member) for a Chapter meeting."""
+    if meeting.chapter_id is None:
+        return False, False, False
+
+    chapter = db.get(Chapter, meeting.chapter_id)
+    if chapter is None or not chapter.is_active:
+        return False, False, False
+
+    if not _is_active_user(db, user_id):
+        return False, False, False
+
+    platform_staff = is_platform_moderator(db, user_id)
+    coordinator = _is_chapter_coordinator(db, user_id, meeting.chapter_id)
+    member = _is_official_chapter_member(db, user_id, meeting.chapter_id)
+    guest_grant = _has_chapter_meeting_grant(
+        db, user_id, meeting.chapter_id, meeting.id
+    )
+
+    can_host = platform_staff or coordinator
+    can_view = can_host or member or guest_grant
+
+    return can_view, can_host, member
 
 
 def _visible_meeting(
@@ -122,36 +219,78 @@ def _visible_meeting(
     meeting = db.get(Meeting, meeting_id)
     if meeting is None:
         raise MEETING_NOT_FOUND
+
+    if not _is_active_user(db, user_id):
+        raise MEETING_NOT_FOUND
+
+    if meeting.chapter_id is not None:
+        can_view, _, _ = _chapter_access(db, user_id, meeting)
+        if not can_view:
+            raise MEETING_NOT_FOUND
+        return meeting, None
+
     if meeting.community_id is None:
         return meeting, None
+
     try:
-        _, membership = get_visible_community(db, meeting.community_id, user_id)
+        _, membership = get_visible_community(
+            db, meeting.community_id, user_id
+        )
     except NotFound:
         raise MEETING_NOT_FOUND from None
+
     return meeting, membership
 
 
 def _can_host(
-    community_id: uuid.UUID | None, membership_role: str | None, platform_moderator: bool
+    db: Session,
+    user_id: UserId,
+    meeting: Meeting,
+    membership_role: str | None,
 ) -> bool:
-    if platform_moderator:
+    if is_platform_moderator(db, user_id):
         return True
-    return community_id is not None and rank(membership_role) >= rank(CommunityRole.MODERATOR)
+
+    if meeting.chapter_id is not None:
+        _, can_host, _ = _chapter_access(db, user_id, meeting)
+        return can_host
+
+    if meeting.community_id is None:
+        return False
+
+    return rank(membership_role) >= rank(CommunityRole.MODERATOR)
 
 
 def _require_host(
-    db: Session, user_id: UserId, meeting: Meeting, membership: CommunityMembership | None
+    db: Session,
+    user_id: UserId,
+    meeting: Meeting,
+    membership: CommunityMembership | None,
 ) -> None:
     if is_platform_moderator(db, user_id):
         return
+
+    if meeting.chapter_id is not None:
+        _, can_host, _ = _chapter_access(db, user_id, meeting)
+        if not can_host:
+            raise Forbidden(
+                "insufficient_role",
+                "Only the Chapter Coordinator or platform staff can manage this meeting.",
+            )
+        return
+
     if meeting.community_id is None:
         raise Forbidden(
-            "insufficient_role", "Only app moderators and admins host app-wide meetings."
+            "insufficient_role",
+            "Only app moderators and admins host app-wide meetings.",
         )
+
     require_role(membership, CommunityRole.MODERATOR)
 
 
-def _has_event_spot(db: Session, event_id: uuid.UUID, user_id: UserId) -> bool:
+def _has_event_spot(
+    db: Session, event_id: uuid.UUID, user_id: UserId
+) -> bool:
     return (
         db.scalar(
             select(EventRegistration.id).where(
@@ -171,15 +310,61 @@ def _join_refusal(
     membership_role: str | None,
     is_host: bool,
 ) -> Forbidden | None:
-    """Why the user may not join, or None when they may."""
-    if is_host or meeting.kind == MeetingKind.LIVESTREAM.value:
+    """Return why the user cannot join, or None when joining is allowed."""
+
+    if is_host:
         return None
+
+    if meeting.chapter_id is not None:
+        can_view, _, is_member = _chapter_access(db, user_id, meeting)
+
+        if not can_view:
+            return Forbidden(
+                "chapter_access_required",
+                "You do not have access to this Chapter meeting.",
+            )
+
+        # An exact Guest grant allows viewing a livestream and joining it
+        # as a viewer. It does not grant participation in a regular meeting.
+        if meeting.kind == MeetingKind.LIVESTREAM.value:
+            return None
+
+        if not is_member:
+            return Forbidden(
+                "membership_required",
+                "Official Chapter membership is required to join this meeting.",
+            )
+
+        if (
+            meeting.event_id is not None
+            and not _has_event_spot(db, meeting.event_id, user_id)
+        ):
+            return Forbidden(
+                "registration_required",
+                "Sign up for the event to join this meeting.",
+            )
+
+        return None
+
+    # Preserve the existing Community and app-wide behaviour.
+    if meeting.kind == MeetingKind.LIVESTREAM.value:
+        return None
+
     if meeting.community_id is not None and membership_role is None:
-        return Forbidden("membership_required", "Join this community first.")
-    if meeting.event_id is not None and not _has_event_spot(db, meeting.event_id, user_id):
         return Forbidden(
-            "registration_required", "Sign up for the event to join this meeting."
+            "membership_required",
+            "Join this community first.",
         )
+
+    if (
+        meeting.event_id is not None
+        and not _has_event_spot(db, meeting.event_id, user_id)
+    ):
+        return Forbidden(
+            "registration_required",
+            "Sign up for the event to join this meeting.",
+        )
+
     return None
 
 
@@ -194,6 +379,7 @@ def _lock_meeting(db: Session, meeting_id: uuid.UUID) -> Meeting:
     ).one()
 
 
+
 # Reading
 
 
@@ -203,6 +389,7 @@ def _to_read(meeting: Meeting, can_host: bool, can_join: bool) -> MeetingRead:
             "id": meeting.id,
             "kind": meeting.kind,
             "community_id": meeting.community_id,
+            "chapter_id": meeting.chapter_id,
             "event_id": meeting.event_id,
             "created_by": meeting.created_by,
             "title": meeting.title,
@@ -221,15 +408,20 @@ def _to_read(meeting: Meeting, can_host: bool, can_join: bool) -> MeetingRead:
 
 
 def meeting_read(
-    db: Session, user_id: UserId, meeting: Meeting, membership: CommunityMembership | None
+    db: Session,
+    user_id: UserId,
+    meeting: Meeting,
+    membership: CommunityMembership | None,
 ) -> MeetingRead:
     role = membership.role if membership else None
-    can_host = _can_host(meeting.community_id, role, is_platform_moderator(db, user_id))
+    can_host = _can_host(db, user_id, meeting, role)
     refusal = _join_refusal(db, user_id, meeting, role, can_host)
     return _to_read(meeting, can_host, refusal is None)
 
 
-def get_meeting(db: Session, user_id: UserId, meeting_id: uuid.UUID) -> MeetingRead:
+def get_meeting(
+    db: Session, user_id: UserId, meeting_id: uuid.UUID
+) -> MeetingRead:
     meeting, membership = _visible_meeting(db, user_id, meeting_id)
     return meeting_read(db, user_id, meeting, membership)
 
@@ -241,49 +433,186 @@ def list_meetings(
     cursor: str | None,
     *,
     community_id: uuid.UUID | None = None,
+    chapter_id: uuid.UUID | None = None,
     event_id: uuid.UUID | None = None,
     status: MeetingStatus | None = None,
     kind: MeetingKind | None = None,
 ) -> tuple[list[MeetingRead], str | None]:
-    """Meetings the user can see, newest first."""
+    """List only meetings visible to the user, newest first."""
+
+    if not _is_active_user(db, user_id):
+        raise MEETING_NOT_FOUND
+
+    if community_id is not None and chapter_id is not None:
+        raise InvalidInput(
+            "scope_conflict",
+            "Filter by either a Community or a Chapter, not both.",
+        )
+
+    platform_staff = is_platform_moderator(db, user_id)
+
+    # Communities the user belongs to.
     my_communities = select(CommunityMembership.community_id).where(
         CommunityMembership.user_id == user_id
     )
     public_communities = select(Community.id).where(
         Community.visibility == CommunityVisibility.PUBLIC.value
     )
+
+    # Chapters where the user is an official Member.
+    my_chapters = (
+    select(Chapter.id)
+    .join(UserProfile, UserProfile.branch_id == Chapter.id)
+    .join(User, User.id == UserProfile.user_id)
+    .where(
+        User.id == user_id,
+        User.membership_status == MembershipStatus.MEMBER.value,
+        Chapter.is_active.is_(True),
+    )
+)
+
+    # Chapters where the user is the assigned Coordinator.
+    coordinated_chapters = (
+    select(ChapterCoordinator.branch_id)
+    .join(Chapter, Chapter.id == ChapterCoordinator.branch_id)
+    .where(
+        ChapterCoordinator.user_id == user_id,
+        Chapter.is_active.is_(True),
+    )
+)
+
+    # Exact meeting grants for Guests.
+    granted_meetings = (
+    select(ChapterAccessGrantItem.meeting_id)
+    .join(
+        ChapterAccessGrant,
+        ChapterAccessGrant.id == ChapterAccessGrantItem.grant_id,
+    )
+    .join(
+        User,
+        User.id == ChapterAccessGrant.user_id,
+    )
+    .join(
+        Meeting,
+        Meeting.id == ChapterAccessGrantItem.meeting_id,
+    )
+    .join(
+        Chapter,
+        Chapter.id == Meeting.chapter_id,
+    )
+    .where(
+        ChapterAccessGrant.user_id == user_id,
+        User.is_active.is_(True),
+        User.membership_status == MembershipStatus.GUEST.value,
+        Meeting.chapter_id == ChapterAccessGrant.chapter_id,
+        Chapter.is_active.is_(True),
+    )
+)
+
     statement = select(Meeting)
+
     if community_id is not None:
-        get_visible_community(db, community_id, user_id)
+        try:
+            get_visible_community(db, community_id, user_id)
+        except NotFound:
+            raise MEETING_NOT_FOUND from None
+
         statement = statement.where(Meeting.community_id == community_id)
+
+    elif chapter_id is not None:
+        chapter = db.get(Chapter, chapter_id)
+        if chapter is None or not chapter.is_active:
+            raise MEETING_NOT_FOUND
+
+        chapter_access = or_(
+            Meeting.chapter_id.in_(my_chapters),
+            Meeting.chapter_id.in_(coordinated_chapters),
+            Meeting.id.in_(granted_meetings),
+        )
+
+        if platform_staff:
+            statement = statement.where(Meeting.chapter_id == chapter_id)
+        else:
+            statement = statement.where(
+                Meeting.chapter_id == chapter_id,
+                chapter_access,
+            )
+
     else:
+        visible_community_meetings = or_(
+    (
+        Meeting.community_id.is_(None)
+        & Meeting.chapter_id.is_(None)
+    ),
+    Meeting.community_id.in_(public_communities),
+    Meeting.community_id.in_(my_communities),
+)
+
+        visible_chapter_meetings = or_(
+            Meeting.chapter_id.in_(my_chapters),
+            Meeting.chapter_id.in_(coordinated_chapters),
+            Meeting.id.in_(granted_meetings),
+        )
+
+        if platform_staff:
+            active_chapters = select(Chapter.id).where(Chapter.is_active.is_(True))
+            visible_chapter_meetings = or_(
+                visible_chapter_meetings,
+                Meeting.chapter_id.in_(active_chapters),
+            )
+
         statement = statement.where(
             or_(
-                Meeting.community_id.is_(None),
-                Meeting.community_id.in_(public_communities),
-                Meeting.community_id.in_(my_communities),
+                visible_community_meetings,
+                visible_chapter_meetings,
             )
         )
+
     if event_id is not None:
         statement = statement.where(Meeting.event_id == event_id)
+
     if status is not None:
         statement = statement.where(Meeting.status == status.value)
+
     if kind is not None:
         statement = statement.where(Meeting.kind == kind.value)
+
     if cursor:
         statement = statement.where(
-            pagination.after_cursor(Meeting.created_at, Meeting.id, cursor, newest_first=True)
+            pagination.after_cursor(
+                Meeting.created_at,
+                Meeting.id,
+                cursor,
+                newest_first=True,
+            )
         )
+
     statement = statement.order_by(
-        *pagination.order_by(Meeting.created_at, Meeting.id, newest_first=True)
+        *pagination.order_by(
+            Meeting.created_at,
+            Meeting.id,
+            newest_first=True,
+        )
     ).limit(limit + 1)
 
-    rows, next_cursor = pagination.split_page(list(db.scalars(statement)), limit)
-    community_ids = {row.community_id for row in rows if row.community_id is not None}
+    rows, next_cursor = pagination.split_page(
+        list(db.scalars(statement)),
+        limit,
+    )
+
+    community_ids = {
+        row.community_id
+        for row in rows
+        if row.community_id is not None
+    }
+
     my_roles = (
         dict(
             db.execute(
-                select(CommunityMembership.community_id, CommunityMembership.role).where(
+                select(
+                    CommunityMembership.community_id,
+                    CommunityMembership.role,
+                ).where(
                     CommunityMembership.user_id == user_id,
                     CommunityMembership.community_id.in_(community_ids),
                 )
@@ -292,74 +621,166 @@ def list_meetings(
         if community_ids
         else {}
     )
-    event_ids = {row.event_id for row in rows if row.event_id is not None}
-    my_spots = (
-        set(
-            db.scalars(
-                select(EventRegistration.event_id).where(
-                    EventRegistration.user_id == user_id,
-                    EventRegistration.status == RegistrationStatus.REGISTERED.value,
-                    EventRegistration.event_id.in_(event_ids),
-                )
-            )
-        )
-        if event_ids
-        else set()
-    )
-    platform_moderator = is_platform_moderator(db, user_id)
+
     items = []
+
     for row in rows:
         role = my_roles.get(row.community_id)
-        can_host = _can_host(row.community_id, role, platform_moderator)
-        can_join = (
-            can_host
-            or row.kind == MeetingKind.LIVESTREAM.value
-            or (
-                (row.community_id is None or role is not None)
-                and (row.event_id is None or row.event_id in my_spots)
+        can_host = _can_host(db, user_id, row, role)
+        refusal = _join_refusal(
+            db,
+            user_id,
+            row,
+            role,
+            can_host,
+        )
+        items.append(
+            _to_read(
+                row,
+                can_host,
+                refusal is None,
             )
         )
-        items.append(_to_read(row, can_host, can_join))
+
     return items, next_cursor
 
 
 # Managing meetings
 
 
+
 def create_meeting(db: Session, user_id: UserId, data: MeetingCreate) -> MeetingRead:
     community_id = data.community_id
+    chapter_id = data.chapter_id
     scheduled_start_at = data.scheduled_start_at
+
+    # Event-linked meeting: inherit the event's ownership and start time.
     if data.event_id is not None:
         event = db.get(Event, data.event_id)
+
         if event is None:
             raise NotFound("event_not_found", "Event not found.")
-        if event.community_id is not None:
+
+        if event.status == EventStatus.CANCELLED.value:
+            raise Conflict("event_cancelled", "This event has been cancelled.")
+
+        # Chapter-owned event.
+        if event.chapter_id is not None:
+            if community_id is not None:
+                raise InvalidInput(
+                    "community_mismatch",
+                    "The event belongs to a chapter, not a community.",
+                )
+
+            if chapter_id is not None and chapter_id != event.chapter_id:
+                raise InvalidInput(
+                    "chapter_mismatch",
+                    "The event belongs to a different chapter.",
+                )
+
+            chapter = db.get(Chapter, event.chapter_id)
+
+            if chapter is None or not chapter.is_active:
+                raise NotFound("chapter_not_found", "Chapter not found.")
+
+            if not (
+                is_platform_moderator(db, user_id)
+                or _is_chapter_coordinator(db, user_id, event.chapter_id)
+            ):
+                raise Forbidden(
+                    "insufficient_role",
+                    "Only the chapter coordinator or platform moderators and admins can create chapter meetings.",
+                )
+
+            chapter_id = event.chapter_id
+            community_id = None
+
+        # Community-owned event.
+        elif event.community_id is not None:
+            if chapter_id is not None:
+                raise InvalidInput(
+                    "chapter_mismatch",
+                    "The event belongs to a community, not a chapter.",
+                )
+
             try:
                 get_visible_community(db, event.community_id, user_id)
             except NotFound:
                 raise NotFound("event_not_found", "Event not found.") from None
-        if community_id is not None and community_id != event.community_id:
-            raise InvalidInput(
-                "community_mismatch", "The event belongs to a different community."
+
+            if community_id is not None and community_id != event.community_id:
+                raise InvalidInput(
+                    "community_mismatch",
+                    "The event belongs to a different community.",
+                )
+
+            _, membership = get_visible_community(
+                db, event.community_id, user_id
             )
-        if event.status == EventStatus.CANCELLED.value:
-            raise Conflict("event_cancelled", "This event has been cancelled.")
-        community_id = event.community_id
+
+            if not is_platform_moderator(db, user_id):
+                require_role(membership, CommunityRole.MODERATOR)
+
+            community_id = event.community_id
+            chapter_id = None
+
+        # App-wide event.
+        else:
+            if community_id is not None or chapter_id is not None:
+                raise InvalidInput(
+                    "event_scope_mismatch",
+                    "An app-wide event cannot be assigned to a community or chapter meeting.",
+                )
+
+            if not is_platform_moderator(db, user_id):
+                raise Forbidden(
+                    "insufficient_role",
+                    "Only app moderators and admins can create app-wide event meetings.",
+                )
+
         if scheduled_start_at is None:
             scheduled_start_at = event.starts_at
 
-    if community_id is not None:
+    # Chapter meeting not linked to an event.
+    elif chapter_id is not None:
+        if community_id is not None:
+            raise InvalidInput(
+                "scope_mismatch",
+                "A meeting cannot belong to both a chapter and a community.",
+            )
+
+        chapter = db.get(Chapter, chapter_id)
+
+        if chapter is None or not chapter.is_active:
+            raise NotFound("chapter_not_found", "Chapter not found.")
+
+        if not (
+            is_platform_moderator(db, user_id)
+            or _is_chapter_coordinator(db, user_id, chapter_id)
+        ):
+            raise Forbidden(
+                "insufficient_role",
+                "Only the chapter coordinator or platform moderators and admins can create chapter meetings.",
+            )
+
+    # Community meeting not linked to an event.
+    elif community_id is not None:
         _, membership = get_visible_community(db, community_id, user_id)
+
         if not is_platform_moderator(db, user_id):
             require_role(membership, CommunityRole.MODERATOR)
+
+    # App-wide meeting not linked to an event.
     elif not is_platform_moderator(db, user_id):
         raise Forbidden(
-            "insufficient_role", "Only app moderators and admins create app-wide meetings."
+            "insufficient_role",
+            "Only app moderators and admins create app-wide meetings.",
         )
 
     meeting = Meeting(
         kind=data.kind.value,
         community_id=community_id,
+        chapter_id=chapter_id,
         event_id=data.event_id,
         created_by=user_id,
         title=data.title,
@@ -367,10 +788,13 @@ def create_meeting(db: Session, user_id: UserId, data: MeetingCreate) -> Meeting
         scheduled_start_at=_utc(scheduled_start_at) if scheduled_start_at else None,
         recording_enabled=data.recording_enabled,
     )
+
     db.add(meeting)
     db.commit()
     db.refresh(meeting)
+
     return _to_read(meeting, True, True)
+
 
 
 def update_meeting(
@@ -495,7 +919,7 @@ def issue_join_token(
     if meeting.status != LIVE:
         raise NOT_LIVE
     role_name = membership.role if membership else None
-    is_host = _can_host(meeting.community_id, role_name, is_platform_moderator(db, user_id))
+    is_host = _can_host(db, user_id, meeting, role_name)
     refusal = _join_refusal(db, user_id, meeting, role_name, is_host)
     if refusal is not None:
         raise refusal
@@ -541,13 +965,17 @@ def _recording_read(recording: MeetingRecording) -> RecordingRead:
 
 
 def _host_for(
-    db: Session, user_id: UserId, meeting: Meeting, membership: CommunityMembership | None
+    db: Session, 
+    user_id: UserId, 
+    meeting: Meeting, 
+    membership: CommunityMembership | None
 ) -> bool:
     return _can_host(
-        meeting.community_id,
-        membership.role if membership else None,
-        is_platform_moderator(db, user_id),
-    )
+    db,
+    user_id,
+    meeting,
+    membership.role if membership else None,
+)
 
 
 def _is_watchable(recording: MeetingRecording) -> bool:

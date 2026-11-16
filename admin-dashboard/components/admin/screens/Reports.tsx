@@ -50,7 +50,7 @@ type TabKey = "all" | "New" | "Under review" | "Resolved" | "Dismissed";
 
 export default function Reports() {
   const { globalSearch, navigate } = useAdmin();
-  const data = useLiveList<ApiReport, ReportRow>("moderation/reports?status=any&limit=100", mapReport, sampleReports);
+  const data = useLiveList<ApiReport, ReportRow>("moderation/reports?status=any&limit=50", mapReport, sampleReports);
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");

@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
@@ -59,15 +59,3 @@ def archive_branch(branch_id: UUID, user_id: CurrentUserId, db: DbSession):
 def restore_branch(branch_id: UUID, user_id: CurrentUserId, db: DbSession):
     """App admins only."""
     return branches.set_archived(db, user_id, branch_id, archived=False)
-
-
-@router.put("/{branch_id}/membership", response_model=BranchRead)
-def join_branch(branch_id: UUID, user_id: CurrentUserId, db: DbSession):
-    """Make this your home branch (replacing any other)."""
-    return branches.join_branch(db, user_id, branch_id)
-
-
-@router.delete("/{branch_id}/membership", status_code=status.HTTP_204_NO_CONTENT)
-def leave_branch(branch_id: UUID, user_id: CurrentUserId, db: DbSession):
-    branches.leave_branch(db, user_id, branch_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)

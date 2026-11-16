@@ -41,7 +41,7 @@ type TabKey = "all" | CommunityRow["status"];
 
 export default function Communities() {
   const { globalSearch, navigate } = useAdmin();
-  const data = useLiveList<ApiCommunity, CommunityRow>("communities?limit=100", mapCommunity, sampleCommunities);
+  const data = useLiveList<ApiCommunity, CommunityRow>("communities?limit=50", mapCommunity, sampleCommunities);
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");

@@ -78,7 +78,7 @@ type TabKey = "all" | AuditRow["category"];
 
 export default function Audit() {
   const { globalSearch } = useAdmin();
-  const data = useLiveList<ApiAudit, AuditRow>("moderation/audit-logs?limit=100", mapAudit, sampleAudit);
+  const data = useLiveList<ApiAudit, AuditRow>("moderation/audit-logs?limit=50", mapAudit, sampleAudit);
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [action, setAction] = useState("all");

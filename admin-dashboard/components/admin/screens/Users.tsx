@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { type ReactNode, useMemo, useState } from "react";
 import { api, downloadCsv, matches, useAdmin, useLiveList } from "../data";
@@ -39,7 +39,7 @@ type PanelTab = "overview" | "activity" | "communities" | "reports";
 
 export default function Users() {
   const { globalSearch } = useAdmin();
-  const data = useLiveList<ApiUser, UserRow>("admin/users?limit=100", mapUser, sampleUsers);
+  const data = useLiveList<ApiUser, UserRow>("admin/users?limit=50", mapUser, sampleUsers);
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("all");
@@ -133,7 +133,7 @@ export default function Users() {
 
   const mute = (u: UserRow) => {
     if (live) {
-      toast.error("Muting isn't available in the API yet — use Suspend instead.");
+      toast.error("Muting isn't available in the API yet ΓÇö use Suspend instead.");
       return;
     }
     patch(u.id, { status: u.status === "Muted" ? "Active" : "Muted" });
@@ -226,7 +226,7 @@ export default function Users() {
                         </div>
                       </Td>
                       <Td>{u.role}</Td>
-                      <Td>{u.communities ?? "—"}</Td>
+                      <Td>{u.communities ?? "ΓÇö"}</Td>
                       <Td><StatusBadge status={u.status} /></Td>
                       <Td className="whitespace-nowrap">{formatDate(u.joined)}</Td>
                       <Td className="whitespace-nowrap">{u.lastActive ? timeAgo(u.lastActive) : "Never"}</Td>
@@ -237,11 +237,11 @@ export default function Users() {
                 </tbody>
               </Table>
             </div>
-            <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}–${paged.to} of ${filtered.length} users`} />
+            <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}ΓÇô${paged.to} of ${filtered.length} users`} />
             {data.nextCursor ? (
               <div className="mt-3 text-center">
                 <button type="button" disabled={data.loadingMore} onClick={() => void data.loadMore()} className="text-sm font-semibold text-brand hover:text-brand-dark disabled:opacity-50">
-                  {data.loadingMore ? "Loading…" : "Load more users from the server"}
+                  {data.loadingMore ? "LoadingΓÇª" : "Load more users from the server"}
                 </button>
               </div>
             ) : null}
@@ -285,7 +285,7 @@ export default function Users() {
                   if (u.apiRole === value) return;
                   void run(
                     () => api(`admin/users/${u.id}/role`, { method: "PATCH", body: JSON.stringify({ account_role: value }) }),
-                    { apiRole: value, role: label },
+                    { apiRole: value, role: label === "Member" ? "User" : label },
                     u,
                     `${u.name} is now ${label === "Admin" ? "an" : "a"} ${label}.`,
                   );
@@ -347,7 +347,7 @@ function UserPanel({
     ["user", "Role", user.role],
     ["shieldCheck", "Account status", <StatusBadge key="s" status={user.status} />],
     ["badgeCheck", "Email verified", <StatusBadge key="e" status={user.emailVerified ? "Yes" : "No"} />],
-    ["phone", "Phone verified", user.live ? "—" : <StatusBadge key="p" status="No" />],
+    ["phone", "Phone verified", user.live ? "ΓÇö" : <StatusBadge key="p" status="No" />],
     ["clock", "Last active", user.lastActive ? timeAgo(user.lastActive) : "Never"],
     ["calendar", "Joined", formatDate(user.joined)],
   ];
@@ -376,7 +376,7 @@ function UserPanel({
           [user.comments, "Comments"],
         ].map(([v, l]) => (
           <div key={String(l)}>
-            <p className="text-xl font-bold text-ink">{v ?? "—"}</p>
+            <p className="text-xl font-bold text-ink">{v ?? "ΓÇö"}</p>
             <p className="text-xs text-muted">{l}</p>
           </div>
         ))}
@@ -450,7 +450,7 @@ function UserPanel({
       </div>
       {user.live ? (
         <p className="mt-3 text-[10.5px] text-muted">
-          <Badge tone="gray">Note</Badge> Mute isn&apos;t in the API yet; Ban suspends the account with a “Ban:” reason.
+          <Badge tone="gray">Note</Badge> Mute isn&apos;t in the API yet; Ban suspends the account with a ΓÇ£Ban:ΓÇ¥ reason.
         </p>
       ) : null}
     </Card>
@@ -488,3 +488,6 @@ function PanelAction({
     </button>
   );
 }
+
+
+

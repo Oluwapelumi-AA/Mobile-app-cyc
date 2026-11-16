@@ -11,6 +11,7 @@ from app.core.identity import UserId
 from app.db.session import get_db
 from app.models.user import AccountRole
 from app.schemas.common import Page
+from app.schemas.chapter_admin import MemberAssignmentCreate
 from app.schemas.moderation import (
     AccountRoleUpdate,
     AdminOverview,
@@ -18,7 +19,7 @@ from app.schemas.moderation import (
     ReinstateRequest,
     SuspendRequest,
 )
-from app.services import admin
+from app.services import admin, chapter_management
 from app.services.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -89,3 +90,24 @@ def reinstate_user(
     data: ReinstateRequest | None = None,
 ):
     return admin.reinstate_user(db, user_id, target_id, data or ReinstateRequest())
+
+
+
+@router.patch("/users/{target_id}/membership", response_model=AdminUserRead)
+def assign_user_membership(
+    target_id: UUID,
+    data: MemberAssignmentCreate,
+    user_id: CurrentUserId,
+    db: DbSession,
+):
+    """Convert a Guest into an official Member or reassign an existing Member."""
+
+    chapter_management.assign_member_to_chapter(
+        db,
+        user_id,
+        target_id,
+        data.branch_id,
+        data.department_id,
+    )
+
+    return admin.get_user(db, user_id, target_id)

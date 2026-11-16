@@ -60,7 +60,7 @@ type TabKey = "all" | ResourceRow["type"];
 
 export default function Resources() {
   const { globalSearch } = useAdmin();
-  const data = useLiveList<ApiResource, ResourceRow>("resources?limit=100", mapResource, sampleResources);
+  const data = useLiveList<ApiResource, ResourceRow>("resources?limit=50", mapResource, sampleResources);
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");

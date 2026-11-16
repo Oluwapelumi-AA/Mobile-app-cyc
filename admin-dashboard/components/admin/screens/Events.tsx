@@ -56,7 +56,7 @@ type TabKey = "all" | "upcoming" | "ongoing" | "past";
 
 export default function Events() {
   const { globalSearch } = useAdmin();
-  const data = useLiveList<ApiEvent, EventRow>("events?limit=100", mapEvent, sampleEvents);
+  const data = useLiveList<ApiEvent, EventRow>("events?limit=50", mapEvent, sampleEvents);
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");

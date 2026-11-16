@@ -209,18 +209,17 @@ def _profile(db: Session, user_id: UserId) -> UserProfile:
 
 
 def join_branch(db: Session, user_id: UserId, branch_id: uuid.UUID) -> BranchRead:
-    """Make this the user's home branch, replacing any other."""
-    check_branch(db, branch_id)
-    profile = _profile(db, user_id)
-    profile.branch_id = branch_id
-    db.commit()
-    return get_branch(db, user_id, branch_id)
+    """Self-service Chapter membership is no longer permitted."""
+    raise Forbidden(
+        "chapter_request_required",
+        "Selecting a Chapter requires an access request. "
+        "Official membership can only be assigned by a platform Admin.",
+    )
 
 
 def leave_branch(db: Session, user_id: UserId, branch_id: uuid.UUID) -> None:
-    _get(db, branch_id)
-    profile = _profile(db, user_id)
-    if profile.branch_id != branch_id:
-        raise NotFound("not_branch_member", "This is not your branch.")
-    profile.branch_id = None
-    db.commit()
+    """Users cannot independently change official Chapter membership."""
+    raise Forbidden(
+        "admin_only",
+        "Official Chapter membership can only be changed by a platform Admin.",
+    )

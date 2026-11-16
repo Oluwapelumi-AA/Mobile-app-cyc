@@ -1,3 +1,4 @@
+
 """Event, registration and attendance endpoints."""
 
 from typing import Annotated
@@ -41,17 +42,34 @@ def list_events(
     limit: Limit = DEFAULT_PAGE_SIZE,
     cursor: Cursor = None,
     community_id: UUID | None = None,
+    chapter_id: UUID | None = None,
     past: bool = False,
     mine: bool = False,
 ):
-    """Upcoming events soonest first, or ``past=true`` for ended events.
+    """List visible events.
 
-    ``community_id`` shows one community's events; ``mine=true`` shows only
-    events you signed up for.
+    Use community_id or chapter_id to filter by ownership.
+    Use past=true for ended events and mine=true for events you registered for.
     """
+    if community_id is not None and chapter_id is not None:
+        from app.services.errors import InvalidInput
+
+        raise InvalidInput(
+            "conflicting_event_scope",
+            "Filter by either a Chapter or a Community, not both.",
+        )
+
     items, next_cursor = events.list_events(
-        db, user_id, limit, cursor, community_id=community_id, past=past, mine=mine
+        db,
+        user_id,
+        limit,
+        cursor,
+        community_id=community_id,
+        chapter_id=chapter_id,
+        past=past,
+        mine=mine,
     )
+
     return Page(items=items, next_cursor=next_cursor)
 
 
@@ -61,7 +79,12 @@ def get_event(event_id: UUID, user_id: CurrentUserId, db: DbSession):
 
 
 @router.patch("/{event_id}", response_model=EventRead)
-def update_event(event_id: UUID, data: EventUpdate, user_id: CurrentUserId, db: DbSession):
+def update_event(
+    event_id: UUID,
+    data: EventUpdate,
+    user_id: CurrentUserId,
+    db: DbSession,
+):
     return events.update_event(db, user_id, event_id, data)
 
 
@@ -96,7 +119,9 @@ def list_registrations(
     status: RegistrationStatus | None = None,
 ):
     """Everyone signed up, in sign-up order. Organizers only."""
-    items, next_cursor = events.list_registrations(db, user_id, event_id, limit, cursor, status)
+    items, next_cursor = events.list_registrations(
+        db, user_id, event_id, limit, cursor, status
+    )
     return Page(items=items, next_cursor=next_cursor)
 
 
@@ -111,7 +136,10 @@ def cancel_registration(event_id: UUID, user_id: CurrentUserId, db: DbSession):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.put("/{event_id}/registrations/{attendee_id}/attendance", response_model=RegistrationRead)
+@router.put(
+    "/{event_id}/registrations/{attendee_id}/attendance",
+    response_model=RegistrationRead,
+)
 def set_attendance(
     event_id: UUID,
     attendee_id: UUID,
@@ -120,4 +148,6 @@ def set_attendance(
     db: DbSession,
 ):
     """Mark someone as attended (or undo it). Organizers only."""
-    return events.set_attendance(db, user_id, event_id, attendee_id, data.attended)
+    return events.set_attendance(
+        db, user_id, event_id, attendee_id, data.attended
+    )

@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -81,11 +82,22 @@ class Resource(Base):
             "duration_seconds IS NULL OR duration_seconds > 0",
             name="ck_resources_duration_positive",
         ),
+        CheckConstraint(
+            "chapter_id IS NULL OR community_id IS NULL",
+            name="ck_resources_single_scope",
+        ),
         # The library: newest published first, ties broken by id.
         Index("ix_resources_status_published", "status", "published_at", "id"),
         Index(
             "ix_resources_community_status_published",
             "community_id",
+            "status",
+            "published_at",
+            "id",
+        ),
+        Index(
+            "ix_resources_chapter_status_published",
+            "chapter_id",
             "status",
             "published_at",
             "id",
@@ -97,54 +109,80 @@ class Resource(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    # Null for the app-wide library curated by CYC itself.
+
+    # Null for app-wide resources or Chapter-owned resources.
     community_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("communities.id", ondelete="CASCADE"),
         nullable=True,
     )
+
+    # Null for app-wide resources or Community-owned resources.
+    chapter_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("branches.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
     category_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("resource_categories.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
+
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+
     kind: Mapped[str] = mapped_column(String(10), nullable=False)
+
     status: Mapped[str] = mapped_column(
         String(10),
         default=ResourceStatus.DRAFT.value,
         nullable=False,
     )
+
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # The text of an article.
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Who wrote or spoke it, as shown to readers (not necessarily a user).
     author_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+
     # e.g. "John 3:16-21".
-    scripture_reference: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    scripture_reference: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
     # BCP 47 tag, e.g. "en" or "yo".
     language: Mapped[str | None] = mapped_column(String(35), nullable=True)
+
     external_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # An uploaded audio, video or document file in object storage.
     file_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     file_content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     published_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
         nullable=False,
     )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
@@ -171,17 +209,20 @@ class ResourceBookmark(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
+
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+
     resource_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("resources.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
@@ -215,30 +256,37 @@ class ResourceProgress(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
+
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+
     resource_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("resources.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
+
     percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     # Where to resume audio or video.
     position_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Set the first time the user finishes; kept if they start again.
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
         nullable=False,
     )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,

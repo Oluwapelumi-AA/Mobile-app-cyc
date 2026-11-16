@@ -62,8 +62,19 @@ export type UserRow = {
   name: string;
   email: string;
   avatar: string | null;
-  role: "Member" | "Moderator" | "Admin";
+
+  // Platform account permissions
+  role: "User" | "Moderator" | "Admin";
   apiRole: "user" | "moderator" | "admin";
+
+  // Official CYC membership (separate from account role)
+  membershipStatus: "Guest" | "Member";
+
+  // Official assignments and user preference
+  chapterId: string | null;
+  departmentId: string | null;
+  preferredChapterId: string | null;
+
   communities: number | null;
   status: "Active" | "Muted" | "Banned" | "Pending" | "Suspended";
   emailVerified: boolean;
@@ -75,38 +86,52 @@ export type UserRow = {
   live: boolean;
 };
 
-const userSeed: [string, UserRow["role"], number, UserRow["status"], number, number][] = [
-  ["Ada Okafor", "Member", 12, "Active", 13, 2 * MIN],
-  ["James Carter", "Moderator", 8, "Active", 15, 18 * MIN],
-  ["Luciana Mensah", "Member", 5, "Active", 17, 1 * HOUR],
-  ["Kasham Ali", "Admin", 15, "Active", 20, 2 * HOUR],
-  ["Tolu Adebayo", "Member", 3, "Muted", 22, 3 * HOUR],
-  ["Grace Williams", "Member", 6, "Active", 27, 5 * HOUR],
-  ["Daniel Kim", "Member", 4, "Banned", 30, 1 * DAY],
-  ["Sarah Johnson", "Member", 7, "Active", 35, 1 * DAY],
-  ["Michael Chen", "Moderator", 9, "Active", 37, 2 * DAY],
-  ["Fatima Bello", "Member", 2, "Pending", 40, 2 * DAY],
-  ["Peter Obi", "Member", 3, "Active", 42, 3 * DAY],
-  ["Esther Nwosu", "Member", 5, "Suspended", 45, 6 * DAY],
+const userSeed: [
+  string,
+  UserRow["role"],
+  UserRow["membershipStatus"],
+  number,
+  UserRow["status"],
+  number,
+  number,
+][] = [
+  ["Ada Okafor", "User", "Member", 12, "Active", 13, 2 * MIN],
+  ["James Carter", "Moderator", "Guest", 8, "Active", 15, 18 * MIN],
+  ["Luciana Mensah", "User", "Member", 5, "Active", 17, 1 * HOUR],
+  ["Kasham Ali", "Admin", "Guest", 15, "Active", 20, 2 * HOUR],
+  ["Tolu Adebayo", "User", "Guest", 3, "Muted", 22, 3 * HOUR],
+  ["Grace Williams", "User", "Member", 6, "Active", 27, 5 * HOUR],
+  ["Daniel Kim", "User", "Member", 4, "Banned", 30, 1 * DAY],
+  ["Sarah Johnson", "User", "Member", 7, "Active", 35, 1 * DAY],
+  ["Michael Chen", "Moderator", "Member", 9, "Active", 37, 2 * DAY],
+  ["Fatima Bello", "User", "Guest", 2, "Pending", 40, 2 * DAY],
+  ["Peter Obi", "User", "Member", 3, "Active", 42, 3 * DAY],
+  ["Esther Nwosu", "User", "Member", 5, "Suspended", 45, 6 * DAY],
 ];
 
-export const sampleUsers: UserRow[] = userSeed.map(([name, role, communities, status, joinedDays, last], i) => ({
-  id: `u${i + 1}`,
-  name,
-  email: `${name.split(" ")[0].toLowerCase()}@gmail.com`,
-  avatar: null,
-  role,
-  apiRole: role === "Member" ? "user" : (role.toLowerCase() as "moderator" | "admin"),
-  communities,
-  status,
-  emailVerified: status !== "Pending",
-  joined: ago(joinedDays * DAY),
-  lastActive: ago(last),
-  openReports: status === "Banned" ? 3 : status === "Muted" ? 1 : 0,
-  posts: 48 - i * 3,
-  comments: 236 - i * 17,
-  live: false,
-}));
+export const sampleUsers: UserRow[] = userSeed.map(
+  ([name, role, membershipStatus, communities, status, joinedDays, last], i) => ({
+    id: `u${i + 1}`,
+    name,
+    email: `${name.split(" ")[0].toLowerCase()}@gmail.com`,
+    avatar: null,
+    role,
+    apiRole: role.toLowerCase() as UserRow["apiRole"],
+    membershipStatus,
+    chapterId: null,
+    departmentId: null,
+    preferredChapterId: null,
+    communities,
+    status,
+    emailVerified: status !== "Pending",
+    joined: ago(joinedDays * DAY),
+    lastActive: ago(last),
+    openReports: status === "Banned" ? 3 : status === "Muted" ? 1 : 0,
+    posts: 48 - i * 3,
+    comments: 236 - i * 17,
+    live: false,
+  }),
+);
 
 export const sampleUserActivity = [
   { icon: "message" as const, text: "Commented on “Prayer and Fasting”", at: ago(2 * MIN) },
