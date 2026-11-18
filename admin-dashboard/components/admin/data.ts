@@ -27,7 +27,11 @@ export type PageKey =
   | "chapters"
   | "notifications"
   | "audit"
-  | "settings";
+  | "settings"
+  // Chapter staff workspace
+  | "members"
+  | "requests"
+  | "announcements";
 
 export type AdminOverview = {
   users: number;
@@ -43,19 +47,35 @@ export type AdminOverview = {
   guests: number;
 };
 
+/** The chapter a Coordinator or Moderator is working in. */
+export type ChapterScope = {
+  id: string;
+  name: string;
+  role: "coordinator" | "moderator";
+};
+
 export type AdminContextValue = {
   navigate: (page: PageKey) => void;
   overview: AdminOverview | null;
   globalSearch: string;
+  /** Set in the chapter staff workspace; null for platform admins. */
+  scope: ChapterScope | null;
 };
 
 export const AdminContext = createContext<AdminContextValue>({
   navigate: () => {},
   overview: null,
   globalSearch: "",
+  scope: null,
 });
 
 export const useAdmin = () => useContext(AdminContext);
+
+/** Add `chapter_id=<scope>` to an API path when working inside a chapter. */
+export function scopedPath(path: string, scope: ChapterScope | null) {
+  if (!scope) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}chapter_id=${scope.id}`;
+}
 
 /* ------------------------------------------------------------------ */
 /* API configuration                                                   */
@@ -420,41 +440,53 @@ export type Directory = Map<
   }
 >;
 
-let directoryPromise: Promise<Directory> | null = null;
+const directoryPromises = new Map<string, Promise<Directory>>();
 
-function loadDirectory(): Promise<Directory> {
-  directoryPromise ??= api<{ items: DirectoryUser[] }>(
-    "admin/users?limit=50",
-  )
-    .then((page) => {
-      const directory: Directory = new Map();
+function roleLabel(role: string) {
+  return role === "user" ? "Member" : role === "admin" ? "Admin" : role === "moderator" ? "Moderator" : role;
+}
 
-      for (const user of page.items ?? []) {
-        const role =
-          user.account_role === "user"
-            ? "Member"
-            : user.account_role === "admin"
-              ? "Admin"
-              : user.account_role === "moderator"
-                ? "Moderator"
-                : user.account_role;
+/** Platform admins read the user list; chapter staff read their chapter's members. */
+function loadDirectory(chapterId: string | null): Promise<Directory> {
+  const key = chapterId ?? "admin";
+  let promise = directoryPromises.get(key);
+  if (promise) return promise;
 
-        directory.set(user.id, {
-          name:
-            user.display_name?.trim() ||
-            user.email.split("@")[0],
-          role,
-        });
-      }
+  promise = (
+    chapterId
+      ? api<{ user_id: string; email: string; display_name: string | null; staff_role: string | null }[]>(
+          `chapters/${chapterId}/members`,
+        ).then((rows) => {
+          const directory: Directory = new Map();
+          for (const m of rows ?? []) {
+            directory.set(m.user_id, {
+              name: m.display_name?.trim() || m.email.split("@")[0],
+              role: m.staff_role ? titleCaseRole(m.staff_role) : "Member",
+            });
+          }
+          return directory;
+        })
+      : api<{ items: DirectoryUser[] }>("admin/users?limit=50").then((page) => {
+          const directory: Directory = new Map();
+          for (const user of page.items ?? []) {
+            directory.set(user.id, {
+              name: user.display_name?.trim() || user.email.split("@")[0],
+              role: roleLabel(user.account_role),
+            });
+          }
+          return directory;
+        })
+  ).catch(() => {
+    directoryPromises.delete(key);
+    return new Map<string, { name: string; role: string }>();
+  });
 
-      return directory;
-    })
-    .catch(() => {
-      directoryPromise = null;
-      return new Map<string, { name: string; role: string }>();
-    });
+  directoryPromises.set(key, promise);
+  return promise;
+}
 
-  return directoryPromise;
+function titleCaseRole(role: string) {
+  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 /**
@@ -462,6 +494,8 @@ function loadDirectory(): Promise<Directory> {
  * The first 50 accounts are cached for the current session.
  */
 export function useDirectory(enabled: boolean): Directory {
+  const { scope } = useAdmin();
+  const chapterId = scope?.id ?? null;
   const [directory, setDirectory] = useState<Directory>(
     () => new Map(),
   );
@@ -473,7 +507,7 @@ export function useDirectory(enabled: boolean): Directory {
 
     let cancelled = false;
 
-    void loadDirectory().then((result) => {
+    void loadDirectory(chapterId).then((result) => {
       if (!cancelled) {
         setDirectory(result);
       }
@@ -482,7 +516,7 @@ export function useDirectory(enabled: boolean): Directory {
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [enabled, chapterId]);
 
   return directory;
 }
@@ -504,6 +538,8 @@ function loadChapters(): Promise<ChapterOption[]> {
   chapterPromise ??= api<
     { id: string; name: string; is_active: boolean; member_count: number }[]
   >("chapters?include_archived=true")
+    // Only platform staff may list archived chapters; others get active ones.
+    .catch(() => api<{ id: string; name: string; is_active: boolean; member_count: number }[]>("chapters"))
     .then((rows) =>
       (rows ?? []).map((row) => ({
         id: row.id,

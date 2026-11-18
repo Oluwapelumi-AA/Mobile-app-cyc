@@ -55,7 +55,7 @@ const errorText = (err: unknown, fallback: string) => (err instanceof Error ? er
  * author is told.
  */
 export default function Posts() {
-  const { globalSearch, navigate } = useAdmin();
+  const { globalSearch, navigate, scope } = useAdmin();
   const { chapters, name: chapterName } = useChapters();
   const [chapterId, setChapterId] = useState("");
   const [search, setSearch] = useState("");
@@ -66,7 +66,7 @@ export default function Posts() {
   const activeChapters = chapters.filter((c) => c.active);
   // Start on the largest chapter; the picker is alphabetical.
   const largest = [...activeChapters].sort((a, b) => b.members - a.members)[0];
-  const selectedChapter = chapterId || largest?.id || "";
+  const selectedChapter = scope?.id || chapterId || largest?.id || "";
 
   const data = useLiveList<ApiPost, PostRow>(
     selectedChapter ? `chapters/${selectedChapter}/posts?limit=50` : null,
@@ -102,11 +102,12 @@ export default function Posts() {
 
   return (
     <>
-      <PageHeader title="Posts and comments" subtitle="Read and moderate what members post in each chapter." />
+      <PageHeader title="Posts and comments" subtitle={scope ? `Read and moderate what members post in ${scope.name}.` : "Read and moderate what members post in each chapter."} />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
         <Card className="p-4 sm:p-5">
           <div className="grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
+            {scope ? null : (
             <SelectField
               label="Chapter"
               value={selectedChapter}
@@ -122,6 +123,7 @@ export default function Posts() {
                   : [{ value: "", label: "No chapters yet" }]
               }
             />
+            )}
             <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search posts or authors..." />
           </div>
 

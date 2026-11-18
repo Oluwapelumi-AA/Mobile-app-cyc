@@ -23,6 +23,16 @@ from app.schemas.chapter_access_request import (
 from app.services.errors import Conflict, Forbidden, NotFound
 
 
+def _read(db: Session, row: ChapterAccessRequest) -> ChapterAccessRequestRead:
+    """Serialize a request with the requester's email and display name."""
+    result = ChapterAccessRequestRead.model_validate(row)
+    user = db.get(User, row.user_id)
+    profile = db.get(UserProfile, row.user_id)
+    result.user_email = user.email if user else None
+    result.user_name = (profile.display_name if profile else None) or None
+    return result
+
+
 def _is_admin(db: Session, user_id: UserId) -> bool:
     return (
         db.scalar(
@@ -99,7 +109,7 @@ def create_access_request(
     )
 
     if existing is not None:
-        return ChapterAccessRequestRead.model_validate(existing)
+        return _read(db, existing)
 
     request = ChapterAccessRequest(
         id=uuid.uuid4(),
@@ -126,7 +136,7 @@ def create_access_request(
             )
         )
         if existing is not None:
-            return ChapterAccessRequestRead.model_validate(existing)
+            return _read(db, existing)
 
         raise Conflict(
             "chapter_request_conflict",
@@ -134,7 +144,7 @@ def create_access_request(
         ) from None
 
     db.refresh(request)
-    return ChapterAccessRequestRead.model_validate(request)
+    return _read(db, request)
 
 
 def list_my_access_requests(
@@ -151,7 +161,7 @@ def list_my_access_requests(
     )
 
     return [
-        ChapterAccessRequestRead.model_validate(row)
+        _read(db, row)
         for row in rows
     ]
 
@@ -181,7 +191,7 @@ def list_chapter_access_requests(
     )
 
     return [
-        ChapterAccessRequestRead.model_validate(row)
+        _read(db, row)
         for row in rows
     ]
 
@@ -235,7 +245,7 @@ def review_access_request(
     db.commit()
     db.refresh(request)
 
-    return ChapterAccessRequestRead.model_validate(request)
+    return _read(db, request)
 
 
 def cancel_access_request(
@@ -263,4 +273,4 @@ def cancel_access_request(
     db.commit()
     db.refresh(request)
 
-    return ChapterAccessRequestRead.model_validate(request)
+    return _read(db, request)

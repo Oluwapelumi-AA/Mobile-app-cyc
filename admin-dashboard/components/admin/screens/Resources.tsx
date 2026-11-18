@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, matches, useAdmin, useLiveList } from "../data";
+import { api, matches, useAdmin, useLiveList, scopedPath } from "../data";
 import { useConfirm, useToast } from "../dialogs";
 import { Icon } from "../icons";
 import { type ApiResource, mapResource } from "../mappers";
@@ -72,9 +72,9 @@ function typeFromCategory(
 }
 
 export default function Resources() {
-  const { globalSearch } = useAdmin();
+  const { globalSearch, scope } = useAdmin();
   const data = useLiveList<ApiResource, ResourceRow>(
-    "resources?limit=50",
+    scopedPath("resources?limit=50", scope),
     mapResource,
     sampleResources,
   );

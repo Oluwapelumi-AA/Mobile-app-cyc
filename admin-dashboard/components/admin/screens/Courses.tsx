@@ -5,6 +5,7 @@ import {
   api,
   downloadCsv,
   matches,
+  scopedPath,
   useAdmin,
   useChapters,
   useLiveList,
@@ -82,9 +83,9 @@ function scoreClass(score: number, passMark = 70) {
 }
 
 export default function Courses() {
-  const { globalSearch } = useAdmin();
+  const { globalSearch, scope } = useAdmin();
   const data = useLiveList<ApiCourse, CourseRow>(
-    "courses?limit=50",
+    scopedPath("courses?limit=50", scope),
     mapCourse,
     sampleCourses,
   );

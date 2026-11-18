@@ -116,6 +116,8 @@ def test_chapter_coordinator_can_view_requests_for_own_chapter(api):
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["user_id"] == str(user_id)
+    assert response.json()[0]["user_name"] == "Test User"
+    assert response.json()[0]["user_email"].startswith("requester")
 
 
 @pytest.mark.parametrize("decision", ["approved", "declined"])

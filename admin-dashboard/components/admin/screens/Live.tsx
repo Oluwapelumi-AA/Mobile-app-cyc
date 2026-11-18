@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { api, matches, useAdmin, useChapters, useLiveList } from "../data";
+import { api, matches, useAdmin, useChapters, useLiveList, scopedPath } from "../data";
 import { useConfirm, useToast } from "../dialogs";
 import { Icon } from "../icons";
 import { type ApiMeeting, mapMeeting } from "../mappers";
@@ -41,9 +41,9 @@ import {
 type TabKey = "all" | "Live now" | "Scheduled" | "recorded" | "Draft";
 
 export default function Live() {
-  const { globalSearch } = useAdmin();
+  const { globalSearch, scope } = useAdmin();
   const data = useLiveList<ApiMeeting, VideoRow>(
-    "meetings?limit=50",
+    scopedPath("meetings?limit=50", scope),
     mapMeeting,
     sampleVideos,
   );

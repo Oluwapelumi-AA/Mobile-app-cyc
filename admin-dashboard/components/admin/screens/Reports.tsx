@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { api, downloadCsv, matches, useAdmin, useChapters, useDirectory, useLiveList } from "../data";
+import { api, downloadCsv, matches, useAdmin, useChapters, useDirectory, useLiveList, scopedPath } from "../data";
 import { Modal, useConfirm, useToast } from "../dialogs";
 import { Icon } from "../icons";
 import { type ApiReport, mapReport, withNames } from "../mappers";
@@ -49,8 +49,8 @@ export function reasonTone(reason: string): Tone {
 type TabKey = "all" | "New" | "Under review" | "Resolved" | "Dismissed";
 
 export default function Reports() {
-  const { globalSearch, navigate } = useAdmin();
-  const data = useLiveList<ApiReport, ReportRow>("moderation/reports?status=any&limit=50", mapReport, sampleReports);
+  const { globalSearch, navigate, scope } = useAdmin();
+  const data = useLiveList<ApiReport, ReportRow>(scopedPath("moderation/reports?status=any&limit=50", scope), mapReport, sampleReports);
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");
@@ -299,8 +299,14 @@ export default function Reports() {
             <CardHeader title="Moderation shortcuts" />
             <div className="mt-4 space-y-2.5">
               <LinkRow icon="flag" title="Review pending reports" subtitle={`${pending} waiting for review`} onClick={() => { setTab("New"); paged.setPage(1); }} />
-              <LinkRow icon="users" title="Manage flagged users" subtitle="Suspend or reinstate accounts" onClick={() => navigate("users")} />
-              <LinkRow icon="file" title="Audit log" subtitle="See every moderation action" onClick={() => navigate("audit")} />
+              {scope ? (
+                <LinkRow icon="users" title="Banned members" subtitle="Ban or reinstate members of this chapter" onClick={() => navigate("members")} />
+              ) : (
+                <>
+                  <LinkRow icon="users" title="Manage flagged users" subtitle="Suspend or reinstate accounts" onClick={() => navigate("users")} />
+                  <LinkRow icon="file" title="Audit log" subtitle="See every moderation action" onClick={() => navigate("audit")} />
+                </>
+              )}
             </div>
           </Card>
         </div>

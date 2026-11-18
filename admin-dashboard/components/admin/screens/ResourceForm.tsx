@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiError, api } from "../data";
+import { ApiError, api, useAdmin } from "../data";
 import { Modal } from "../dialogs";
 import {
   ChapterSelect,
@@ -116,6 +116,8 @@ export default function ResourceForm({
   const { busy, error, setError, run } = useSubmit();
   const set = <K extends keyof FormState>(key: K) => (value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
   const editing = resourceId !== null;
+  // Only app moderators and admins add categories.
+  const { scope } = useAdmin();
 
   // Mounted fresh each time the dialog opens (see the parent's `key`).
   useEffect(() => {
@@ -246,7 +248,7 @@ export default function ResourceForm({
             options={[
               { value: "", label: "No category" },
               ...categories.map((c) => ({ value: c.id, label: c.name })),
-              { value: NEW_CATEGORY, label: "+ New category…" },
+              ...(scope ? [] : [{ value: NEW_CATEGORY, label: "+ New category…" }]),
             ]}
           />
           {form.category_id === NEW_CATEGORY ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, downloadCsv, matches, useAdmin, useLiveList } from "../data";
+import { api, downloadCsv, matches, useAdmin, useLiveList, scopedPath } from "../data";
 import { useConfirm, useToast } from "../dialogs";
 import { Icon } from "../icons";
 import { type ApiEvent, mapEvent } from "../mappers";
@@ -64,9 +64,9 @@ function eventWhen(e: EventRow) {
 type TabKey = "all" | "upcoming" | "ongoing" | "past";
 
 export default function Events() {
-  const { globalSearch } = useAdmin();
+  const { globalSearch, scope } = useAdmin();
   const data = useLiveList<ApiEvent, EventRow>(
-    "events?limit=50",
+    scopedPath("events?limit=50", scope),
     mapEvent,
     sampleEvents,
   );

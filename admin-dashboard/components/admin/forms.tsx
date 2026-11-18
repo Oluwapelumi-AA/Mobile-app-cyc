@@ -1,7 +1,7 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
-import { useChapters } from "./data";
+import { type ReactNode, useEffect, useState } from "react";
+import { useAdmin, useChapters } from "./data";
 import { cx } from "./ui";
 
 const INPUT =
@@ -168,6 +168,21 @@ export function ChapterSelect({
   className?: string;
 }) {
   const { chapters } = useChapters();
+  const { scope } = useAdmin();
+
+  // Chapter staff always create inside their own chapter.
+  useEffect(() => {
+    if (scope && value !== scope.id) onChange(scope.id);
+  }, [scope, value, onChange]);
+
+  if (scope) {
+    return (
+      <Label label="Chapter" className={className}>
+        <input value={scope.name} disabled className={cx(INPUT, "h-10")} />
+      </Label>
+    );
+  }
+
   const active = chapters.filter((c) => c.active).sort((a, b) => a.name.localeCompare(b.name));
   return (
     <Select
