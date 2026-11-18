@@ -15,7 +15,7 @@ def _admin(db: Session, actor_id: UserId) -> None:
         raise Forbidden("admin_only", "Only platform admins can manage global departments.")
 
 def list_departments(db: Session, actor_id: UserId) -> list[DepartmentRead]:
-    _admin(db, actor_id)
+    """Any signed-in user can see the departments, so Members can pick one."""
     rows = db.scalars(select(Department).order_by(Department.name, Department.id))
     counts = dict(
         db.execute(

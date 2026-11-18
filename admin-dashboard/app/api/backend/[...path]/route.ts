@@ -56,6 +56,7 @@ const ALLOWED: Record<Method, RegExp[]> = {
     id("^posts/{id}/comments$"),
 
     /^departments$/,
+    id("^departments/{id}/members$"),
 
     /^events$/,
     id("^events/{id}$"),
@@ -109,6 +110,7 @@ const ALLOWED: Record<Method, RegExp[]> = {
   PUT: [
     id("^chapters/{id}/staff/{id}$"),
     id("^chapters/{id}/bans/{id}$"),
+    id("^departments/{id}/members/{id}$"),
   ],
 
   PATCH: [
@@ -129,6 +131,7 @@ const ALLOWED: Record<Method, RegExp[]> = {
     id("^posts/{id}$"),
     id("^comments/{id}$"),
     id("^departments/{id}$"),
+    id("^departments/{id}/members/{id}$"),
     id("^resources/{id}$"),
     id("^courses/{id}$"),
     id("^course-lessons/{id}$"),

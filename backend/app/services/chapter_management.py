@@ -300,9 +300,10 @@ def assign_member_to_chapter(
     actor_id: UserId,
     target_id: uuid.UUID,
     chapter_id: uuid.UUID,
-    department_id: uuid.UUID,
+    department_id: uuid.UUID | None = None,
 ) -> None:
-    """Atomically convert or reassign a user as an official Chapter Member."""
+    """Atomically convert or reassign a user as an official Chapter Member.
+    Without a department, their current one is kept."""
     _require_admin(db, actor_id, "Only platform Admins can assign official Chapter membership.")
 
     user = db.get(User, target_id)
@@ -320,7 +321,7 @@ def assign_member_to_chapter(
     if chapter is None or not chapter.is_active:
         raise CHAPTER_NOT_FOUND
 
-    if db.get(Department, department_id) is None:
+    if department_id is not None and db.get(Department, department_id) is None:
         raise DEPARTMENT_NOT_FOUND
 
     now = datetime.now(UTC)
@@ -328,7 +329,8 @@ def assign_member_to_chapter(
 
     user.membership_status = MembershipStatus.MEMBER
     profile.chapter_id = chapter_id
-    profile.department_id = department_id
+    if department_id is not None:
+        profile.department_id = department_id
 
     # A converted Member must not keep outstanding Guest requests.
     for request in db.scalars(

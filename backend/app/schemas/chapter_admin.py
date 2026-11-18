@@ -11,4 +11,5 @@ class MemberAssignmentCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     chapter_id: UUID
-    department_id: UUID
+    # Optional: Members can also choose their own department.
+    department_id: UUID | None = None

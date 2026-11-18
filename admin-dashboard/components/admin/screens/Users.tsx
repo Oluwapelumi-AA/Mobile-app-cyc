@@ -572,15 +572,21 @@ function MembershipPanel({
   }, [user.live]);
 
   const chapterValue = chapterId || chapters[0]?.id || "";
-  const departmentValue = departmentId || departments[0]?.id || "";
+  // "" means no department.
+  const departmentValue = departmentId;
 
   async function save() {
     setBusy(true);
     try {
-      const updated = await api<ApiUser>(`admin/users/${user.id}/membership`, {
+      let updated = await api<ApiUser>(`admin/users/${user.id}/membership`, {
         method: "PATCH",
-        body: JSON.stringify({ chapter_id: chapterValue, department_id: departmentValue }),
+        body: JSON.stringify({ chapter_id: chapterValue, department_id: departmentValue || null }),
       });
+      // Clearing the department takes them out of their current one.
+      if (!departmentValue && updated.department_id) {
+        await api(`departments/${updated.department_id}/members/${user.id}`, { method: "DELETE" });
+        updated = await api<ApiUser>(`admin/users/${user.id}`);
+      }
       onChanged(updated);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Could not update membership.");
@@ -622,13 +628,16 @@ function MembershipPanel({
       </p>
       {chapters.length === 0 ? (
         <p className="text-sm text-muted">Create a chapter first.</p>
-      ) : departments.length === 0 ? (
-        <p className="text-sm text-muted">Create a department first (Departments screen).</p>
       ) : (
         <>
           <SelectField label="Chapter" value={chapterValue} onChange={setChapterId} options={chapters.map((c) => ({ value: c.id, label: c.name }))} />
-          <SelectField label="Department" value={departmentValue} onChange={setDepartmentId} options={departments.map((d) => ({ value: d.id, label: d.name }))} />
-          <PrimaryButton icon="checkCircle" className="w-full" disabled={busy || !chapterValue || !departmentValue} onClick={() => void save()}>
+          <SelectField
+            label="Department"
+            value={departmentValue}
+            onChange={setDepartmentId}
+            options={[{ value: "", label: "No department" }, ...departments.map((d) => ({ value: d.id, label: d.name }))]}
+          />
+          <PrimaryButton icon="checkCircle" className="w-full" disabled={busy || !chapterValue} onClick={() => void save()}>
             {isMember ? "Move / update membership" : "Make official member"}
           </PrimaryButton>
         </>

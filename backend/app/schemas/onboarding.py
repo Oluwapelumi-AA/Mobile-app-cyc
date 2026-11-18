@@ -12,8 +12,8 @@ class OnboardingStep(StrEnum):
     LANGUAGE = "language"
     REGION = "region"
     TIMEZONE = "timezone"
-    # Pick the Chapter you want to join (preferred_chapter_id). Official
-    # membership is still assigned by a platform Admin.
+    # Pick the Chapter to join (PUT /me/chapter). You become an official
+    # Member of it when onboarding is complete; no approval is needed.
     CHAPTER = "chapter"
 
 

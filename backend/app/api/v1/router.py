@@ -7,6 +7,7 @@ from app.api.v1 import (
     chapters,
     chapter_management,
     courses,
+    membership,
     departments,
     events,
     locales,
@@ -34,6 +35,7 @@ router.include_router(meetings.router)
 router.include_router(video_webhooks.router)
 router.include_router(resources.categories_router)
 router.include_router(resources.router)
+router.include_router(membership.router)
 router.include_router(courses.router)
 router.include_router(courses.lessons_router)
 router.include_router(courses.quizzes_router)
