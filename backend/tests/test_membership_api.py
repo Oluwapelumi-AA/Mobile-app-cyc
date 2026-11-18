@@ -69,14 +69,39 @@ def test_onboarding_without_a_chapter_stays_guest(api, world):
     assert me(api)["membership_status"] == "guest"
 
 
-def test_after_onboarding_you_can_join_or_move(api, world):
+def test_onboarded_guest_can_join_later(api, world):
     onboard(api, "ada")
     joined = api.client.put(f"{V1}/me/chapter", json={"chapter_id": world["ibadan"]}).json()
     assert joined["membership_status"] == "member"
     assert joined["chapter_id"] == world["ibadan"]
 
-    moved = api.client.put(f"{V1}/me/chapter", json={"chapter_id": world["lagos"]}).json()
-    assert moved["chapter_id"] == world["lagos"]
+
+def test_members_cannot_switch_chapters(api, world):
+    onboard(api, "ada", world["lagos"])
+    response = api.client.put(f"{V1}/me/chapter", json={"chapter_id": world["ibadan"]})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "already_in_a_chapter"
+    assert me(api)["chapter_id"] == world["lagos"]
+
+    # Choosing the same Chapter again is harmless.
+    same = api.client.put(f"{V1}/me/chapter", json={"chapter_id": world["lagos"]})
+    assert same.status_code == 200
+
+
+def test_choice_during_onboarding_can_change_until_complete(api, world):
+    onboard(api, "ada", world["lagos"], complete=False)
+    assert api.client.put(f"{V1}/me/chapter", json={"chapter_id": world["ibadan"]}).status_code == 200
+    api.client.post(f"{V1}/onboarding/me/complete")
+    assert me(api)["chapter_id"] == world["ibadan"]
+
+
+def test_admin_can_still_move_a_member(api, world):
+    user = onboard(api, "ada", world["lagos"])
+    api.act_as(world["admin"])
+    response = api.client.patch(f"{V1}/admin/users/{user}/membership", json={"chapter_id": world["ibadan"]})
+    assert response.status_code == 200
+    api.act_as(user)
+    assert me(api)["chapter_id"] == world["ibadan"]
 
 
 def test_archived_chapters_cannot_be_chosen(api, world):

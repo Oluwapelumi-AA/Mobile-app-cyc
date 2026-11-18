@@ -31,11 +31,12 @@ def get_my_membership(user_id: CurrentUserId, db: DbSession):
 
 @router.put("/me/chapter", response_model=MyMembershipRead)
 def choose_chapter(data: ChapterChoice, user_id: CurrentUserId, db: DbSession):
-    """Pick a Chapter. No approval needed.
+    """Pick your Chapter. No approval needed.
 
     During onboarding this records your choice, and you become a Member when
-    onboarding is complete. After onboarding it joins the Chapter at once,
-    moving you out of your current one.
+    onboarding is complete. If you finished onboarding without one, this
+    joins the Chapter at once. Once you're a Member you can't leave or switch
+    Chapters (409 ``already_in_a_chapter``); only an Admin can move you.
     """
     return membership.choose_chapter(db, user_id, data.chapter_id)
 

@@ -14,6 +14,7 @@ class OnboardingStep(StrEnum):
     TIMEZONE = "timezone"
     # Pick the Chapter to join (PUT /me/chapter). You become an official
     # Member of it when onboarding is complete; no approval is needed.
+    # Members stay in that Chapter; they can't leave or switch.
     CHAPTER = "chapter"
 
 

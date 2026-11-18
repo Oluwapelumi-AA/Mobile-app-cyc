@@ -4,8 +4,9 @@
   becomes an official Member of it straight away. No Coordinator approval.
 - Before onboarding is complete, choosing a Chapter only records the choice
   (``preferred_chapter_id``); membership starts when onboarding completes.
-- After onboarding, a user can join or move to another Chapter at any time.
-  A user belongs to one Chapter at a time.
+- A user who finished onboarding without choosing can join a Chapter later.
+- A Member belongs to one Chapter and cannot leave it or move to another.
+  Only a platform Admin can move a Member (Users → Membership).
 - Members pick their own department, and can leave it or move to another.
   Departments are app-wide; a Member is in at most one.
 - Platform Admins can add Members to, or remove them from, any department.
@@ -35,6 +36,10 @@ USER_NOT_FOUND = NotFound("user_not_found", "User not found.")
 PROFILE_NOT_FOUND = NotFound("profile_not_found", "Create your profile first.")
 CHAPTER_NOT_FOUND = NotFound("chapter_not_found", "Active Chapter not found.")
 DEPARTMENT_NOT_FOUND = NotFound("department_not_found", "Department not found.")
+ALREADY_IN_A_CHAPTER = Conflict(
+    "already_in_a_chapter",
+    "You're already a Member of a Chapter. Members can't leave or switch Chapters.",
+)
 NOT_A_MEMBER = Conflict(
     "membership_required",
     "Join a Chapter before choosing a department.",
@@ -84,9 +89,9 @@ def _settle_requests(db: Session, user_id: UserId, chapter_id: uuid.UUID) -> Non
 def _make_member(
     db: Session, user: User, profile: UserProfile, chapter_id: uuid.UUID, how: str
 ) -> None:
-    """Make the user an official Member of the Chapter. Does not commit."""
-    previous = profile.chapter_id if user.membership_status == MembershipStatus.MEMBER else None
-    if previous == chapter_id:
+    """Make a Guest an official Member of the Chapter. Does not commit.
+    Existing Members are left where they are."""
+    if user.membership_status == MembershipStatus.MEMBER and profile.chapter_id is not None:
         return
     user.membership_status = MembershipStatus.MEMBER
     profile.chapter_id = chapter_id
@@ -99,7 +104,7 @@ def _make_member(
         "user",
         user.id,
         chapter_id=chapter_id,
-        data={"from_chapter_id": previous, "how": how},
+        data={"how": how},
     )
 
 
@@ -124,8 +129,12 @@ def my_membership(db: Session, user_id: UserId) -> MyMembershipRead:
 
 def choose_chapter(db: Session, user_id: UserId, chapter_id: uuid.UUID) -> MyMembershipRead:
     """Pick a Chapter. During onboarding this records the choice; afterwards
-    it joins (or moves to) the Chapter at once."""
+    it joins the Chapter at once. Members cannot change Chapter."""
     user, profile = _user_and_profile(db, user_id)
+    if user.membership_status == MembershipStatus.MEMBER and profile.chapter_id is not None:
+        if profile.chapter_id == chapter_id:
+            return my_membership(db, user_id)
+        raise ALREADY_IN_A_CHAPTER
     _active_chapter(db, chapter_id)
     if profile.onboarding_completed_at is None:
         profile.preferred_chapter_id = chapter_id
