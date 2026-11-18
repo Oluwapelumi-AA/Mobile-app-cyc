@@ -9,7 +9,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     StringConstraints,
-    model_validator,
 )
 
 from app.models.meeting import MeetingKind, MeetingStatus, RecordingStatus
@@ -26,13 +25,11 @@ MeetingDescription = Annotated[
 
 
 class MeetingCreate(BaseModel):
-    """Create a Community, Chapter, event-linked or app-wide meeting.
+    """Create a Chapter, event-linked or app-wide meeting.
 
-    For an event-linked meeting, ownership is inherited from the event.
-    If community_id or chapter_id is supplied, it must match the event.
-
-    A meeting cannot belong directly to both a Community and a Chapter.
-    Leave out community_id, chapter_id and event_id for an app-wide meeting.
+    For an event-linked meeting, the Chapter is inherited from the event.
+    If chapter_id is supplied, it must match the event.
+    Leave out chapter_id and event_id for an app-wide meeting.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -40,19 +37,10 @@ class MeetingCreate(BaseModel):
     kind: MeetingKind = MeetingKind.MEETING
     title: MeetingTitle
     description: MeetingDescription | None = None
-    community_id: UUID | None = None
     chapter_id: UUID | None = None
     event_id: UUID | None = None
     scheduled_start_at: datetime | None = None
     recording_enabled: bool = False
-
-    @model_validator(mode="after")
-    def validate_ownership(self):
-        if self.community_id is not None and self.chapter_id is not None:
-            raise ValueError(
-                "A meeting cannot belong to both a Community and a Chapter."
-            )
-        return self
 
 
 class MeetingUpdate(BaseModel):
@@ -70,7 +58,6 @@ class MeetingUpdate(BaseModel):
 class MeetingRead(BaseModel):
     id: UUID
     kind: MeetingKind
-    community_id: UUID | None
     chapter_id: UUID | None
     event_id: UUID | None
     created_by: UUID | None

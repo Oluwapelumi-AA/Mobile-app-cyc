@@ -1,11 +1,11 @@
 """Platform-wide department catalog and one-department-per-member assignment."""
 import uuid
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.core.identity import UserId
 from app.models.chapter_management import Department
-from app.models.user import AccountRole, User
+from app.models.user import AccountRole, MembershipStatus, User
 from app.models.user_profile import UserProfile
 from app.schemas.chapter_management import DepartmentCreate, DepartmentRead, DepartmentUpdate
 from app.services.errors import Conflict, Forbidden, NotFound
@@ -17,7 +17,21 @@ def _admin(db: Session, actor_id: UserId) -> None:
 def list_departments(db: Session, actor_id: UserId) -> list[DepartmentRead]:
     _admin(db, actor_id)
     rows = db.scalars(select(Department).order_by(Department.name, Department.id))
-    return [DepartmentRead.model_validate(row) for row in rows]
+    counts = dict(
+        db.execute(
+            select(UserProfile.department_id, func.count())
+            .join(User, User.id == UserProfile.user_id)
+            .where(
+                UserProfile.department_id.is_not(None),
+                User.membership_status == MembershipStatus.MEMBER,
+            )
+            .group_by(UserProfile.department_id)
+        ).all()
+    )
+    return [
+        DepartmentRead.model_validate(row).model_copy(update={"member_count": counts.get(row.id, 0)})
+        for row in rows
+    ]
 
 def create_department(db: Session, actor_id: UserId, data: DepartmentCreate) -> DepartmentRead:
     _admin(db, actor_id)

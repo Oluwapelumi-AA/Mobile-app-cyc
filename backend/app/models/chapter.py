@@ -16,12 +16,13 @@ def utc_now() -> datetime:
 class Chapter(Base):
     """A regional CYC Chapter, such as Nigeria, Ireland or Cameroon.
 
-    Geographic coverage is managed separately through ChapterCoverageArea.
-    The physical table remains 'branches' temporarily for compatibility
-    with existing foreign keys until the coordinated database migration.
+    Chapters are the only grouping in the app: official Members belong to
+    one Chapter (``user_profiles.chapter_id``), and posts, events, meetings,
+    resources, bans and reports are scoped to a Chapter. Geographic coverage
+    is managed separately through ChapterCoverageArea.
     """
 
-    __tablename__ = "branches"
+    __tablename__ = "chapters"
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -49,6 +50,3 @@ class Chapter(Base):
         nullable=False,
     )
 
-
-# Temporary compatibility alias for existing backend imports.
-Branch = Chapter

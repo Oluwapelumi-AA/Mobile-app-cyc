@@ -15,7 +15,7 @@ const API_BASE = (
 const UUID =
   "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 type RefreshResult =
   | {
@@ -28,41 +28,50 @@ type RefreshResult =
 
 const refreshInFlight = new Map<string, Promise<RefreshResult>>();
 
+const id = (pattern: string) => new RegExp(pattern.replaceAll("{id}", UUID));
+
+/**
+ * Every backend route the dashboard may call, by method. Anything else is
+ * answered with 404 here and never reaches the API. The API still checks
+ * every permission itself.
+ */
 const ALLOWED: Record<Method, RegExp[]> = {
   GET: [
     /^admin\/overview$/,
     /^admin\/users$/,
-    new RegExp(`^admin/users/${UUID}$`),
+    id("^admin/users/{id}$"),
 
     /^moderation\/reports$/,
-    new RegExp(`^moderation/reports/${UUID}$`),
+    id("^moderation/reports/{id}$"),
     /^moderation\/audit-logs$/,
 
-    /^communities$/,
-    new RegExp(`^communities/${UUID}(/posts|/members)?$`),
+    // Chapters and everything inside them.
+    /^chapters$/,
+    id("^chapters/{id}$"),
+    id("^chapters/{id}/(posts|staff|coordinators|moderators|members|department-members|dashboard|bans|access-requests|access-grants)$"),
+    /^me\/chapter-staff$/,
+    /^me\/chapter-access-requests$/,
+
+    id("^posts/{id}$"),
+    id("^posts/{id}/comments$"),
+
+    /^departments$/,
 
     /^events$/,
-    new RegExp(`^events/${UUID}$`),
+    id("^events/{id}$"),
+    id("^events/{id}/registrations$"),
 
     /^meetings$/,
-    new RegExp(`^meetings/${UUID}(/recordings)?$`),
+    id("^meetings/{id}(/recordings)?$"),
 
     /^resources$/,
-    new RegExp(`^resources/${UUID}$`),
+    id("^resources/{id}$"),
     /^resource-categories$/,
 
-    /^branches$/,
-    /^chapter-coordinator\/me$/,
-    new RegExp(`^branches/${UUID}$`),
-    new RegExp(`^branches/${UUID}/coordinators$`),
-    new RegExp(`^branches/${UUID}/members$`),
-    new RegExp(`^branches/${UUID}/departments$`),
-    new RegExp(`^branches/${UUID}/posts$`),
-    new RegExp(`^branches/${UUID}/dashboard$`),
-
-    new RegExp(`^chapter-posts/${UUID}/comments$`),
-    /^me\/chapter-access-requests$/,
-    new RegExp(`^chapters/${UUID}/access-requests$`),
+    /^courses$/,
+    /^courses\/(overview|quiz-attempts|certificates)$/,
+    id("^courses/{id}$"),
+    id("^course-quizzes/{id}$"),
 
     /^search(\/[a-z]+)?$/,
     /^auth\/me$/,
@@ -71,51 +80,59 @@ const ALLOWED: Record<Method, RegExp[]> = {
   ],
 
   POST: [
-    /^branches$/,
+    /^chapters$/,
+    id("^chapters/{id}/(archive|restore)$"),
+    id("^chapters/{id}/(coordinators|moderators)$"),
+    id("^chapters/{id}/posts$"),
+    id("^chapters/{id}/announcements$"),
+    id("^chapters/{id}/access-grants$"),
+    id("^chapter-access-requests/{id}/(review|cancel)$"),
 
-    new RegExp(`^admin/users/${UUID}/suspend$`),
-    new RegExp(`^admin/users/${UUID}/reinstate$`),
+    id("^posts/{id}/comments$"),
 
-    new RegExp(`^moderation/reports/${UUID}/resolve$`),
+    /^departments$/,
 
-    new RegExp(`^events/${UUID}/cancel$`),
+    id("^admin/users/{id}/(suspend|reinstate)$"),
+    id("^moderation/reports/{id}/resolve$"),
+    /^events$/,
+    id("^events/{id}/cancel$"),
+    /^meetings$/,
+    id("^meetings/{id}/(start|end|cancel)$"),
+    /^resources$/,
+    /^resource-categories$/,
+    id("^resources/{id}/(publish|unpublish)$"),
+    id("^resources/{id}/file/(upload-intent|confirm)$"),
+    /^courses$/,
+    id("^courses/{id}/(publish|unpublish|lessons|quizzes)$"),
+  ],
 
-    new RegExp(`^meetings/${UUID}/(start|end|cancel)$`),
-
-    new RegExp(`^resources/${UUID}/(publish|unpublish)$`),
-
-    new RegExp(`^branches/${UUID}/(archive|restore)$`),
-    new RegExp(`^branches/${UUID}/coordinators$`),
-    new RegExp(`^branches/${UUID}/departments$`),
-    new RegExp(`^branches/${UUID}/posts$`),
-    new RegExp(`^branches/${UUID}/push-notifications$`),
-
-    new RegExp(`^chapter-posts/${UUID}/comments$`),
-
-    new RegExp(`^chapters/${UUID}/access-requests$`),
-    new RegExp(`^chapter-access-requests/${UUID}/review$`),
-    new RegExp(`^chapter-access-requests/${UUID}/cancel$`),
+  PUT: [
+    id("^chapters/{id}/staff/{id}$"),
+    id("^chapters/{id}/bans/{id}$"),
   ],
 
   PATCH: [
-    new RegExp(`^admin/users/${UUID}/role$`),
-    new RegExp(`^admin/users/${UUID}/membership$`),
-
-    new RegExp(`^branches/${UUID}$`),
-    new RegExp(`^branches/${UUID}/departments/${UUID}$`),
-    new RegExp(`^branches/${UUID}/members/${UUID}/profile$`),
-
-    new RegExp(`^communities/${UUID}$`),
-    new RegExp(`^events/${UUID}$`),
+    id("^admin/users/{id}/(role|membership)$"),
+    id("^chapters/{id}$"),
+    id("^chapters/{id}/members/{id}/profile$"),
+    id("^departments/{id}$"),
+    id("^events/{id}$"),
+    id("^meetings/{id}$"),
+    id("^resources/{id}$"),
+    id("^courses/{id}$"),
+    id("^course-lessons/{id}$"),
+    id("^course-quizzes/{id}$"),
   ],
 
   DELETE: [
-    new RegExp(`^branches/${UUID}/coordinators/${UUID}$`),
-    new RegExp(`^branches/${UUID}/departments/${UUID}$`),
-    new RegExp(`^branches/${UUID}/posts/${UUID}$`),
-    new RegExp(
-      `^branches/${UUID}/posts/${UUID}/comments/${UUID}$`,
-    ),
+    id("^chapters/{id}/(staff|coordinators|moderators|members|bans)/{id}$"),
+    id("^posts/{id}$"),
+    id("^comments/{id}$"),
+    id("^departments/{id}$"),
+    id("^resources/{id}$"),
+    id("^courses/{id}$"),
+    id("^course-lessons/{id}$"),
+    id("^course-quizzes/{id}$"),
   ],
 };
 
@@ -290,7 +307,7 @@ async function forward(
 
   let body: string | undefined;
 
-  if (method === "POST" || method === "PATCH") {
+  if (method === "POST" || method === "PUT" || method === "PATCH") {
     body = (await request.text()) || "{}";
 
     try {
@@ -385,6 +402,10 @@ export function GET(request: NextRequest, ctx: Ctx) {
 
 export function POST(request: NextRequest, ctx: Ctx) {
   return forward(request, ctx, "POST");
+}
+
+export function PUT(request: NextRequest, ctx: Ctx) {
+  return forward(request, ctx, "PUT");
 }
 
 export function PATCH(request: NextRequest, ctx: Ctx) {

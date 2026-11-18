@@ -8,8 +8,8 @@ import pytest
 
 from app.core.config import settings
 from app.models import AccountRole, Meeting, MeetingRecording, User
-from app.models.branch import Chapter
-from app.models.chapter_management import ChapterCoordinator
+from app.models.chapter import Chapter
+from app.models.chapter_management import ChapterStaff
 from app.models.user_profile import UserProfile
 from app.models.user import MembershipStatus
 from app.services.object_storage import InMemoryObjectStorage, get_object_storage
@@ -96,8 +96,9 @@ def create_profile(api, user_id, display_name="Test User"):
 def assign_coordinator(api, chapter_id, coordinator_id):
     with api.session_factory() as db:
         db.add(
-            ChapterCoordinator(
-                branch_id=chapter_id,
+            ChapterStaff(
+                role="coordinator",
+                chapter_id=chapter_id,
                 user_id=coordinator_id,
             )
         )
@@ -112,7 +113,7 @@ def assign_official_member(api, chapter_id, user_id):
         profile = db.get(UserProfile, user_id)
 
         user.membership_status = MembershipStatus.MEMBER
-        profile.branch_id = chapter_id
+        profile.chapter_id = chapter_id
 
         db.commit()
 
@@ -263,7 +264,6 @@ def test_chapter_coordinator_can_create_meeting(api):
     )
 
     assert meeting["chapter_id"] == str(chapter_id)
-    assert meeting["community_id"] is None
     assert meeting["created_by"] == str(coordinator)
 
 
@@ -672,7 +672,6 @@ def test_chapter_event_meeting_inherits_chapter_and_event_start(api):
     )
 
     assert meeting["chapter_id"] == str(chapter_id)
-    assert meeting["community_id"] is None
     assert meeting["event_id"] == event["id"]
     assert meeting["scheduled_start_at"] == event["starts_at"]
 

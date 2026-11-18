@@ -7,14 +7,14 @@ Actions logged:
 
 - ``report.actioned``, ``report.dismissed``
 - ``post.removed``, ``comment.removed`` (by someone other than the author)
-- ``community.deleted``, ``member.role_changed``, ``member.removed``,
-  ``member.banned``, ``member.unbanned``
+- ``member.banned``, ``member.unbanned``, ``member.removed``
+- ``chapter_staff.assigned``, ``chapter_staff.removed``
 - ``user.suspended``, ``user.reinstated``, ``user.role_changed``
-- ``branch.created``, ``branch.updated``, ``branch.archived``,
-  ``branch.restored``
+- ``chapter.created``, ``chapter.updated``, ``chapter.archived``,
+  ``chapter.restored``
 
-Who can read it: app moderators and admins read everything; community
-moderators and above read their own community's entries.
+Who can read it: app moderators and admins read everything; a Chapter's
+Moderators and Coordinator read their own Chapter's entries.
 """
 
 import uuid
@@ -24,7 +24,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.identity import UserId
-from app.models.community import CommunityRole
 from app.models.moderation import AuditLog
 from app.schemas.moderation import AuditLogRead
 from app.services import pagination
@@ -38,7 +37,7 @@ def record(
     target_type: str,
     target_id: uuid.UUID,
     *,
-    community_id: uuid.UUID | None = None,
+    chapter_id: uuid.UUID | None = None,
     data: dict | None = None,
 ) -> AuditLog:
     """Add an audit entry. Does not commit."""
@@ -47,7 +46,7 @@ def record(
         action=action,
         target_type=target_type,
         target_id=target_id,
-        community_id=community_id,
+        chapter_id=chapter_id,
         data={key: _jsonable(value) for key, value in (data or {}).items()},
     )
     db.add(entry)
@@ -70,33 +69,27 @@ def list_entries(
     limit: int,
     cursor: str | None,
     *,
-    community_id: uuid.UUID | None = None,
+    chapter_id: uuid.UUID | None = None,
     actor_id: uuid.UUID | None = None,
     action: str | None = None,
     target_type: str | None = None,
     target_id: uuid.UUID | None = None,
 ) -> tuple[list[AuditLogRead], str | None]:
     """Audit entries, newest first."""
-    # Imported here: communities records audit entries, so it imports this.
-    from app.services.communities import (
-        get_visible_community,
-        is_platform_moderator,
-        require_role,
-    )
+    from app.services import chapter_access
 
-    if not is_platform_moderator(db, user_id):
-        if community_id is None:
+    if not chapter_access.is_platform_moderator(db, user_id):
+        if chapter_id is None:
             raise Forbidden(
                 "insufficient_role",
                 "Only app moderators and admins see the whole audit log. "
-                "Pass community_id to see a community's.",
+                "Pass chapter_id to see a Chapter's.",
             )
-        _, membership = get_visible_community(db, community_id, user_id)
-        require_role(membership, CommunityRole.MODERATOR)
+        chapter_access.require_moderate(db, user_id, chapter_id)
 
     statement = select(AuditLog)
-    if community_id is not None:
-        statement = statement.where(AuditLog.community_id == community_id)
+    if chapter_id is not None:
+        statement = statement.where(AuditLog.chapter_id == chapter_id)
     if actor_id is not None:
         statement = statement.where(AuditLog.actor_id == actor_id)
     if action:

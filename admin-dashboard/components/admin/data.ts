@@ -18,13 +18,13 @@ export type PageKey =
   | "overview"
   | "reports"
   | "users"
-  | "communities"
+  | "departments"
   | "posts"
   | "events"
   | "live"
   | "resources"
   | "courses"
-  | "branches"
+  | "chapters"
   | "notifications"
   | "audit"
   | "settings";
@@ -34,11 +34,13 @@ export type AdminOverview = {
   active_users: number;
   inactive_users: number;
   new_users_last_7_days: number;
-  communities: number;
   posts_last_7_days: number;
   open_reports: number;
   upcoming_events: number;
-  branches: number;
+  // Active Chapters, official Members and Guests.
+  chapters: number;
+  members: number;
+  guests: number;
 };
 
 export type AdminContextValue = {
@@ -95,6 +97,14 @@ function detailMessage(body: unknown, status: number) {
     typeof (detail as { message?: unknown }).message === "string"
   ) {
     return (detail as { message: string }).message;
+  }
+
+  // FastAPI validation errors: [{ loc: ["body", "title"], msg: "..." }, ...]
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0] as { loc?: unknown[]; msg?: string };
+    const field = (first.loc ?? []).filter((part) => part !== "body").join(" › ").replace(/_/g, " ");
+    const message = (first.msg ?? "Invalid value").replace(/^Value error, /, "");
+    return field ? `${field}: ${message}` : message;
   }
 
   if (status === 401) {
@@ -475,6 +485,85 @@ export function useDirectory(enabled: boolean): Directory {
   }, [enabled]);
 
   return directory;
+}
+
+/* ------------------------------------------------------------------ */
+/* Chapter directory: resolve chapter IDs to names                     */
+/* ------------------------------------------------------------------ */
+
+export type ChapterOption = {
+  id: string;
+  name: string;
+  active: boolean;
+  members: number;
+};
+
+let chapterPromise: Promise<ChapterOption[]> | null = null;
+
+function loadChapters(): Promise<ChapterOption[]> {
+  chapterPromise ??= api<
+    { id: string; name: string; is_active: boolean; member_count: number }[]
+  >("chapters?include_archived=true")
+    .then((rows) =>
+      (rows ?? []).map((row) => ({
+        id: row.id,
+        name: row.name,
+        active: row.is_active,
+        members: row.member_count,
+      })),
+    )
+    .catch(() => {
+      chapterPromise = null;
+      return [];
+    });
+
+  return chapterPromise;
+}
+
+/** Forget cached chapters, e.g. after one is created or renamed. */
+export function invalidateChapters() {
+  chapterPromise = null;
+}
+
+/**
+ * Every chapter (archived ones included), cached for the session.
+ * `name(id)` gives a chapter's name, or "App-wide" for null.
+ */
+export function useChapters(): {
+  chapters: ChapterOption[];
+  name: (id: string | null | undefined) => string;
+} {
+  const [chapters, setChapters] = useState<ChapterOption[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadChapters().then((result) => {
+      if (!cancelled) {
+        setChapters(result);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const name = useCallback(
+    (id: string | null | undefined) => {
+      if (!id) {
+        return "App-wide";
+      }
+
+      return (
+        chapters.find((chapter) => chapter.id === id)?.name ??
+        `Chapter ${id.replace(/-/g, "").slice(-4).toUpperCase()}`
+      );
+    },
+    [chapters],
+  );
+
+  return { chapters, name };
 }
 
 /* ------------------------------------------------------------------ */

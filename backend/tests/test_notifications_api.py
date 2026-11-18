@@ -14,7 +14,7 @@ from app.models import (
 from app.services.object_storage import InMemoryObjectStorage, get_object_storage
 from app.services.video_provider import FakeVideoProvider, get_video_provider
 
-COMMUNITIES = "/api/v1/communities"
+CHAPTERS = "/api/v1/chapters"
 EVENTS = "/api/v1/events"
 MEETINGS = "/api/v1/meetings"
 RESOURCES = "/api/v1/resources"
@@ -26,10 +26,8 @@ DEVICES = f"{NOTIFICATIONS}/devices"
 
 @pytest.fixture
 def world(api):
-    """A public community with an owner, a moderator and two members.
-
-    The moderator's promotion notification is cleared so tests start empty.
-    """
+    """A Chapter with a Coordinator ("owner"), a Moderator ("mod") and two
+    Members, plus an outsider from another Chapter."""
     from app.core.config import settings
     from app.main import app
 
@@ -38,21 +36,17 @@ def world(api):
 
     ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "outsider")}
     ids["staff"] = api.add_user("staff", AccountRole.MODERATOR)
-    for name in ("owner", "alice", "bob"):
-        api.act_as(ids[name])
-        api.client.post(PROFILE, json={"display_name": name.title()})
-    api.act_as(ids["owner"])
-    cid = api.client.post(COMMUNITIES, json={"name": "Abuja Fellowship"}).json()["id"]
-    for name in ("mod", "alice", "bob"):
-        api.act_as(ids[name])
-        api.client.post(f"{COMMUNITIES}/{cid}/join")
-    api.act_as(ids["owner"])
-    api.client.patch(f"{COMMUNITIES}/{cid}/members/{ids['mod']}", json={"role": "moderator"})
-    with api.session_factory() as db:
-        db.execute(Notification.__table__.delete())
-        db.commit()
+    ids["admin"] = api.add_user("admin", AccountRole.ADMIN)
+    cid = api.add_chapter("Abuja Fellowship")
+    other = api.add_chapter("Lagos Youth")
+    # The Coordinator ("owner") and Moderator ("mod") are Members too.
+    for name in ("owner", "mod", "alice", "bob"):
+        api.add_member(ids[name], cid, name.title())
+    api.add_member(ids["outsider"], other, "Outsider")
+    api.add_staff(ids["owner"], cid, "coordinator")
+    api.add_staff(ids["mod"], cid, "moderator")
     try:
-        yield {"community_id": cid, **ids}
+        yield {"chapter_id": str(cid), **ids}
     finally:
         app.dependency_overrides.pop(get_video_provider, None)
         app.dependency_overrides.pop(get_object_storage, None)
@@ -72,7 +66,7 @@ def unread(api, user_id):
 
 def post(api, user_id, world, body="Pray for our outreach on Saturday"):
     api.act_as(user_id)
-    response = api.client.post(f"{COMMUNITIES}/{world['community_id']}/posts", json={"body": body})
+    response = api.client.post(f"{CHAPTERS}/{world['chapter_id']}/posts", json={"body": body})
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -105,7 +99,7 @@ def create_event(api, user_id, world, capacity=None, days=3):
     response = api.client.post(
         EVENTS,
         json={
-            "community_id": world["community_id"],
+            "chapter_id": world["chapter_id"],
             "title": "Youth Prayer Night",
             "starts_at": starts.isoformat(),
             "ends_at": (starts + timedelta(hours=2)).isoformat(),
@@ -140,7 +134,7 @@ def test_comment_notifies_the_post_author(api, world):
     assert item["body"] == "Amen, praying with you!"
     assert item["actor_id"] == str(world["bob"])
     assert item["data"] == {
-        "community_id": world["community_id"],
+        "chapter_id": world["chapter_id"],
         "post_id": created["id"],
         "comment_id": reply["id"],
     }
@@ -157,7 +151,7 @@ def test_commenting_on_your_own_post_notifies_nobody(api, world):
 
 def test_author_without_a_profile_is_someone(api, world):
     created = post(api, world["alice"], world)
-    comment(api, world["mod"], created["id"])
+    comment(api, world["staff"], created["id"])  # App staff have no profile here.
     assert inbox(api, world["alice"])[0]["title"] == "Someone commented on your post"
 
 
@@ -184,7 +178,7 @@ def test_failed_action_leaves_no_notification(api, world):
     response = api.client.post(
         f"/api/v1/posts/{created['id']}/comments", json={"body": "Hello"}
     )
-    assert response.status_code == 403
+    assert response.status_code == 404
     assert inbox(api, world["alice"]) == []
 
 
@@ -290,7 +284,7 @@ def test_default_preferences(api, world):
     api.act_as(world["alice"])
     assert api.client.get(PREFERENCES).json() == [
         {"category": "social", "push": True, "email": False},
-        {"category": "community", "push": True, "email": False},
+        {"category": "chapter", "push": True, "email": False},
         {"category": "events", "push": True, "email": True},
         {"category": "meetings", "push": True, "email": False},
         {"category": "resources", "push": False, "email": False},
@@ -454,30 +448,54 @@ def test_notifications_need_sign_in(api):
     assert api.client.post(DEVICES, json={"token": "abcdefghij", "platform": "ios"}).status_code == 401
 
 
-# Communities
+# Chapters
 
 
-def test_role_change_and_removal_notify_the_member(api, world):
-    api.act_as(world["owner"])
-    cid = world["community_id"]
-    api.client.patch(f"{COMMUNITIES}/{cid}/members/{world['alice']}", json={"role": "admin"})
+def test_staff_role_and_removal_notify_the_member(api, world):
+    api.act_as(world["admin"])
+    cid = world["chapter_id"]
+    url = f"{CHAPTERS}/{cid}/staff/{world['alice']}"
+    assert api.client.put(url, json={"role": "moderator"}).status_code == 200
     # Same role again changes nothing, so no second notification.
-    api.client.patch(f"{COMMUNITIES}/{cid}/members/{world['alice']}", json={"role": "admin"})
-    api.client.delete(f"{COMMUNITIES}/{cid}/members/{world['bob']}")
+    assert api.client.put(url, json={"role": "moderator"}).status_code == 200
+    assert api.client.delete(f"{CHAPTERS}/{cid}/members/{world['bob']}").status_code == 204
 
     alice = inbox(api, world["alice"])
-    assert [item["title"] for item in alice] == ["You are now an admin of Abuja Fellowship"]
-    assert alice[0]["data"] == {"community_id": cid, "role": "admin"}
+    assert [item["title"] for item in alice] == ["You are now a Moderator of Abuja Fellowship"]
+    assert alice[0]["data"] == {"chapter_id": cid, "role": "moderator"}
+    assert alice[0]["category"] == "chapter"
     bob = inbox(api, world["bob"])
-    assert [item["type"] for item in bob] == ["community_removed"]
+    assert [item["type"] for item in bob] == ["chapter_removed"]
     assert bob[0]["title"] == "You were removed from Abuja Fellowship"
 
 
-def test_leaving_notifies_nobody(api, world):
+def test_losing_a_staff_role_notifies(api, world):
+    api.act_as(world["admin"])
+    cid = world["chapter_id"]
+    assert api.client.delete(f"{CHAPTERS}/{cid}/staff/{world['mod']}").status_code == 204
+    titles = [item["title"] for item in inbox(api, world["mod"])]
+    assert titles == ["You're no longer on the staff of Abuja Fellowship"]
+
+
+def test_announcements_reach_members_and_respect_push_settings(api, world):
+    register_device(api, world["alice"])
     api.act_as(world["alice"])
-    api.client.post(f"{COMMUNITIES}/{world['community_id']}/leave")
-    with api.session_factory() as db:
-        assert db.scalar(select(Notification)) is None
+    response = api.client.patch(
+        PREFERENCES, json={"preferences": [{"category": "chapter", "push": False}]}
+    )
+    assert response.status_code == 200, response.text
+    api.act_as(world["owner"])
+    response = api.client.post(
+        f"{CHAPTERS}/{world['chapter_id']}/announcements",
+        json={"title": "Retreat", "body": "Sign up by Friday"},
+    )
+    assert response.status_code == 202, response.text
+    # Everyone but the sender, and not other Chapters.
+    assert response.json()["recipients"] == 3
+    assert [item["title"] for item in inbox(api, world["bob"])] == ["Retreat"]
+    assert inbox(api, world["owner"]) == []
+    assert inbox(api, world["outsider"]) == []
+    assert deliveries(api) == []
 
 
 # Events
@@ -494,7 +512,7 @@ def test_freed_spot_notifies_the_promoted_person(api, world):
     bob = inbox(api, world["bob"])
     assert [item["type"] for item in bob] == ["event_spot_confirmed"]
     assert bob[0]["title"] == "You have a spot at Youth Prayer Night"
-    assert bob[0]["data"] == {"event_id": event["id"], "community_id": world["community_id"]}
+    assert bob[0]["data"] == {"event_id": event["id"], "chapter_id": world["chapter_id"]}
     assert inbox(api, world["alice"]) == []
 
 
@@ -567,21 +585,21 @@ def test_event_emails_are_on_by_default(api, world):
 # Meetings
 
 
-def test_going_live_notifies_community_members(api, world):
-    api.act_as(world["mod"])
+def test_going_live_notifies_chapter_members(api, world):
+    api.act_as(world["owner"])
     meeting = api.client.post(
         MEETINGS,
-        json={"title": "Midweek Bible Study", "community_id": world["community_id"]},
+        json={"title": "Midweek Bible Study", "chapter_id": world["chapter_id"]},
     ).json()
     api.client.post(f"{MEETINGS}/{meeting['id']}/start")
     api.client.post(f"{MEETINGS}/{meeting['id']}/start")
 
-    for name in ("owner", "alice", "bob"):
+    for name in ("mod", "alice", "bob"):
         items = inbox(api, world[name])
         assert [item["title"] for item in items] == ["Midweek Bible Study is live"]
         assert items[0]["body"] == "The meeting has started. Join now."
         assert items[0]["data"]["meeting_id"] == meeting["id"]
-    assert inbox(api, world["mod"]) == []
+    assert inbox(api, world["owner"]) == []
     assert inbox(api, world["outsider"]) == []
 
 
@@ -614,7 +632,7 @@ def test_app_wide_meeting_notifies_nobody(api, world):
 
 
 def test_publishing_a_resource_notifies_members_once(api, world):
-    api.act_as(world["mod"])
+    api.act_as(world["owner"])
     resource = api.client.post(
         RESOURCES,
         json={
@@ -622,7 +640,7 @@ def test_publishing_a_resource_notifies_members_once(api, world):
             "title": "Morning Devotional",
             "summary": "Start the day with Psalm 23",
             "body": "The Lord is my shepherd ...",
-            "community_id": world["community_id"],
+            "chapter_id": world["chapter_id"],
         },
     ).json()
     api.client.post(f"{RESOURCES}/{resource['id']}/publish")
@@ -633,7 +651,7 @@ def test_publishing_a_resource_notifies_members_once(api, world):
     assert [item["title"] for item in items] == ["New in Abuja Fellowship: Morning Devotional"]
     assert items[0]["body"] == "Start the day with Psalm 23"
     assert items[0]["data"]["resource_id"] == resource["id"]
-    assert inbox(api, world["mod"]) == []
+    assert inbox(api, world["owner"]) == []
     # Push and email are off for resources by default.
     register_device(api, world["bob"])
     assert deliveries(api) == []

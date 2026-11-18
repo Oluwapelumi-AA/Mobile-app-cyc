@@ -39,7 +39,7 @@ class ChapterAccessGrant(Base):
 
     chapter_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("branches.id", ondelete="CASCADE"),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -74,7 +74,6 @@ class ChapterAccessGrantItem(Base):
             """
             (
                 CASE WHEN post_id IS NOT NULL THEN 1 ELSE 0 END +
-                CASE WHEN chapter_post_id IS NOT NULL THEN 1 ELSE 0 END +
                 CASE WHEN event_id IS NOT NULL THEN 1 ELSE 0 END +
                 CASE WHEN meeting_id IS NOT NULL THEN 1 ELSE 0 END +
                 CASE WHEN resource_id IS NOT NULL THEN 1 ELSE 0 END
@@ -86,11 +85,6 @@ class ChapterAccessGrantItem(Base):
             "grant_id",
             "post_id",
             name="uq_chapter_grant_post",
-        ),
-        UniqueConstraint(
-            "grant_id",
-            "chapter_post_id",
-            name="uq_chapter_grant_chapter_post",
         ),
         UniqueConstraint(
             "grant_id",
@@ -125,12 +119,6 @@ class ChapterAccessGrantItem(Base):
     post_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("posts.id", ondelete="CASCADE"),
-        nullable=True,
-    )
-
-    chapter_post_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("chapter_posts.id", ondelete="CASCADE"),
         nullable=True,
     )
 

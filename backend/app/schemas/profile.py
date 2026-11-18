@@ -116,7 +116,7 @@ class ProfileRead(BaseModel):
     city: str | None = None
     timezone: str | None
     preferred_chapter_id: uuid.UUID | None = None
-    branch_id: uuid.UUID | None = None
+    chapter_id: uuid.UUID | None = None
     department_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime

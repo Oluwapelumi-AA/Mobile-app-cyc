@@ -1,10 +1,10 @@
-﻿"use client";
+"use client";
 
-import { type ReactNode, useMemo, useState } from "react";
-import { api, downloadCsv, matches, useAdmin, useLiveList } from "../data";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { api, downloadCsv, matches, useAdmin, useChapters, useLiveList } from "../data";
 import { Modal, useConfirm, useToast } from "../dialogs";
 import { Icon, type IconName } from "../icons";
-import { type ApiUser, mapUser } from "../mappers";
+import { type ApiDepartment, type ApiUser, mapUser } from "../mappers";
 import { sampleUserActivity, sampleUsers, type UserRow } from "../sample";
 import {
   Avatar,
@@ -35,7 +35,7 @@ import {
 } from "../ui";
 
 type TabKey = "all" | "Admin" | "Moderator" | "Pending" | "Suspended";
-type PanelTab = "overview" | "activity" | "communities" | "reports";
+type PanelTab = "overview" | "membership" | "activity" | "reports";
 
 export default function Users() {
   const { globalSearch } = useAdmin();
@@ -44,6 +44,8 @@ export default function Users() {
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("all");
   const [status, setStatus] = useState("all");
+  const [chapterFilter, setChapterFilter] = useState("all");
+  const { chapters, name: chapterName } = useChapters();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelTab, setPanelTab] = useState<PanelTab>("overview");
@@ -65,6 +67,8 @@ export default function Users() {
       tabOk &&
       (role === "all" || u.role === role) &&
       (status === "all" || u.status === status) &&
+      (chapterFilter === "all" ||
+        (chapterFilter === "guest" ? u.membershipStatus === "Guest" : u.chapterId === chapterFilter)) &&
       matches(search || globalSearch, u.name, u.email)
     );
   });
@@ -133,7 +137,7 @@ export default function Users() {
 
   const mute = (u: UserRow) => {
     if (live) {
-      toast.error("Muting isn't available in the API yet ΓÇö use Suspend instead.");
+      toast.error("Muting isn't available in the API yet — use Suspend instead.");
       return;
     }
     patch(u.id, { status: u.status === "Muted" ? "Active" : "Muted" });
@@ -145,6 +149,15 @@ export default function Users() {
     return [
       { label: "View details", icon: "eye" as IconName, onSelect: () => { setSelectedId(u.id); setPanelOpen(true); } },
       { label: "Change role", icon: "cap" as IconName, onSelect: () => setRoleModal(u) },
+      {
+        label: "Chapter membership",
+        icon: "branch" as IconName,
+        onSelect: () => {
+          setSelectedId(u.id);
+          setPanelOpen(true);
+          setPanelTab("membership");
+        },
+      },
       blocked
         ? { label: "Reinstate", icon: "checkCircle" as IconName, onSelect: () => reinstate(u) }
         : { label: "Suspend", icon: "ban" as IconName, danger: true, onSelect: () => suspend(u) },
@@ -183,7 +196,17 @@ export default function Users() {
             <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
               <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search users..." />
               <SelectField label="Role" value={role} onChange={setRole} className="md:w-[106px]" options={[{ value: "all", label: "All roles" }, { value: "Member", label: "Member" }, { value: "Moderator", label: "Moderator" }, { value: "Admin", label: "Admin" }]} />
-              <SelectField label="Department" value="all" onChange={() => {}} className="md:w-[132px]" options={[{ value: "all", label: "All departments" }]} />
+              <SelectField
+                label="Chapter"
+                value={chapterFilter}
+                onChange={setChapterFilter}
+                className="md:w-[150px]"
+                options={[
+                  { value: "all", label: "All chapters" },
+                  { value: "guest", label: "Guests (no chapter)" },
+                  ...chapters.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
               <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[106px]" options={[{ value: "all", label: "All status" }, ...["Active", "Pending", "Muted", "Suspended", "Banned"].map((s) => ({ value: s, label: s }))]} />
               <DateRangeChip />
               <ExportButton onClick={() => downloadCsv("cyc-users.csv", filtered.map((u) => ({ name: u.name, email: u.email, role: u.role, status: u.status, joined: u.joined, last_active: u.lastActive ?? "" })))} />
@@ -196,7 +219,7 @@ export default function Users() {
                     <Th className="w-10"><Checkbox label="Select all" checked={sel.all} onChange={sel.toggleAll} /></Th>
                     <Th sortable>User</Th>
                     <Th>Role</Th>
-                    <Th>Departments</Th>
+                    <Th>Chapter</Th>
                     <Th sortable>Status</Th>
                     <Th sortable>Joined</Th>
                     <Th sortable>Last active</Th>
@@ -226,7 +249,9 @@ export default function Users() {
                         </div>
                       </Td>
                       <Td>{u.role}</Td>
-                      <Td>{u.communities ?? "ΓÇö"}</Td>
+                      <Td className="whitespace-nowrap">
+                        {u.membershipStatus === "Member" && u.chapterId ? chapterName(u.chapterId) : <span className="text-muted">Guest</span>}
+                      </Td>
                       <Td><StatusBadge status={u.status} /></Td>
                       <Td className="whitespace-nowrap">{formatDate(u.joined)}</Td>
                       <Td className="whitespace-nowrap">{u.lastActive ? timeAgo(u.lastActive) : "Never"}</Td>
@@ -237,11 +262,11 @@ export default function Users() {
                 </tbody>
               </Table>
             </div>
-            <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}ΓÇô${paged.to} of ${filtered.length} users`} />
+            <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}–${paged.to} of ${filtered.length} users`} />
             {data.nextCursor ? (
               <div className="mt-3 text-center">
                 <button type="button" disabled={data.loadingMore} onClick={() => void data.loadMore()} className="text-sm font-semibold text-brand hover:text-brand-dark disabled:opacity-50">
-                  {data.loadingMore ? "LoadingΓÇª" : "Load more users from the server"}
+                  {data.loadingMore ? "Loading…" : "Load more users from the server"}
                 </button>
               </div>
             ) : null}
@@ -259,6 +284,13 @@ export default function Users() {
             onSuspend={() => (selected.status === "Suspended" || selected.status === "Banned" ? reinstate(selected) : suspend(selected))}
             onBan={() => suspend(selected, true)}
             onMessage={() => toast.success("Direct messages will open in the CYC app.")}
+            chapterName={chapterName}
+            chapters={chapters.filter((c) => c.active)}
+            onMembershipChanged={(updated) => {
+              patch(selected.id, mapUser(updated));
+              toast.success("Membership updated.");
+            }}
+            onError={(message) => toast.error(message)}
           />
         ) : null}
       </div>
@@ -331,6 +363,10 @@ function UserPanel({
   onSuspend,
   onBan,
   onMessage,
+  chapterName,
+  chapters,
+  onMembershipChanged,
+  onError,
 }: {
   user: UserRow;
   tab: PanelTab;
@@ -341,13 +377,17 @@ function UserPanel({
   onSuspend: () => void;
   onBan: () => void;
   onMessage: () => void;
+  chapterName: (id: string | null) => string;
+  chapters: { id: string; name: string }[];
+  onMembershipChanged: (user: ApiUser) => void;
+  onError: (message: string) => void;
 }) {
   const blocked = user.status === "Suspended" || user.status === "Banned";
   const rows: [IconName, string, ReactNode][] = [
     ["user", "Role", user.role],
     ["shieldCheck", "Account status", <StatusBadge key="s" status={user.status} />],
     ["badgeCheck", "Email verified", <StatusBadge key="e" status={user.emailVerified ? "Yes" : "No"} />],
-    ["phone", "Phone verified", user.live ? "ΓÇö" : <StatusBadge key="p" status="No" />],
+    ["phone", "Phone verified", user.live ? "—" : <StatusBadge key="p" status="No" />],
     ["clock", "Last active", user.lastActive ? timeAgo(user.lastActive) : "Never"],
     ["calendar", "Joined", formatDate(user.joined)],
   ];
@@ -371,12 +411,12 @@ function UserPanel({
 
       <div className="mt-5 grid grid-cols-3 divide-x divide-line border-y border-line py-3 text-center">
         {[
-          [user.communities, "Departments"],
-          [user.posts, "Posts"],
-          [user.comments, "Comments"],
+          [user.membershipStatus, "Membership"],
+          [user.membershipStatus === "Member" && user.chapterId ? chapterName(user.chapterId) : "—", "Chapter"],
+          [user.openReports, "Open reports"],
         ].map(([v, l]) => (
-          <div key={String(l)}>
-            <p className="text-xl font-bold text-ink">{v ?? "ΓÇö"}</p>
+          <div key={String(l)} className="min-w-0 px-1">
+            <p className="truncate text-base font-bold text-ink">{v ?? "—"}</p>
             <p className="text-xs text-muted">{l}</p>
           </div>
         ))}
@@ -389,8 +429,8 @@ function UserPanel({
           onChange={onTab}
           tabs={[
             { key: "overview", label: "Overview" },
+            { key: "membership", label: "Membership" },
             { key: "activity", label: "Activity" },
-            { key: "communities", label: "Departments" },
             { key: "reports", label: "Reports" },
           ]}
         />
@@ -406,6 +446,15 @@ function UserPanel({
             </div>
           ))}
         </dl>
+      ) : tab === "membership" ? (
+        <MembershipPanel
+          key={user.id}
+          user={user}
+          chapterName={chapterName}
+          chapters={chapters}
+          onChanged={onMembershipChanged}
+          onError={onError}
+        />
       ) : tab === "reports" ? (
         <div className="mt-4 rounded-xl bg-canvas px-4 py-5 text-center">
           <p className="text-2xl font-bold text-ink">{user.openReports}</p>
@@ -450,7 +499,7 @@ function UserPanel({
       </div>
       {user.live ? (
         <p className="mt-3 text-[10.5px] text-muted">
-          <Badge tone="gray">Note</Badge> Mute isn&apos;t in the API yet; Ban suspends the account with a ΓÇ£Ban:ΓÇ¥ reason.
+          <Badge tone="gray">Note</Badge> Mute isn&apos;t in the API yet; Ban suspends the account with a “Ban:” reason.
         </p>
       ) : null}
     </Card>
@@ -491,3 +540,109 @@ function PanelAction({
 
 
 
+
+function MembershipPanel({
+  user,
+  chapterName,
+  chapters,
+  onChanged,
+  onError,
+}: {
+  user: UserRow;
+  chapterName: (id: string | null) => string;
+  chapters: { id: string; name: string }[];
+  onChanged: (user: ApiUser) => void;
+  onError: (message: string) => void;
+}) {
+  const [departments, setDepartments] = useState<ApiDepartment[]>([]);
+  const [chapterId, setChapterId] = useState(user.chapterId ?? "");
+  const [departmentId, setDepartmentId] = useState(user.departmentId ?? "");
+  const [busy, setBusy] = useState(false);
+  const isMember = user.membershipStatus === "Member" && Boolean(user.chapterId);
+
+  useEffect(() => {
+    if (!user.live) return;
+    let cancelled = false;
+    api<ApiDepartment[]>("departments")
+      .then((rows) => !cancelled && setDepartments(rows ?? []))
+      .catch(() => !cancelled && setDepartments([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [user.live]);
+
+  const chapterValue = chapterId || chapters[0]?.id || "";
+  const departmentValue = departmentId || departments[0]?.id || "";
+
+  async function save() {
+    setBusy(true);
+    try {
+      const updated = await api<ApiUser>(`admin/users/${user.id}/membership`, {
+        method: "PATCH",
+        body: JSON.stringify({ chapter_id: chapterValue, department_id: departmentValue }),
+      });
+      onChanged(updated);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not update membership.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeFromChapter() {
+    if (!user.chapterId) return;
+    setBusy(true);
+    try {
+      await api(`chapters/${user.chapterId}/members/${user.id}`, { method: "DELETE" });
+      onChanged(await api<ApiUser>(`admin/users/${user.id}`));
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not remove the member.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!user.live) {
+    return <p className="mt-4 rounded-xl bg-canvas px-4 py-5 text-center text-sm text-muted">Sample user. Connect the API to manage membership.</p>;
+  }
+
+  return (
+    <div className="mt-4 space-y-3">
+      <p className="rounded-xl bg-canvas px-4 py-3 text-sm text-ink/80">
+        {isMember ? (
+          <>
+            Official member of <span className="font-semibold text-ink">{chapterName(user.chapterId)}</span>.
+          </>
+        ) : (
+          <>Guest — not an official member of any chapter.</>
+        )}
+        {user.preferredChapterId && user.preferredChapterId !== user.chapterId ? (
+          <span className="mt-1 block text-xs text-muted">Prefers {chapterName(user.preferredChapterId)}.</span>
+        ) : null}
+      </p>
+      {chapters.length === 0 ? (
+        <p className="text-sm text-muted">Create a chapter first.</p>
+      ) : departments.length === 0 ? (
+        <p className="text-sm text-muted">Create a department first (Departments screen).</p>
+      ) : (
+        <>
+          <SelectField label="Chapter" value={chapterValue} onChange={setChapterId} options={chapters.map((c) => ({ value: c.id, label: c.name }))} />
+          <SelectField label="Department" value={departmentValue} onChange={setDepartmentId} options={departments.map((d) => ({ value: d.id, label: d.name }))} />
+          <PrimaryButton icon="checkCircle" className="w-full" disabled={busy || !chapterValue || !departmentValue} onClick={() => void save()}>
+            {isMember ? "Move / update membership" : "Make official member"}
+          </PrimaryButton>
+        </>
+      )}
+      {isMember ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void removeFromChapter()}
+          className="w-full rounded-xl border border-line px-4 py-2.5 text-sm font-medium text-brand hover:bg-brand-soft disabled:opacity-50"
+        >
+          Remove from chapter (becomes a guest)
+        </button>
+      ) : null}
+    </div>
+  );
+}

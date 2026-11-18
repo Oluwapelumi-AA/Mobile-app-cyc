@@ -41,30 +41,21 @@ def list_events(
     db: DbSession,
     limit: Limit = DEFAULT_PAGE_SIZE,
     cursor: Cursor = None,
-    community_id: UUID | None = None,
     chapter_id: UUID | None = None,
     past: bool = False,
     mine: bool = False,
 ):
     """List visible events.
 
-    Use community_id or chapter_id to filter by ownership.
-    Use past=true for ended events and mine=true for events you registered for.
+    Use chapter_id for one Chapter's events, past=true for ended events and
+    mine=true for events you registered for.
     """
-    if community_id is not None and chapter_id is not None:
-        from app.services.errors import InvalidInput
-
-        raise InvalidInput(
-            "conflicting_event_scope",
-            "Filter by either a Chapter or a Community, not both.",
-        )
 
     items, next_cursor = events.list_events(
         db,
         user_id,
         limit,
         cursor,
-        community_id=community_id,
         chapter_id=chapter_id,
         past=past,
         mine=mine,

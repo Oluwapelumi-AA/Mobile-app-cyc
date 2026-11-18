@@ -1,13 +1,15 @@
 """Events, registrations, capacity and attendance.
 
-- An event either belongs to a community or is app-wide (no community).
-- Community moderators and above create and manage their community's events.
-  App-wide moderators and admins (``users.account_role``) manage every event
-  and are the only ones who create app-wide events.
-- Who can see an event follows its community: public or joined communities.
-  Hidden events answer 404. App-wide events are visible to every user.
-- Registering needs membership of the event's community. Registration closes
-  when the event starts or is cancelled.
+- An event either belongs to a Chapter or is app-wide (no Chapter).
+- A Chapter's Coordinator and platform moderators and admins create and
+  manage its events. Only platform moderators and admins create app-wide
+  events.
+- A Chapter's events are visible to its Members and staff, and to Guests a
+  Coordinator granted that one event. Hidden events answer 404. App-wide
+  events are visible to every user.
+- Registering needs Chapter membership (or a staff role) and no ban from the
+  Chapter; Guests are view-only. Anyone can register for an app-wide event.
+  Registration closes when the event starts or is cancelled.
 - When an event is full, new registrations join a waitlist in sign-up order.
   A freed spot (a cancellation or a higher capacity) goes to the next person.
   Capacity cannot drop below the number already registered.
@@ -16,14 +18,7 @@
 - Times are stored in UTC. Each event keeps the IANA time zone it was
   scheduled in; a time sent without a UTC offset is read in that zone.
 """
-from app.models.branch import Chapter
-from app.models.chapter_management import ChapterCoordinator
-from app.models.chapter_access_grant import (
-    ChapterAccessGrant,
-    ChapterAccessGrantItem,
-)
-from app.models.user import User, MembershipStatus
-from app.models.user_profile import UserProfile
+
 import uuid
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -33,12 +28,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.identity import UserId
-from app.models.community import (
-    Community,
-    CommunityMembership,
-    CommunityRole,
-    CommunityVisibility,
-)
+from app.models.chapter import Chapter
+from app.models.chapter_access_grant import ChapterAccessGrantItem
 from app.models.event import (
     Event,
     EventRegistration,
@@ -51,13 +42,8 @@ from app.schemas.event import (
     EventUpdate,
     RegistrationRead,
 )
-from app.services import notifications, pagination
-from app.services.communities import (
-    get_visible_community,
-    is_platform_moderator,
-    rank,
-    require_role,
-)
+from app.services import chapter_access, notifications, pagination
+from app.services.chapter_access import is_platform_moderator
 from app.services.errors import Conflict, Forbidden, InvalidInput, NotFound
 
 CHECK_IN_OPENS_BEFORE_START = timedelta(hours=1)
@@ -112,209 +98,46 @@ def _check_in_future(starts_at: datetime) -> None:
 
 # Access
 
-# Access
 
-
-def _is_chapter_coordinator(
-    db: Session,
-    user_id: UserId,
-    chapter_id: uuid.UUID,
-) -> bool:
-    return (
-        db.scalar(
-            select(ChapterCoordinator.id).where(
-                ChapterCoordinator.branch_id == chapter_id,
-                ChapterCoordinator.user_id == user_id,
-            )
-        )
-        is not None
-    )
-
-
-def _is_official_chapter_member(
-    db: Session,
-    user_id: UserId,
-    chapter_id: uuid.UUID,
-) -> bool:
-    return (
-        db.scalar(
-            select(User.id)
-            .join(UserProfile, UserProfile.user_id == User.id)
-            .where(
-                User.id == user_id,
-                User.membership_status == MembershipStatus.MEMBER.value,
-                UserProfile.branch_id == chapter_id,
-            )
-        )
-        is not None
-    )
-
-
-def _has_event_grant(
-    db: Session,
-    user_id: UserId,
-    chapter_id: uuid.UUID,
-    event_id: uuid.UUID,
-) -> bool:
-    return (
-        db.scalar(
-            select(ChapterAccessGrantItem.id)
-            .join(
-                ChapterAccessGrant,
-                ChapterAccessGrant.id == ChapterAccessGrantItem.grant_id,
-            )
-            .where(
-                ChapterAccessGrant.chapter_id == chapter_id,
-                ChapterAccessGrant.user_id == user_id,
-                ChapterAccessGrantItem.event_id == event_id,
-            )
-        )
-        is not None
-    )
-
-
-def _can_view_chapter_event(
-    db: Session,
-    user_id: UserId,
-    event: Event,
-) -> bool:
-    if event.chapter_id is None:
-        return False
-
-    chapter = db.get(Chapter, event.chapter_id)
-    if chapter is None or not chapter.is_active:
-        return False
-
-    if is_platform_moderator(db, user_id):
-        return True
-
-    if _is_chapter_coordinator(db, user_id, event.chapter_id):
-        return True
-
-    if _is_official_chapter_member(db, user_id, event.chapter_id):
-        return True
-
-    user = db.get(User, user_id)
-    if user is None or user.membership_status != MembershipStatus.GUEST.value:
-        return False
-
-    return _has_event_grant(
-        db,
-        user_id,
-        event.chapter_id,
-        event.id,
-    )
-
-
-def _visible_event(
-    db: Session,
-    user_id: UserId,
-    event_id: uuid.UUID,
-) -> tuple[Event, CommunityMembership | None]:
+def _visible_event(db: Session, user_id: UserId, event_id: uuid.UUID) -> Event:
     event = db.get(Event, event_id)
-
     if event is None:
         raise EVENT_NOT_FOUND
-
-    # An event must never belong to both a Chapter and a Community.
-    if event.chapter_id is not None and event.community_id is not None:
-        raise EVENT_NOT_FOUND
-
-    # Chapter-owned event.
-    if event.chapter_id is not None:
-        if not _can_view_chapter_event(db, user_id, event):
-            raise EVENT_NOT_FOUND
-        return event, None
-
-    # App-wide event.
-    if event.community_id is None:
-        return event, None
-
-    # Legacy Community-owned event.
-    try:
-        _, membership = get_visible_community(
-            db,
-            event.community_id,
-            user_id,
-        )
-    except NotFound:
-        raise EVENT_NOT_FOUND from None
-
-    return event, membership
+    if event.chapter_id is None:
+        return event
+    if chapter_access.can_read(db, user_id, event.chapter_id):
+        return event
+    if chapter_access.has_grant(db, user_id, event.chapter_id, event_id=event.id):
+        chapter = db.get(Chapter, event.chapter_id)
+        if chapter is not None and chapter.is_active:
+            return event
+    raise EVENT_NOT_FOUND
 
 
-def visible_event(
-    db: Session,
-    user_id: UserId,
-    event_id: uuid.UUID,
-) -> tuple[Event, CommunityMembership | None]:
-    """Return the event and Community membership, or 404 if inaccessible."""
+def visible_event(db: Session, user_id: UserId, event_id: uuid.UUID) -> Event:
+    """The event, or 404 if the user can't see it."""
     return _visible_event(db, user_id, event_id)
 
 
-def _can_manage(
-    event_community_id: uuid.UUID | None,
-    membership_role: str | None,
-    platform_moderator: bool,
-) -> bool:
-    """Legacy Community/app-wide management check."""
-    if platform_moderator:
-        return True
-
-    return event_community_id is not None and rank(membership_role) >= rank(
-        CommunityRole.MODERATOR
-    )
+def _can_manage_event(db: Session, user_id: UserId, event: Event) -> bool:
+    if event.chapter_id is None:
+        return is_platform_moderator(db, user_id)
+    return chapter_access.can_organize(db, user_id, event.chapter_id)
 
 
-def _can_manage_event(
-    db: Session,
-    user_id: UserId,
-    event: Event,
-    membership: CommunityMembership | None,
-) -> bool:
-    if is_platform_moderator(db, user_id):
-        return True
-
-    if event.chapter_id is not None:
-        return _is_chapter_coordinator(
-            db,
-            user_id,
-            event.chapter_id,
-        )
-
-    return _can_manage(
-        event.community_id,
-        membership.role if membership else None,
-        False,
-    )
-
-
-def _require_manage(
-    db: Session,
-    user_id: UserId,
-    event: Event,
-    membership: CommunityMembership | None,
-) -> None:
-    if is_platform_moderator(db, user_id):
+def _require_manage(db: Session, user_id: UserId, event: Event) -> None:
+    if _can_manage_event(db, user_id, event):
         return
-
-    if event.chapter_id is not None:
-        if _is_chapter_coordinator(db, user_id, event.chapter_id):
-            return
-
-        raise Forbidden(
-            "insufficient_role",
-            "Only the assigned Chapter Coordinator and platform moderators "
-            "or admins can manage Chapter events.",
-        )
-
-    if event.community_id is None:
+    if event.chapter_id is None:
         raise Forbidden(
             "insufficient_role",
             "Only app moderators and admins manage app-wide events.",
         )
-
-    require_role(membership, CommunityRole.MODERATOR)
+    raise Forbidden(
+        "insufficient_role",
+        "Only the Chapter's Coordinator and platform moderators or admins "
+        "can manage Chapter events.",
+    )
 
 
 def _lock_event(db: Session, event_id: uuid.UUID) -> Event:
@@ -366,7 +189,6 @@ def _to_read(
         {
             "id": event.id,
             "chapter_id": event.chapter_id,
-            "community_id": event.community_id,
             "created_by": event.created_by,
             "title": event.title,
             "description": event.description,
@@ -407,43 +229,18 @@ def _get_registration(
 
 
 
-def event_read(
-    db: Session,
-    user_id: UserId,
-    event: Event,
-    membership: CommunityMembership | None,
-) -> EventRead:
+def event_read(db: Session, user_id: UserId, event: Event) -> EventRead:
     registration = _get_registration(db, event.id, user_id)
-
     return _to_read(
         event,
         _registration_counts(db, [event.id]).get(event.id, {}),
         registration.status if registration else None,
-        _can_manage_event(db, user_id, event, membership),
+        _can_manage_event(db, user_id, event),
     )
 
 
-
 def get_event(db: Session, user_id: UserId, event_id: uuid.UUID) -> EventRead:
-    event, membership = _visible_event(db, user_id, event_id)
-    return event_read(db, user_id, event, membership)
-
-
-def _membership_for_list_row(
-    my_roles: dict[uuid.UUID, str],
-    community_id: uuid.UUID,
-) -> CommunityMembership | None:
-    role = my_roles.get(community_id)
-
-    if role is None:
-        return None
-
-    # The listing path only needs the role for the management check.
-    return type(
-        "_EventMembershipRole",
-        (),
-        {"role": role},
-    )()
+    return event_read(db, user_id, _visible_event(db, user_id, event_id))
 
 
 def list_events(
@@ -452,111 +249,33 @@ def list_events(
     limit: int,
     cursor: str | None,
     *,
-    community_id: uuid.UUID | None = None,
     chapter_id: uuid.UUID | None = None,
     past: bool = False,
     mine: bool = False,
 ) -> tuple[list[EventRead], str | None]:
-    """List events visible to the authenticated user.
-
-    Supports app-wide, legacy Community, and Chapter-owned events.
-    Guests can see only individually granted Chapter events.
-    """
-
-    my_communities = select(CommunityMembership.community_id).where(
-        CommunityMembership.user_id == user_id
+    """Events the user can see: app-wide ones, their Chapter's, and any
+    Chapter event granted to them as a Guest. ``chapter_id`` narrows it to
+    one Chapter."""
+    readable = chapter_access.readable_chapter_ids(db, user_id)
+    granted = chapter_access.granted_ids(db, user_id, ChapterAccessGrantItem.event_id)
+    active = chapter_access.active_chapter_ids()
+    chapter_visibility = (
+        Event.chapter_id.in_(active)
+        if readable is None
+        else or_(
+            Event.chapter_id.in_(readable) & Event.chapter_id.in_(active),
+            Event.id.in_(granted) & Event.chapter_id.in_(active),
+        )
     )
-
-    public_communities = select(Community.id).where(
-        Community.visibility == CommunityVisibility.PUBLIC.value
-    )
-
-    active_chapters = select(Chapter.id).where(
-        Chapter.is_active.is_(True)
-    )
-
-    platform_moderator = is_platform_moderator(db, user_id)
-
-    # Chapter access is determined independently from Community membership.
-    if platform_moderator:
-        chapter_visibility = Event.chapter_id.in_(active_chapters)
-    else:
-        coordinator_chapters = select(
-            ChapterCoordinator.branch_id
-        ).where(
-            ChapterCoordinator.user_id == user_id
-        )
-
-        member_chapters = (
-            select(UserProfile.branch_id)
-            .join(User, User.id == UserProfile.user_id)
-            .where(
-                User.id == user_id,
-                User.membership_status == MembershipStatus.MEMBER.value,
-                UserProfile.branch_id.is_not(None),
-            )
-        )
-
-        granted_events = (
-            select(ChapterAccessGrantItem.event_id)
-            .join(
-                ChapterAccessGrant,
-                ChapterAccessGrant.id == ChapterAccessGrantItem.grant_id,
-            )
-            .where(
-                ChapterAccessGrant.user_id == user_id,
-                ChapterAccessGrantItem.event_id.is_not(None),
-            )
-        )
-
-        chapter_visibility = or_(
-            Event.chapter_id.in_(coordinator_chapters),
-            Event.chapter_id.in_(member_chapters),
-            Event.id.in_(granted_events),
-        )
 
     statement = select(Event)
-
-    # Explicit Community filter.
-    if community_id is not None:
-        get_visible_community(db, community_id, user_id)
-        statement = statement.where(
-            Event.community_id == community_id
-        )
-
-    # Explicit Chapter filter.
     if chapter_id is not None:
         chapter = db.get(Chapter, chapter_id)
-
         if chapter is None or not chapter.is_active:
-            raise EVENT_NOT_FOUND
-
-        statement = statement.where(
-            Event.chapter_id == chapter_id,
-            chapter_visibility,
-        )
-
-    # No ownership filter: return all categories the user may access.
-    if community_id is None and chapter_id is None:
-        statement = statement.where(
-            or_(
-                # App-wide events.
-                (
-                    Event.community_id.is_(None)
-                    & Event.chapter_id.is_(None)
-                ),
-
-                # Legacy Community events.
-                Event.community_id.in_(public_communities),
-                Event.community_id.in_(my_communities),
-
-                # Chapter events.
-                (
-                    Event.chapter_id.in_(active_chapters)
-                    & chapter_visibility
-                ),
-            )
-        )
+            raise chapter_access.CHAPTER_NOT_FOUND
+        statement = statement.where(Event.chapter_id == chapter_id, chapter_visibility)
+    else:
+        statement = statement.where(or_(Event.chapter_id.is_(None), chapter_visibility))
 
     if mine:
         statement = statement.where(
@@ -617,46 +336,12 @@ def list_events(
         else {}
     )
 
-    community_ids = {
-        row.community_id
-        for row in rows
-        if row.community_id is not None
-    }
-
-    my_roles = (
-        dict(
-            db.execute(
-                select(
-                    CommunityMembership.community_id,
-                    CommunityMembership.role,
-                ).where(
-                    CommunityMembership.user_id == user_id,
-                    CommunityMembership.community_id.in_(community_ids),
-                )
-            ).all()
-        )
-        if community_ids
-        else {}
-    )
-
     items = [
         _to_read(
             row,
             counts.get(row.id, {}),
             my_statuses.get(row.id),
-            _can_manage_event(
-                db,
-                user_id,
-                row,
-                (
-                    None
-                    if row.community_id is None
-                    else _membership_for_list_row(
-                        my_roles,
-                        row.community_id,
-                    )
-                ),
-            ),
+            _can_manage_event(db, user_id, row),
         )
         for row in rows
     ]
@@ -666,32 +351,9 @@ def list_events(
 
 
 def create_event(db: Session, user_id: UserId, data: EventCreate) -> EventRead:
-    membership = None
-
     if data.chapter_id is not None:
-        chapter = db.get(Chapter, data.chapter_id)
-
-        if chapter is None or not chapter.is_active:
-            raise NotFound("chapter_not_found", "Chapter not found.")
-
-        if (
-            not is_platform_moderator(db, user_id)
-            and not _is_chapter_coordinator(db, user_id, data.chapter_id)
-        ):
-            raise Forbidden(
-                "insufficient_role",
-                "Only the assigned Chapter Coordinator and platform "
-                "moderators or admins can create Chapter events.",
-            )
-
-    elif data.community_id is not None:
-        _, membership = get_visible_community(
-            db, data.community_id, user_id
-        )
-
-        if not is_platform_moderator(db, user_id):
-            require_role(membership, CommunityRole.MODERATOR)
-
+        chapter_access.get_active_chapter(db, data.chapter_id)
+        chapter_access.require_organize(db, user_id, data.chapter_id)
     elif not is_platform_moderator(db, user_id):
         raise Forbidden(
             "insufficient_role",
@@ -706,7 +368,6 @@ def create_event(db: Session, user_id: UserId, data: EventCreate) -> EventRead:
 
     event = Event(
         chapter_id=data.chapter_id,
-        community_id=data.community_id,
         created_by=user_id,
         title=data.title,
         description=data.description or None,
@@ -729,8 +390,8 @@ def create_event(db: Session, user_id: UserId, data: EventCreate) -> EventRead:
 def update_event(
     db: Session, user_id: UserId, event_id: uuid.UUID, data: EventUpdate
 ) -> EventRead:
-    event, membership = _visible_event(db, user_id, event_id)
-    _require_manage(db, user_id, event, membership)
+    event = _visible_event(db, user_id, event_id)
+    _require_manage(db, user_id, event)
     event = _lock_event(db, event.id)
     if event.status == EventStatus.CANCELLED.value:
         raise EVENT_CANCELLED
@@ -774,13 +435,13 @@ def update_event(
         notifications.event_rescheduled(db, event, user_id)
     db.commit()
     db.refresh(event)
-    return event_read(db, user_id, event, membership)
+    return event_read(db, user_id, event)
 
 
 def cancel_event(db: Session, user_id: UserId, event_id: uuid.UUID) -> EventRead:
     """Mark the event cancelled. Registrations are kept so people can see it."""
-    event, membership = _visible_event(db, user_id, event_id)
-    _require_manage(db, user_id, event, membership)
+    event = _visible_event(db, user_id, event_id)
+    _require_manage(db, user_id, event)
     if event.status == EventStatus.CANCELLED.value:
         raise EVENT_CANCELLED
     event.status = EventStatus.CANCELLED.value
@@ -788,12 +449,12 @@ def cancel_event(db: Session, user_id: UserId, event_id: uuid.UUID) -> EventRead
     notifications.event_cancelled(db, event, user_id)
     db.commit()
     db.refresh(event)
-    return event_read(db, user_id, event, membership)
+    return event_read(db, user_id, event)
 
 
 def delete_event(db: Session, user_id: UserId, event_id: uuid.UUID) -> None:
-    event, membership = _visible_event(db, user_id, event_id)
-    _require_manage(db, user_id, event, membership)
+    event = _visible_event(db, user_id, event_id)
+    _require_manage(db, user_id, event)
     db.execute(
         EventRegistration.__table__.delete().where(EventRegistration.event_id == event.id)
     )
@@ -872,33 +533,18 @@ def register(
 ) -> RegistrationRead:
     """Register an eligible user or add them to the event waitlist."""
 
-    event, membership = _visible_event(db, user_id, event_id)
-
+    event = _visible_event(db, user_id, event_id)
     if event.chapter_id is not None:
-        is_platform_staff = is_platform_moderator(db, user_id)
-
-        is_coordinator = _is_chapter_coordinator(
-            db,
-            user_id,
-            event.chapter_id,
-        )
-
-        is_member = _is_official_chapter_member(
-            db,
-            user_id,
-            event.chapter_id,
-        )
-
-        if not (is_platform_staff or is_coordinator or is_member):
-            raise Forbidden(
-                "insufficient_role",
-                "Only official Chapter Members, the assigned Coordinator, "
-                "and platform moderators or admins can register for "
-                "Chapter events. Guest access is view-only.",
-            )
-
-    elif event.community_id is not None:
-        require_role(membership, CommunityRole.MEMBER)
+        try:
+            chapter_access.require_participate(db, user_id, event.chapter_id)
+        except Forbidden as error:
+            if error.code == "chapter_access_denied":
+                raise Forbidden(
+                    "membership_required",
+                    "Only the Chapter's Members and staff can register for its "
+                    "events. Guest access is view-only.",
+                ) from None
+            raise
 
     event = _lock_event(db, event.id)
     _ensure_open(event)
@@ -945,7 +591,7 @@ def register(
 def get_my_registration(
     db: Session, user_id: UserId, event_id: uuid.UUID
 ) -> RegistrationRead:
-    event, _ = _visible_event(db, user_id, event_id)
+    event = _visible_event(db, user_id, event_id)
     registration = _get_registration(db, event.id, user_id)
     if registration is None:
         raise NotFound("not_registered", "You have not signed up for this event.")
@@ -954,7 +600,7 @@ def get_my_registration(
 
 def cancel_registration(db: Session, user_id: UserId, event_id: uuid.UUID) -> None:
     """Withdraw the user's sign-up. A freed spot goes to the waitlist."""
-    event, _ = _visible_event(db, user_id, event_id)
+    event = _visible_event(db, user_id, event_id)
     event = _lock_event(db, event.id)
     registration = _get_registration(db, event.id, user_id)
     if registration is None:
@@ -979,8 +625,8 @@ def list_registrations(
     status: RegistrationStatus | None = None,
 ) -> tuple[list[RegistrationRead], str | None]:
     """Everyone signed up, in sign-up order. Organizers only."""
-    event, membership = _visible_event(db, user_id, event_id)
-    _require_manage(db, user_id, event, membership)
+    event = _visible_event(db, user_id, event_id)
+    _require_manage(db, user_id, event)
     statement = select(EventRegistration).where(EventRegistration.event_id == event.id)
     if status is not None:
         statement = statement.where(EventRegistration.status == status.value)
@@ -1006,8 +652,8 @@ def set_attendance(
     attended: bool,
 ) -> RegistrationRead:
     """Mark a registered person as attended, or undo it. Organizers only."""
-    event, membership = _visible_event(db, user_id, event_id)
-    _require_manage(db, user_id, event, membership)
+    event = _visible_event(db, user_id, event_id)
+    _require_manage(db, user_id, event)
     if event.status == EventStatus.CANCELLED.value:
         raise EVENT_CANCELLED
     if _now() < _utc(event.starts_at) - CHECK_IN_OPENS_BEFORE_START:

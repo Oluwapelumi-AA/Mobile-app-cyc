@@ -1,15 +1,15 @@
-"""Reports, the moderation queue and community bans.
+"""Reports, the moderation queue and Chapter bans.
 
 Reports
 
-- Any signed-in user can report a post, comment, event, resource, community
+- Any signed-in user can report a post, comment, event, resource, Chapter
   or user they can see. Nobody reports themselves or their own content.
 - One report per person per thing. Reporting it again while open is a
   conflict; after review it reopens the same report.
 - The report keeps a snapshot of what was reported, so moderators see it as
   it was even after an edit or delete.
-- Reports about things inside a community go to that community's moderators
-  and above. Reports about users, communities themselves and app-wide events
+- Reports about things inside a Chapter go to that Chapter's Moderators and
+  Coordinator. Reports about users, Chapters themselves and app-wide events
   and resources go to app moderators and admins, who also see everything.
 - Reviewing closes every open report about the same thing, as ``actioned``
   or ``dismissed``. Moderators can remove a reported post or comment as part
@@ -20,9 +20,10 @@ Reports
 
 Bans
 
-- Community moderators and above (and app moderators) ban people from a
-  community: they are removed and can't join again until unbanned. The same
-  rank rules as removing a member apply, and owners can't be banned.
+- A Chapter's Moderators and Coordinator (and app moderators) ban people
+  from that Chapter: until unbanned they can still read it but can't post,
+  comment, react or register there. Nobody bans someone with the same or a
+  stronger role in the Chapter, and platform staff can't be banned.
 
 Every review and ban goes in the audit log.
 """
@@ -35,17 +36,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.identity import UserId
-from app.models.community import CommunityMembership, CommunityRole
+from app.models.chapter import Chapter
 from app.models.event import Event
 from app.models.moderation import (
-    CommunityBan,
+    ChapterBan,
     ContentReport,
     ReportStatus,
     ReportTarget,
 )
 from app.models.post import Comment, Post
 from app.models.resource import Resource
-from app.models.community import Community
 from app.models.user import User
 from app.models.user_profile import UserProfile
 from app.schemas.moderation import (
@@ -56,30 +56,28 @@ from app.schemas.moderation import (
     ReportRead,
     ReportResolve,
 )
-from app.services import audit, events, notifications, pagination, posts, resources
-from app.services.communities import (
-    get_membership,
-    get_visible_community,
-    is_platform_moderator,
-    rank,
-    require_role,
+from app.services import (
+    audit,
+    chapter_access,
+    events,
+    notifications,
+    pagination,
+    posts,
+    resources,
 )
+from app.services.chapter_access import ChapterRole, is_platform_moderator, rank
 from app.services.errors import Conflict, Forbidden, InvalidInput, NotFound
 
 REPORT_NOT_FOUND = NotFound("report_not_found", "Report not found.")
 USER_NOT_FOUND = NotFound("user_not_found", "User not found.")
-BAN_NOT_FOUND = NotFound("ban_not_found", "That user is not banned from this community.")
-
-MODERATOR_ROLES = [
-    role.value for role in CommunityRole if rank(role) >= rank(CommunityRole.MODERATOR)
-]
+BAN_NOT_FOUND = NotFound("ban_not_found", "That user is not banned from this Chapter.")
 
 # Where each kind of target lives, for "does it still exist?".
 TARGET_MODELS = {
     ReportTarget.POST: Post,
     ReportTarget.COMMENT: Comment,
     ReportTarget.USER: User,
-    ReportTarget.COMMUNITY: Community,
+    ReportTarget.CHAPTER: Chapter,
     ReportTarget.EVENT: Event,
     ReportTarget.RESOURCE: Resource,
 }
@@ -95,42 +93,44 @@ def _now() -> datetime:
 def _target_context(
     db: Session, user_id: UserId, target_type: ReportTarget, target_id: uuid.UUID
 ) -> tuple[UserId | None, uuid.UUID | None, dict]:
-    """(owner, reviewing community, snapshot) for something the user can see.
+    """(owner, reviewing Chapter, snapshot) for something the user can see.
 
     Raises the target's own 404 when it is missing or hidden from them.
     """
     if target_type == ReportTarget.POST:
         post, _ = posts.visible_post(db, user_id, target_id)
-        return post.author_id, post.community_id, {"body": post.body}
+        return post.author_id, post.chapter_id, {"body": post.body}
     if target_type == ReportTarget.COMMENT:
         comment, _ = posts.visible_comment(db, user_id, target_id)
-        community_id = db.scalar(select(Post.community_id).where(Post.id == comment.post_id))
+        chapter_id = db.scalar(select(Post.chapter_id).where(Post.id == comment.post_id))
         return (
             comment.author_id,
-            community_id,
+            chapter_id,
             {"body": comment.body, "post_id": str(comment.post_id)},
         )
     if target_type == ReportTarget.EVENT:
-        event, _ = events.visible_event(db, user_id, target_id)
+        event = events.visible_event(db, user_id, target_id)
         return (
             event.created_by,
-            event.community_id,
+            event.chapter_id,
             {"title": event.title, "description": event.description, "location": event.location},
         )
     if target_type == ReportTarget.RESOURCE:
         resource = resources.visible_resource(db, user_id, target_id)
         return (
             resource.created_by,
-            resource.community_id,
+            resource.chapter_id,
             {"title": resource.title, "summary": resource.summary},
         )
-    if target_type == ReportTarget.COMMUNITY:
-        community, _ = get_visible_community(db, target_id, user_id)
-        # Reports about a community go to app staff, not its own moderators.
+    if target_type == ReportTarget.CHAPTER:
+        chapter = db.get(Chapter, target_id)
+        if chapter is None or (not chapter.is_active and not is_platform_moderator(db, user_id)):
+            raise chapter_access.CHAPTER_NOT_FOUND
+        # Reports about a Chapter go to app staff, not its own staff.
         return (
-            community.created_by,
             None,
-            {"name": community.name, "description": community.description},
+            None,
+            {"name": chapter.name, "description": chapter.description},
         )
     user = db.get(User, target_id)
     if user is None:
@@ -152,7 +152,7 @@ def _my_report_read(report: ContentReport) -> MyReportRead:
 
 
 def create_report(db: Session, user_id: UserId, data: ReportCreate) -> MyReportRead:
-    owner_id, community_id, snapshot = _target_context(
+    owner_id, chapter_id, snapshot = _target_context(
         db, user_id, data.target_type, data.target_id
     )
     if owner_id == user_id:
@@ -174,7 +174,7 @@ def create_report(db: Session, user_id: UserId, data: ReportCreate) -> MyReportR
         )
         db.add(report)
     report.target_owner_id = owner_id
-    report.community_id = community_id
+    report.chapter_id = chapter_id
     report.reason = data.reason.value
     report.details = data.details
     report.snapshot = snapshot
@@ -217,20 +217,12 @@ def list_my_reports(
 # The moderation queue
 
 
-def _moderated_communities(db: Session, user_id: UserId):
-    return select(CommunityMembership.community_id).where(
-        CommunityMembership.user_id == user_id,
-        CommunityMembership.role.in_(MODERATOR_ROLES),
-    )
-
-
 def _can_review(db: Session, user_id: UserId, report: ContentReport) -> bool:
     if is_platform_moderator(db, user_id):
         return True
-    if report.community_id is None:
+    if report.chapter_id is None:
         return False
-    membership = get_membership(db, report.community_id, user_id)
-    return rank(membership.role if membership else None) >= rank(CommunityRole.MODERATOR)
+    return chapter_access.can_moderate(db, user_id, report.chapter_id)
 
 
 def _reviewable_report(db: Session, user_id: UserId, report_id: uuid.UUID) -> ContentReport:
@@ -277,7 +269,7 @@ def _report_reads(db: Session, rows: list[ContentReport]) -> list[ReportRead]:
                 **MyReportRead.model_validate(row, from_attributes=True).model_dump(),
                 "reporter_id": row.reporter_id,
                 "target_owner_id": row.target_owner_id,
-                "community_id": row.community_id,
+                "chapter_id": row.chapter_id,
                 "snapshot": row.snapshot or {},
                 "target_exists": (row.target_type, row.target_id) in existing,
                 "open_reports_on_target": counts.get((row.target_type, row.target_id), 0),
@@ -299,30 +291,28 @@ def list_reports(
     *,
     status: ReportStatus | None = ReportStatus.OPEN,
     target_type: ReportTarget | None = None,
-    community_id: uuid.UUID | None = None,
+    chapter_id: uuid.UUID | None = None,
     app_wide: bool = False,
 ) -> tuple[list[ReportRead], str | None]:
     """Reports the user can review.
 
     Open reports come oldest first, like a queue; reviewed ones newest first.
-    ``app_wide`` (app staff only) lists only reports with no community.
+    ``app_wide`` (app staff only) lists only reports with no Chapter.
     """
     platform_moderator = is_platform_moderator(db, user_id)
     statement = select(ContentReport)
-    if community_id is not None:
-        if not platform_moderator:
-            _, membership = get_visible_community(db, community_id, user_id)
-            require_role(membership, CommunityRole.MODERATOR)
-        statement = statement.where(ContentReport.community_id == community_id)
+    if chapter_id is not None:
+        chapter_access.require_moderate(db, user_id, chapter_id)
+        statement = statement.where(ContentReport.chapter_id == chapter_id)
     elif app_wide:
         if not platform_moderator:
             raise Forbidden(
                 "insufficient_role", "Only app moderators and admins review app-wide reports."
             )
-        statement = statement.where(ContentReport.community_id.is_(None))
+        statement = statement.where(ContentReport.chapter_id.is_(None))
     elif not platform_moderator:
         statement = statement.where(
-            ContentReport.community_id.in_(_moderated_communities(db, user_id))
+            ContentReport.chapter_id.in_(chapter_access.moderated_chapter_ids(db, user_id))
         )
     if status is not None:
         statement = statement.where(ContentReport.status == status.value)
@@ -365,7 +355,7 @@ def _remove_target(db: Session, user_id: UserId, report: ContentReport, note: st
     raise InvalidInput(
         "cannot_remove_content",
         "Only posts and comments can be removed from a report. Use the "
-        "event, resource, community or user tools for the rest.",
+        "event, resource, Chapter or user tools for the rest.",
     )
 
 
@@ -409,7 +399,7 @@ def resolve_report(
         f"report.{data.status.value}",
         report.target_type,
         report.target_id,
-        community_id=report.community_id,
+        chapter_id=report.chapter_id,
         data={
             "report_ids": [str(report_id) for report_id in same_target],
             "note": data.note,
@@ -421,55 +411,48 @@ def resolve_report(
     return _report_reads(db, [report])[0]
 
 
-# Community bans
+# Chapter bans
 
 
-def _require_ban_rights(
-    db: Session, user_id: UserId, community_id: uuid.UUID
-) -> CommunityMembership | None:
-    """The actor's membership, if they may ban in this community."""
-    _, membership = get_visible_community(db, community_id, user_id)
-    if is_platform_moderator(db, user_id):
-        return membership
-    return require_role(membership, CommunityRole.MODERATOR)
+def _require_ban_rights(db: Session, user_id: UserId, chapter_id: uuid.UUID) -> ChapterRole:
+    """The actor's role, if they may ban in this Chapter."""
+    return chapter_access.require_moderate(db, user_id, chapter_id)
+
+
+def _ban_conflict() -> Conflict:
+    return Conflict("already_banned", "That user is already banned from this Chapter.")
 
 
 def ban_member(
     db: Session,
     user_id: UserId,
-    community_id: uuid.UUID,
+    chapter_id: uuid.UUID,
     target_user_id: UserId,
     data: BanCreate,
 ) -> BanRead:
-    actor = _require_ban_rights(db, user_id, community_id)
+    actor_role = _require_ban_rights(db, user_id, chapter_id)
     if target_user_id == user_id:
         raise InvalidInput("cannot_ban_self", "You can't ban yourself.")
     if db.get(User, target_user_id) is None:
         raise USER_NOT_FOUND
-    target = get_membership(db, community_id, target_user_id)
-    if target is not None:
-        if target.role == CommunityRole.OWNER.value:
-            raise Forbidden("cannot_ban_owner", "Owners can't be banned.")
-        if (
-            actor is not None
-            and actor.role != CommunityRole.OWNER.value
-            and rank(actor.role) <= rank(target.role)
-            and not is_platform_moderator(db, user_id)
-        ):
-            raise Forbidden("insufficient_role", "You can only ban members ranked below you.")
+    target_role = chapter_access.chapter_role(db, target_user_id, chapter_id)
+    if target_role in (ChapterRole.PLATFORM_ADMIN, ChapterRole.PLATFORM_MODERATOR):
+        raise Forbidden("cannot_ban_staff", "App moderators and admins can't be banned.")
+    if target_role is not None and rank(actor_role) <= rank(target_role):
+        raise Forbidden(
+            "insufficient_role", "You can only ban people with a weaker role in this Chapter."
+        )
     existing = db.scalar(
-        select(CommunityBan).where(
-            CommunityBan.community_id == community_id,
-            CommunityBan.user_id == target_user_id,
+        select(ChapterBan).where(
+            ChapterBan.chapter_id == chapter_id,
+            ChapterBan.user_id == target_user_id,
         )
     )
     if existing is not None:
-        raise Conflict("already_banned", "That user is already banned from this community.")
+        raise _ban_conflict()
 
-    if target is not None:
-        db.delete(target)
-    ban = CommunityBan(
-        community_id=community_id,
+    ban = ChapterBan(
+        chapter_id=chapter_id,
         user_id=target_user_id,
         banned_by=user_id,
         reason=data.reason,
@@ -481,29 +464,27 @@ def ban_member(
         "member.banned",
         "user",
         target_user_id,
-        community_id=community_id,
-        data={"reason": data.reason, "role": target.role if target else None},
+        chapter_id=chapter_id,
+        data={"reason": data.reason, "role": target_role.value if target_role else None},
     )
-    notifications.member_banned(db, community_id, target_user_id, user_id)
+    notifications.member_banned(db, chapter_id, target_user_id, user_id)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise Conflict(
-            "already_banned", "That user is already banned from this community."
-        ) from None
+        raise _ban_conflict() from None
     db.refresh(ban)
     return BanRead.model_validate(ban)
 
 
 def unban_member(
-    db: Session, user_id: UserId, community_id: uuid.UUID, target_user_id: UserId
+    db: Session, user_id: UserId, chapter_id: uuid.UUID, target_user_id: UserId
 ) -> None:
-    _require_ban_rights(db, user_id, community_id)
+    _require_ban_rights(db, user_id, chapter_id)
     ban = db.scalar(
-        select(CommunityBan).where(
-            CommunityBan.community_id == community_id,
-            CommunityBan.user_id == target_user_id,
+        select(ChapterBan).where(
+            ChapterBan.chapter_id == chapter_id,
+            ChapterBan.user_id == target_user_id,
         )
     )
     if ban is None:
@@ -514,7 +495,7 @@ def unban_member(
         "member.unbanned",
         "user",
         target_user_id,
-        community_id=community_id,
+        chapter_id=chapter_id,
         data={"banned_at": ban.created_at, "reason": ban.reason},
     )
     db.delete(ban)
@@ -522,19 +503,17 @@ def unban_member(
 
 
 def list_bans(
-    db: Session, user_id: UserId, community_id: uuid.UUID, limit: int, cursor: str | None
+    db: Session, user_id: UserId, chapter_id: uuid.UUID, limit: int, cursor: str | None
 ) -> tuple[list[BanRead], str | None]:
-    """A community's bans, newest first."""
-    _require_ban_rights(db, user_id, community_id)
-    statement = select(CommunityBan).where(CommunityBan.community_id == community_id)
+    """A Chapter's bans, newest first."""
+    _require_ban_rights(db, user_id, chapter_id)
+    statement = select(ChapterBan).where(ChapterBan.chapter_id == chapter_id)
     if cursor:
         statement = statement.where(
-            pagination.after_cursor(
-                CommunityBan.created_at, CommunityBan.id, cursor, newest_first=True
-            )
+            pagination.after_cursor(ChapterBan.created_at, ChapterBan.id, cursor, newest_first=True)
         )
     statement = statement.order_by(
-        *pagination.order_by(CommunityBan.created_at, CommunityBan.id, newest_first=True)
+        *pagination.order_by(ChapterBan.created_at, ChapterBan.id, newest_first=True)
     ).limit(limit + 1)
     rows, next_cursor = pagination.split_page(list(db.scalars(statement)), limit)
     return [BanRead.model_validate(row) for row in rows], next_cursor

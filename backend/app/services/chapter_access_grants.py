@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.identity import UserId
-from app.models.branch import Branch
+from app.models.chapter import Chapter
 from app.models.chapter_access_grant import (
     ChapterAccessGrant,
     ChapterAccessGrantItem,
@@ -17,7 +17,7 @@ from app.models.chapter_access_request import (
     ChapterAccessRequest,
     ChapterAccessRequestStatus,
 )
-from app.models.chapter_content import ChapterPost
+from app.models.post import Post
 from app.models.event import Event
 from app.models.meeting import Meeting
 from app.models.resource import Resource
@@ -27,12 +27,12 @@ from app.schemas.chapter_access_grant import (
     ChapterAccessGrantItemRead,
     ChapterAccessGrantRead,
 )
-from app.services.chapter_management import require_chapter_access
+from app.services.chapter_access import require_coordinate as require_chapter_access
 from app.services.errors import Conflict, Forbidden, NotFound
 
 
 _CONTENT_MODELS = {
-    "chapter_post_id": ChapterPost,
+    "post_id": Post,
     "event_id": Event,
     "meeting_id": Meeting,
     "resource_id": Resource,
@@ -71,10 +71,7 @@ def _validate_content_ownership(
             "The selected Chapter content item was not found.",
         )
 
-    if field == "chapter_post_id":
-        owner_chapter_id = content.branch_id
-    else:
-        owner_chapter_id = content.chapter_id
+    owner_chapter_id = content.chapter_id
 
     if owner_chapter_id != chapter_id:
         raise Forbidden(
@@ -123,7 +120,7 @@ def grant_chapter_content(
     # assigned Chapter by this shared authorization function.
     require_chapter_access(db, actor_id, chapter_id)
 
-    chapter = db.get(Branch, chapter_id)
+    chapter = db.get(Chapter, chapter_id)
 
     if chapter is None or not chapter.is_active:
         raise NotFound(

@@ -1,3 +1,4 @@
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +21,7 @@ def make_profile(**overrides):
         language_code=None,
         country_code=None,
         timezone=None,
+        preferred_chapter_id=None,
     )
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -53,11 +55,15 @@ def test_step_requires_profile_data():
     assert progress.steps[OnboardingStep.LANGUAGE] is StepStatus.COMPLETED
 
 
-def test_communities_step_needs_no_profile_field():
+def test_chapter_step_needs_a_preferred_chapter():
     progress = OnboardingProgress()
-    progress.complete_step(OnboardingStep.COMMUNITIES, make_profile())
+    with pytest.raises(StepRequirementNotMet):
+        progress.complete_step(OnboardingStep.CHAPTER, make_profile())
 
-    assert progress.steps[OnboardingStep.COMMUNITIES] is StepStatus.COMPLETED
+    progress.complete_step(
+        OnboardingStep.CHAPTER, make_profile(preferred_chapter_id=uuid.uuid4())
+    )
+    assert progress.steps[OnboardingStep.CHAPTER] is StepStatus.COMPLETED
 
 
 @pytest.mark.parametrize("step", [OnboardingStep.PROFILE_BASICS, OnboardingStep.LANGUAGE])
@@ -108,7 +114,7 @@ def test_complete_onboarding_skips_pending_optional_steps():
     assert status.can_complete is False
     assert progress.steps[OnboardingStep.REGION] is StepStatus.COMPLETED
     assert progress.steps[OnboardingStep.AVATAR] is StepStatus.SKIPPED
-    assert progress.steps[OnboardingStep.COMMUNITIES] is StepStatus.SKIPPED
+    assert progress.steps[OnboardingStep.CHAPTER] is StepStatus.SKIPPED
 
 
 def test_no_changes_after_completion():

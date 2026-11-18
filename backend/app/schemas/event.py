@@ -18,7 +18,6 @@ from pydantic import (
     Field,
     StringConstraints,
     UrlConstraints,
-    model_validator,
 )
 
 from app.models.event import EventStatus, RegistrationStatus
@@ -43,10 +42,8 @@ Capacity = Annotated[int, Field(ge=1, le=100_000)]
 class EventCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # An event may belong to a Chapter, a legacy Community, or be app-wide.
-    # Only one ownership field may be supplied.
+    # The Chapter that owns the event; leave out for an app-wide event.
     chapter_id: UUID | None = None
-    community_id: UUID | None = None
 
     title: EventTitle
     description: EventDescription | None = None
@@ -56,14 +53,6 @@ class EventCreate(BaseModel):
     ends_at: datetime
     timezone: TimeZoneId
     capacity: Capacity | None = None
-
-    @model_validator(mode="after")
-    def validate_event_scope(self):
-        if self.chapter_id is not None and self.community_id is not None:
-            raise ValueError(
-                "An event cannot belong to both a Chapter and a Community."
-            )
-        return self
 
 
 class EventUpdate(BaseModel):
@@ -90,7 +79,6 @@ class EventUpdate(BaseModel):
 class EventRead(BaseModel):
     id: UUID
     chapter_id: UUID | None
-    community_id: UUID | None
     created_by: UUID | None
     title: str
     description: str | None

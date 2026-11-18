@@ -4,13 +4,14 @@ reading progress.
 - Categories (Devotionals, Bible Study, Sermons, ...) are shared by the whole
   app and managed by app moderators and admins (``users.account_role``).
 - A resource is an ``article`` (text read in the app), ``audio``, ``video``,
-  ``document`` (PDF or EPUB) or ``link``. It belongs to a community or to the
-  app-wide library. Community moderators and above manage their community's
-  resources; app moderators and admins manage every resource and are the
-  only ones who add to the app-wide library.
+  ``document`` (PDF or EPUB) or ``link``. It belongs to a Chapter or to the
+  app-wide library. A Chapter's Coordinator manages its resources; app
+  moderators and admins manage every resource and are the only ones who add
+  to the app-wide library.
 - Resources start as drafts, seen only by the people who manage them. A
-  published resource is seen by anyone who can see its community (everyone
-  for the app-wide library), like events. Hidden ones answer 404.
+  published Chapter resource is seen by the Chapter's Members and staff, and
+  by Guests a Coordinator granted it to; the app-wide library is seen by
+  everyone. Hidden ones answer 404.
 - Publishing needs content: a body for an article, a link for a link, and an
   uploaded file or a link for audio, video and documents.
 - Files never pass through the API: managers upload straight to object
@@ -31,12 +32,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.identity import UserId
-from app.models.community import (
-    Community,
-    CommunityMembership,
-    CommunityRole,
-    CommunityVisibility,
-)
+from app.models.chapter import Chapter
+from app.models.chapter_access_grant import ChapterAccessGrantItem
 from app.models.resource import (
     Resource,
     ResourceBookmark,
@@ -59,13 +56,8 @@ from app.schemas.resource import (
     ResourceSummary,
     ResourceUpdate,
 )
-from app.services import notifications, pagination
-from app.services.communities import (
-    get_visible_community,
-    is_platform_moderator,
-    rank,
-    require_role,
-)
+from app.services import chapter_access, notifications, pagination
+from app.services.chapter_access import is_platform_moderator
 from app.services.errors import (
     Conflict,
     Forbidden,
@@ -206,36 +198,37 @@ def _check_category(db: Session, category_id: uuid.UUID | None) -> None:
 # Access
 
 
-def _can_manage(
-    community_id: uuid.UUID | None, membership_role: str | None, platform_moderator: bool
-) -> bool:
-    if platform_moderator:
-        return True
-    return community_id is not None and rank(membership_role) >= rank(CommunityRole.MODERATOR)
+def _can_manage(db: Session, user_id: UserId, chapter_id: uuid.UUID | None) -> bool:
+    if chapter_id is None:
+        return is_platform_moderator(db, user_id)
+    return chapter_access.can_organize(db, user_id, chapter_id)
 
 
 def _visible_resource(
     db: Session, user_id: UserId, resource_id: uuid.UUID
-) -> tuple[Resource, CommunityMembership | None, bool]:
-    """Load a resource the user may see, their membership and whether they
-    manage it. Drafts are hidden from everyone else."""
+) -> tuple[Resource, bool]:
+    """Load a resource the user may see and whether they manage it. Drafts
+    are hidden from everyone else."""
     resource = db.get(Resource, resource_id)
     if resource is None:
         raise RESOURCE_NOT_FOUND
-    membership = None
-    if resource.community_id is not None:
-        try:
-            _, membership = get_visible_community(db, resource.community_id, user_id)
-        except NotFound:
-            raise RESOURCE_NOT_FOUND from None
-    can_manage = _can_manage(
-        resource.community_id,
-        membership.role if membership else None,
-        is_platform_moderator(db, user_id),
-    )
+    can_manage = _can_manage(db, user_id, resource.chapter_id)
+    if resource.chapter_id is not None and not can_manage:
+        readable = chapter_access.can_read(db, user_id, resource.chapter_id)
+        if not readable:
+            chapter = db.get(Chapter, resource.chapter_id)
+            granted = (
+                chapter is not None
+                and chapter.is_active
+                and chapter_access.has_grant(
+                    db, user_id, resource.chapter_id, resource_id=resource.id
+                )
+            )
+            if not granted:
+                raise RESOURCE_NOT_FOUND
     if resource.status != PUBLISHED and not can_manage:
         raise RESOURCE_NOT_FOUND
-    return resource, membership, can_manage
+    return resource, can_manage
 
 
 def visible_resource(db: Session, user_id: UserId, resource_id: uuid.UUID) -> Resource:
@@ -243,44 +236,51 @@ def visible_resource(db: Session, user_id: UserId, resource_id: uuid.UUID) -> Re
     return _visible_resource(db, user_id, resource_id)[0]
 
 
-def published_and_visible(user_id: UserId):
+def published_and_visible(db: Session, user_id: UserId):
     """WHERE clause for published resources the user can see."""
-    return _published_and_visible(user_id)
+    return _published_and_visible(db, user_id)
 
 
 def _managed_resource(
     db: Session, user_id: UserId, resource_id: uuid.UUID
 ) -> Resource:
-    resource, membership, can_manage = _visible_resource(db, user_id, resource_id)
+    resource, can_manage = _visible_resource(db, user_id, resource_id)
     if not can_manage:
-        if resource.community_id is None:
+        if resource.chapter_id is None:
             raise Forbidden(
                 "insufficient_role",
                 "Only app moderators and admins manage the app-wide library.",
             )
-        require_role(membership, CommunityRole.MODERATOR)
+        raise Forbidden(
+            "insufficient_role",
+            "Only the Chapter's Coordinator and platform moderators or admins "
+            "manage its resources.",
+        )
     return resource
 
 
 def _published_resource(db: Session, user_id: UserId, resource_id: uuid.UUID) -> Resource:
-    resource, *_ = _visible_resource(db, user_id, resource_id)
+    resource, _ = _visible_resource(db, user_id, resource_id)
     if resource.status != PUBLISHED:
         raise NOT_PUBLISHED
     return resource
 
 
-def _published_and_visible(user_id: UserId):
+def _published_and_visible(db: Session, user_id: UserId):
     """WHERE clause for published resources the user can see."""
-    my_communities = select(CommunityMembership.community_id).where(
-        CommunityMembership.user_id == user_id
-    )
-    public_communities = select(Community.id).where(
-        Community.visibility == CommunityVisibility.PUBLIC.value
-    )
+    active = chapter_access.active_chapter_ids()
+    readable = chapter_access.readable_chapter_ids(db, user_id)
+    granted = chapter_access.granted_ids(db, user_id, ChapterAccessGrantItem.resource_id)
+    if readable is None:
+        chapter_visibility = Resource.chapter_id.in_(active)
+    else:
+        chapter_visibility = Resource.chapter_id.in_(active) & or_(
+            Resource.chapter_id.in_(readable),
+            Resource.id.in_(granted),
+        )
     return (Resource.status == PUBLISHED) & or_(
-        Resource.community_id.is_(None),
-        Resource.community_id.in_(public_communities),
-        Resource.community_id.in_(my_communities),
+        Resource.chapter_id.is_(None),
+        chapter_visibility,
     )
 
 
@@ -308,7 +308,7 @@ def _summary_fields(
 ) -> dict:
     return {
         "id": resource.id,
-        "community_id": resource.community_id,
+        "chapter_id": resource.chapter_id,
         "category_id": resource.category_id,
         "created_by": resource.created_by,
         "kind": resource.kind,
@@ -407,27 +407,17 @@ def _summaries(db: Session, user_id: UserId, rows: list[Resource]) -> list[Resou
             )
         )
     }
-    community_ids = {row.community_id for row in rows if row.community_id is not None}
-    my_roles = (
-        dict(
-            db.execute(
-                select(CommunityMembership.community_id, CommunityMembership.role).where(
-                    CommunityMembership.user_id == user_id,
-                    CommunityMembership.community_id.in_(community_ids),
-                )
-            ).all()
-        )
-        if community_ids
-        else {}
-    )
-    platform_moderator = is_platform_moderator(db, user_id)
+    manages = {
+        chapter_id: _can_manage(db, user_id, chapter_id)
+        for chapter_id in {row.chapter_id for row in rows}
+    }
     return [
         ResourceSummary.model_validate(
             _summary_fields(
                 row,
                 row.id in bookmarked,
                 progress.get(row.id),
-                _can_manage(row.community_id, my_roles.get(row.community_id), platform_moderator),
+                manages[row.chapter_id],
             )
         )
         for row in rows
@@ -437,7 +427,7 @@ def _summaries(db: Session, user_id: UserId, rows: list[Resource]) -> list[Resou
 def get_resource(
     db: Session, user_id: UserId, resource_id: uuid.UUID, storage: ObjectStorage
 ) -> ResourceRead:
-    resource, _, can_manage = _visible_resource(db, user_id, resource_id)
+    resource, can_manage = _visible_resource(db, user_id, resource_id)
     return _resource_read(db, user_id, resource, can_manage, storage)
 
 
@@ -451,7 +441,7 @@ def list_resources(
     limit: int,
     cursor: str | None,
     *,
-    community_id: uuid.UUID | None = None,
+    chapter_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     kind: ResourceKind | None = None,
     language: str | None = None,
@@ -465,29 +455,22 @@ def list_resources(
     title, summary, author and scripture reference.
     """
     statement = select(Resource)
-    if community_id is not None:
-        _, membership = get_visible_community(db, community_id, user_id)
-        statement = statement.where(Resource.community_id == community_id)
+    if chapter_id is not None:
+        chapter = db.get(Chapter, chapter_id)
+        if chapter is None or (not chapter.is_active and not is_platform_moderator(db, user_id)):
+            raise chapter_access.CHAPTER_NOT_FOUND
+        statement = statement.where(Resource.chapter_id == chapter_id)
     if drafts:
         statement = statement.where(Resource.status == DRAFT)
-        if not is_platform_moderator(db, user_id):
-            if community_id is not None:
-                require_role(membership, CommunityRole.MODERATOR)
-            else:
-                managed = select(CommunityMembership.community_id).where(
-                    CommunityMembership.user_id == user_id,
-                    CommunityMembership.role.in_(
-                        [
-                            role.value
-                            for role in CommunityRole
-                            if rank(role) >= rank(CommunityRole.MODERATOR)
-                        ]
-                    ),
-                )
-                statement = statement.where(Resource.community_id.in_(managed))
+        if chapter_id is not None:
+            chapter_access.require_organize(db, user_id, chapter_id)
+        else:
+            managed = chapter_access.organized_chapter_ids(db, user_id)
+            if managed is not None:
+                statement = statement.where(Resource.chapter_id.in_(managed))
         sort_column, sort_attr = Resource.created_at, "created_at"
     else:
-        statement = statement.where(_published_and_visible(user_id))
+        statement = statement.where(_published_and_visible(db, user_id))
         sort_column, sort_attr = Resource.published_at, "published_at"
 
     if category_id is not None:
@@ -554,10 +537,9 @@ def _require_complete(resource: Resource) -> None:
 
 
 def create_resource(db: Session, user_id: UserId, data: ResourceCreate) -> ResourceRead:
-    if data.community_id is not None:
-        _, membership = get_visible_community(db, data.community_id, user_id)
-        if not is_platform_moderator(db, user_id):
-            require_role(membership, CommunityRole.MODERATOR)
+    if data.chapter_id is not None:
+        chapter_access.get_active_chapter(db, data.chapter_id)
+        chapter_access.require_organize(db, user_id, data.chapter_id)
     elif not is_platform_moderator(db, user_id):
         raise Forbidden(
             "insufficient_role",
@@ -566,7 +548,7 @@ def create_resource(db: Session, user_id: UserId, data: ResourceCreate) -> Resou
     _check_category(db, data.category_id)
 
     resource = Resource(
-        community_id=data.community_id,
+        chapter_id=data.chapter_id,
         category_id=data.category_id,
         created_by=user_id,
         kind=data.kind.value,
@@ -795,7 +777,7 @@ def add_bookmark(db: Session, user_id: UserId, resource_id: uuid.UUID) -> Bookma
 
 def remove_bookmark(db: Session, user_id: UserId, resource_id: uuid.UUID) -> None:
     """Removing a bookmark that isn't there is harmless."""
-    resource, *_ = _visible_resource(db, user_id, resource_id)
+    resource, _ = _visible_resource(db, user_id, resource_id)
     db.execute(
         ResourceBookmark.__table__.delete().where(
             ResourceBookmark.user_id == user_id,
@@ -815,7 +797,7 @@ def list_bookmarks(
     statement = (
         select(ResourceBookmark)
         .join(Resource, Resource.id == ResourceBookmark.resource_id)
-        .where(ResourceBookmark.user_id == user_id, _published_and_visible(user_id))
+        .where(ResourceBookmark.user_id == user_id, _published_and_visible(db, user_id))
     )
     if cursor:
         statement = statement.where(
@@ -846,7 +828,7 @@ def _resources_in_order(
 
 
 def get_progress(db: Session, user_id: UserId, resource_id: uuid.UUID) -> ProgressRead:
-    resource, *_ = _visible_resource(db, user_id, resource_id)
+    resource, _ = _visible_resource(db, user_id, resource_id)
     progress = _get_progress(db, user_id, resource.id)
     if progress is None:
         raise NotFound("no_progress", "You haven't started this resource.")
@@ -883,7 +865,7 @@ def save_progress(
 
 
 def reset_progress(db: Session, user_id: UserId, resource_id: uuid.UUID) -> None:
-    resource, *_ = _visible_resource(db, user_id, resource_id)
+    resource, _ = _visible_resource(db, user_id, resource_id)
     db.execute(
         ResourceProgress.__table__.delete().where(
             ResourceProgress.user_id == user_id,
@@ -904,7 +886,7 @@ def list_in_progress(
         .where(
             ResourceProgress.user_id == user_id,
             ResourceProgress.percent < 100,
-            _published_and_visible(user_id),
+            _published_and_visible(db, user_id),
         )
     )
     if cursor:

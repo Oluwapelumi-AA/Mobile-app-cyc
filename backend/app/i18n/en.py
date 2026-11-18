@@ -5,17 +5,16 @@ MESSAGES = {
     # How a date and time is written, as a strftime pattern.
     "format.datetime": "%a %d %b %Y, %H:%M",
     # "You are now {role} of ...".
-    "role.owner": "an owner",
-    "role.admin": "an admin",
-    "role.moderator": "a moderator",
-    "role.member": "a member",
+    "role.coordinator": "the Coordinator",
+    "role.moderator": "a Moderator",
     "notification.comment_on_post.title": "{name} commented on your post",
-    "notification.community_role_changed.title": "You are now {role} of {community}",
-    "notification.community_removed.title": "You were removed from {community}",
-    "notification.community_banned.title": "You can no longer take part in {community}",
-    "notification.community_banned.body": "A moderator removed you from the community.",
-    "notification.content_removed.title.post": "Your post in {community} was removed",
-    "notification.content_removed.title.comment": "Your comment in {community} was removed",
+    "notification.chapter_role_changed.title": "You are now {role} of {chapter}",
+    "notification.chapter_staff_removed.title": "You're no longer on the staff of {chapter}",
+    "notification.chapter_removed.title": "You were removed from {chapter}",
+    "notification.chapter_banned.title": "You can no longer take part in {chapter}",
+    "notification.chapter_banned.body": "A moderator banned you from posting, commenting and registering in this Chapter.",
+    "notification.content_removed.title.post": "Your post in {chapter} was removed",
+    "notification.content_removed.title.comment": "Your comment in {chapter} was removed",
     "notification.content_removed.body": (
         "A moderator removed it for breaking the community guidelines."
     ),
@@ -31,7 +30,7 @@ MESSAGES = {
     "notification.meeting_live.title": "{meeting} is live",
     "notification.meeting_live.body.meeting": "The meeting has started. Join now.",
     "notification.meeting_live.body.livestream": "The livestream has started. Join now.",
-    "notification.resource_published.title": "New in {community}: {resource}",
+    "notification.resource_published.title": "New in {chapter}: {resource}",
     "email.footer": (
         "You're getting this email from The Light App. "
         "You can change which emails you get in the app under Settings > Notifications."

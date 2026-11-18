@@ -22,7 +22,7 @@ class NotificationRead(BaseModel):
     title: str
     body: str | None
     # Ids for opening the right screen: post_id, comment_id, event_id,
-    # meeting_id, resource_id, community_id, depending on the type.
+    # meeting_id, resource_id, chapter_id, depending on the type.
     data: dict[str, str]
     actor_id: UUID | None
     read: bool

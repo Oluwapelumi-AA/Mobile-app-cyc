@@ -86,7 +86,7 @@ def list_resources(
     db: DbSession,
     limit: Limit = DEFAULT_PAGE_SIZE,
     cursor: Cursor = None,
-    community_id: UUID | None = None,
+    chapter_id: UUID | None = None,
     category_id: UUID | None = None,
     kind: ResourceKind | None = None,
     language: Annotated[str | None, Query(max_length=35)] = None,
@@ -95,7 +95,7 @@ def list_resources(
 ):
     """The library, newest first.
 
-    Filter by ``community_id``, ``category_id``, ``kind`` or ``language``
+    Filter by ``chapter_id``, ``category_id``, ``kind`` or ``language``
     (``en`` also matches ``en-GB``), or search with ``q``. ``drafts=true``
     lists the drafts you manage instead.
     """
@@ -109,7 +109,7 @@ def list_resources(
         user_id,
         limit,
         cursor,
-        community_id=community_id,
+        chapter_id=chapter_id,
         category_id=category_id,
         kind=kind,
         language=language,

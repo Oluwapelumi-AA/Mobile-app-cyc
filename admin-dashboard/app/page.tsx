@@ -6,9 +6,9 @@ import { ALL_NAV, ShellFrame, Sidebar, Topbar } from "../components/admin/Shell"
 import { Icon } from "../components/admin/icons";
 import { AdminContext, type AdminOverview, type PageKey, api } from "../components/admin/data";
 import Audit from "../components/admin/screens/Audit";
-import Branches from "../components/admin/screens/Branches";
-import Communities from "../components/admin/screens/Communities";
+import Chapters from "../components/admin/screens/Chapters";
 import Courses from "../components/admin/screens/Courses";
+import Departments from "../components/admin/screens/Departments";
 import Events from "../components/admin/screens/Events";
 import Live from "../components/admin/screens/Live";
 import Notifications from "../components/admin/screens/Notifications";
@@ -23,13 +23,13 @@ const SCREENS: Record<PageKey, () => React.JSX.Element> = {
   overview: Overview,
   reports: Reports,
   users: Users,
-  communities: Communities,
+  chapters: Chapters,
   posts: Posts,
   events: Events,
   live: Live,
   resources: Resources,
   courses: Courses,
-  branches: Branches,
+  departments: Departments,
   notifications: Notifications,
   audit: Audit,
   settings: Settings,
@@ -57,8 +57,9 @@ type Me = {
 };
 
 type CoordinatorAssignment = {
-  branch_id: string;
-  branch_name: string;
+  chapter_id: string;
+  chapter_name: string;
+  role: "coordinator" | "moderator";
 };
 
 type DashboardMode = "admin" | "coordinator";
@@ -159,8 +160,9 @@ export default function Home() {
       }
 
 
-      // A non-admin account can enter this dashboard only when assigned as coordinator.
-      const assignments = await api<CoordinatorAssignment[]>("chapter-coordinator/me");
+      // A non-admin account can enter only with a chapter staff role
+      // (Coordinator or Moderator).
+      const assignments = await api<CoordinatorAssignment[]>("me/chapter-staff");
 
       if (!Array.isArray(assignments) || assignments.length === 0) {
         setOverview(null);
@@ -168,7 +170,7 @@ export default function Home() {
         setMode(null);
         setSignedIn(false);
         setError(
-          "Your account is not assigned as a chapter coordinator. Please contact a platform administrator.",
+          "Your account isn't a chapter coordinator or moderator. Please contact a platform administrator.",
         );
         return;
       }
@@ -244,7 +246,7 @@ export default function Home() {
   const navItem = ALL_NAV.find((item) => item.key === page) ?? ALL_NAV[0];
 
   useEffect(() => {
-    document.title = `${mode === "coordinator" ? "Chapter Coordinator" : navItem.label} | CYC`;
+    document.title = `${mode === "coordinator" ? "Chapter staff" : navItem.label} | CYC`;
   }, [mode, navItem.label]);
 
   /* ---------- loading state ---------- */
@@ -390,7 +392,7 @@ export default function Home() {
               />
               <div>
                 <h1 className="text-xl font-bold text-ink">CYC Chapter Dashboard</h1>
-                <p className="text-sm text-muted">Chapter Coordinator</p>
+                <p className="text-sm text-muted">Chapter staff</p>
               </div>
             </div>
             <button
@@ -405,22 +407,22 @@ export default function Home() {
           <section className="mt-10">
             <h2 className="text-2xl font-bold text-ink">Welcome, {me?.name || "Coordinator"}</h2>
             <p className="mt-2 text-sm text-muted">
-              You have coordinator access to the following chapters.
+              You have staff access to the following chapters.
             </p>
           </section>
 
           <section className="mt-7 grid gap-4 sm:grid-cols-2">
             {coordinatorAssignments.map((assignment) => (
               <article
-                key={assignment.branch_id}
+                key={assignment.chapter_id}
                 className="rounded-2xl border border-line bg-white p-6 shadow-sm"
               >
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-                  Assigned Chapter
+                  {assignment.role === "coordinator" ? "Coordinator" : "Moderator"}
                 </p>
-                <h3 className="mt-3 text-lg font-bold text-ink">{assignment.branch_name}</h3>
+                <h3 className="mt-3 text-lg font-bold text-ink">{assignment.chapter_name}</h3>
                 <p className="mt-2 break-all text-xs text-muted">
-                  Chapter ID: {assignment.branch_id}
+                  Chapter ID: {assignment.chapter_id}
                 </p>
                 <p className="mt-4 text-sm text-muted">
                   Your chapter management workspace will appear here.

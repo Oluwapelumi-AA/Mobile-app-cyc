@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { api, downloadCsv, matches, useAdmin, useDirectory, useLiveList } from "../data";
+import { api, downloadCsv, matches, useAdmin, useChapters, useDirectory, useLiveList } from "../data";
 import { Modal, useConfirm, useToast } from "../dialogs";
 import { Icon } from "../icons";
 import { type ApiReport, mapReport, withNames } from "../mappers";
@@ -54,7 +54,7 @@ export default function Reports() {
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");
-  const [community, setCommunity] = useState("all");
+  const [chapter, setChapter] = useState("all");
   const [status, setStatus] = useState("all");
   const [range, setRange] = useState("30");
   const [detail, setDetail] = useState<ReportRow | null>(null);
@@ -62,18 +62,23 @@ export default function Reports() {
   const toast = useToast();
 
   const dir = useDirectory(data.mode === "live");
-  const items = useMemo(() => withNames(data.items, dir), [data.items, dir]);
+  const { name: chapterName } = useChapters();
+  const items = useMemo(
+    () =>
+      withNames(data.items, dir).map((r) => (r.chapterId ? { ...r, chapter: chapterName(r.chapterId) } : r)),
+    [data.items, dir, chapterName],
+  );
   const count = (s: ReportRow["status"]) => items.filter((r) => r.status === s).length;
   const reasons = useMemo(() => [...new Set(items.map((r) => r.reason))], [items]);
-  const communities = useMemo(() => [...new Set(items.map((r) => r.community))], [items]);
+  const chapters = useMemo(() => [...new Set(items.map((r) => r.chapter))], [items]);
 
   const filtered = items.filter(
     (r) =>
       (tab === "all" || r.status === tab) &&
       (type === "all" || r.reason === type) &&
-      (community === "all" || r.community === community) &&
+      (chapter === "all" || r.chapter === chapter) &&
       (status === "all" || r.status === status) &&
-      matches(search || globalSearch, r.title, r.reason, r.reporter, r.community, r.targetType),
+      matches(search || globalSearch, r.title, r.reason, r.reporter, r.chapter, r.targetType),
   );
   const paged = usePaged(filtered, 10);
   const sel = useSelection(paged.slice.map((r) => r.id));
@@ -136,7 +141,7 @@ export default function Reports() {
   const exportCsv = () =>
     downloadCsv(
       "cyc-reports.csv",
-      filtered.map((r) => ({ title: r.title, target: r.targetType, community: r.community, reason: r.reason, reported_by: r.reporter, status: r.status, created_at: r.createdAt })),
+      filtered.map((r) => ({ title: r.title, target: r.targetType, chapter: r.chapter, reason: r.reason, reported_by: r.reporter, status: r.status, created_at: r.createdAt })),
     );
   const pct = (part: number) => (items.length ? Math.round((part / items.length) * 100) : 0);
 
@@ -178,7 +183,7 @@ export default function Reports() {
           <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
             <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search reports..." />
             <SelectField label="Type" value={type} onChange={setType} className="md:w-[108px]" options={[{ value: "all", label: "All types" }, ...reasons.map((r) => ({ value: r, label: r }))]} />
-            <SelectField label="Department" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All departments" }, ...communities.map((c) => ({ value: c, label: c }))]} />
+            <SelectField label="Chapter" value={chapter} onChange={setChapter} className="md:w-[138px]" options={[{ value: "all", label: "All chapters" }, ...chapters.map((c) => ({ value: c, label: c }))]} />
             <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[106px]" options={[{ value: "all", label: "All status" }, ...["New", "Under review", "Resolved", "Dismissed"].map((s) => ({ value: s, label: s }))]} />
             <DateRangeChip days={Number(range)} />
           </div>
@@ -223,7 +228,7 @@ export default function Reports() {
                           <Thumb seed={r.id} width={40} height={40} rounded="rounded-lg" />
                           <span className="min-w-0">
                             <span className="block max-w-[200px] truncate font-semibold text-ink hover:text-brand">{r.title}</span>
-                            <span className="block truncate text-[11.5px] text-muted">{r.targetType} · {r.community}</span>
+                            <span className="block truncate text-[11.5px] text-muted">{r.targetType} · {r.chapter}</span>
                           </span>
                         </button>
                       </Td>
@@ -321,7 +326,7 @@ export default function Reports() {
               <Thumb seed={detail.id} width={56} height={56} rounded="rounded-xl" />
               <div>
                 <p className="font-semibold text-ink">{detail.title}</p>
-                <p className="text-sm text-muted">{detail.targetType} · {detail.community}</p>
+                <p className="text-sm text-muted">{detail.targetType} · {detail.chapter}</p>
               </div>
             </div>
             {detail.snippet ? <blockquote className="rounded-xl bg-canvas px-4 py-3 text-sm italic text-ink/80">“{detail.snippet}”</blockquote> : null}

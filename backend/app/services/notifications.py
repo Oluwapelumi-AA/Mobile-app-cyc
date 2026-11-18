@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.identity import UserId
 from app.i18n import LocalTime, Text, best_language, render
-from app.models.community import Community, CommunityMembership
+from app.models.chapter import Chapter
 from app.models.event import Event, EventRegistration, RegistrationStatus
 from app.models.meeting import Meeting, MeetingKind
 from app.models.notification import (
@@ -58,7 +58,7 @@ DEVICE_NOT_FOUND = NotFound("device_not_found", "Device not found.")
 # (push, email) for a category nobody has changed.
 DEFAULT_CHANNELS: dict[NotificationCategory, tuple[bool, bool]] = {
     NotificationCategory.SOCIAL: (True, False),
-    NotificationCategory.COMMUNITY: (True, False),
+    NotificationCategory.CHAPTER: (True, False),
     NotificationCategory.EVENTS: (True, True),
     NotificationCategory.MEETINGS: (True, False),
     NotificationCategory.RESOURCES: (False, False),
@@ -261,7 +261,7 @@ def comment_added(db: Session, post: Post, comment: Comment) -> None:
         title=Text("notification.comment_on_post.title", name=name),
         body=_preview(comment.body),
         data={
-            "community_id": post.community_id,
+            "chapter_id": post.chapter_id,
             "post_id": post.id,
             "comment_id": comment.id,
         },
@@ -269,55 +269,64 @@ def comment_added(db: Session, post: Post, comment: Comment) -> None:
     )
 
 
-def _community_name(db: Session, community_id: uuid.UUID | None) -> str | None:
-    if community_id is None:
+def _chapter_name(db: Session, chapter_id: uuid.UUID | None) -> str | None:
+    if chapter_id is None:
         return None
-    return db.scalar(select(Community.name).where(Community.id == community_id))
+    return db.scalar(select(Chapter.name).where(Chapter.id == chapter_id))
 
 
-def member_role_changed(
-    db: Session, membership: CommunityMembership, actor_id: UserId
+def staff_role_changed(
+    db: Session,
+    chapter_id: uuid.UUID,
+    user_id: UserId,
+    role: str | None,
+    actor_id: UserId,
 ) -> None:
-    community = _community_name(db, membership.community_id)
+    """Someone was made Coordinator or Moderator of a Chapter, or lost it."""
+    chapter = _chapter_name(db, chapter_id)
+    if role is None:
+        title = Text("notification.chapter_staff_removed.title", chapter=chapter)
+    else:
+        title = Text(
+            "notification.chapter_role_changed.title",
+            role=Text(f"role.{role}"),
+            chapter=chapter,
+        )
     notify(
         db,
-        [membership.user_id],
-        NotificationType.COMMUNITY_ROLE_CHANGED,
-        title=Text(
-            "notification.community_role_changed.title",
-            role=Text(f"role.{membership.role}"),
-            community=community,
-        ),
-        data={"community_id": membership.community_id, "role": membership.role},
+        [user_id],
+        NotificationType.CHAPTER_ROLE_CHANGED,
+        title=title,
+        data={"chapter_id": chapter_id, "role": role},
         actor_id=actor_id,
     )
 
 
 def member_removed(
-    db: Session, community_id: uuid.UUID, user_id: UserId, actor_id: UserId
+    db: Session, chapter_id: uuid.UUID, user_id: UserId, actor_id: UserId
 ) -> None:
-    community = _community_name(db, community_id)
+    chapter = _chapter_name(db, chapter_id)
     notify(
         db,
         [user_id],
-        NotificationType.COMMUNITY_REMOVED,
-        title=Text("notification.community_removed.title", community=community),
-        data={"community_id": community_id},
+        NotificationType.CHAPTER_REMOVED,
+        title=Text("notification.chapter_removed.title", chapter=chapter),
+        data={"chapter_id": chapter_id},
         actor_id=actor_id,
     )
 
 
 def member_banned(
-    db: Session, community_id: uuid.UUID, user_id: UserId, actor_id: UserId
+    db: Session, chapter_id: uuid.UUID, user_id: UserId, actor_id: UserId
 ) -> None:
-    community = _community_name(db, community_id)
+    chapter = _chapter_name(db, chapter_id)
     notify(
         db,
         [user_id],
-        NotificationType.COMMUNITY_BANNED,
-        title=Text("notification.community_banned.title", community=community),
-        body=Text("notification.community_banned.body"),
-        data={"community_id": community_id},
+        NotificationType.CHAPTER_BANNED,
+        title=Text("notification.chapter_banned.title", chapter=chapter),
+        body=Text("notification.chapter_banned.body"),
+        data={"chapter_id": chapter_id},
         actor_id=actor_id,
     )
 
@@ -326,19 +335,40 @@ def content_removed(
     db: Session,
     kind: str,
     owner_id: UserId,
-    community_id: uuid.UUID,
+    chapter_id: uuid.UUID,
     actor_id: UserId,
     data: dict,
 ) -> None:
     """Tell an author a moderator removed their ``kind`` ("post"/"comment")."""
-    community = _community_name(db, community_id)
+    chapter = _chapter_name(db, chapter_id)
     notify(
         db,
         [owner_id],
         NotificationType.CONTENT_REMOVED,
-        title=Text(f"notification.content_removed.title.{kind}", community=community),
+        title=Text(f"notification.content_removed.title.{kind}", chapter=chapter),
         body=Text("notification.content_removed.body"),
-        data={"community_id": community_id, "kind": kind, **data},
+        data={"chapter_id": chapter_id, "kind": kind, **data},
+        actor_id=actor_id,
+    )
+
+
+def chapter_announcement(
+    db: Session,
+    chapter_id: uuid.UUID,
+    title: str,
+    body: str,
+    actor_id: UserId,
+) -> int:
+    """A Coordinator's announcement to every active official Member."""
+    from app.services.chapter_access import member_ids
+
+    return notify(
+        db,
+        member_ids(db, chapter_id),
+        NotificationType.CHAPTER_ANNOUNCEMENT,
+        title=title,
+        body=body,
+        data={"chapter_id": chapter_id, "kind": "chapter_announcement"},
         actor_id=actor_id,
     )
 
@@ -353,7 +383,7 @@ def _event_people(db: Session, event_id: uuid.UUID, confirmed_only: bool) -> lis
 
 
 def _event_data(event: Event) -> dict:
-    return {"event_id": event.id, "community_id": event.community_id}
+    return {"event_id": event.id, "chapter_id": event.chapter_id}
 
 
 def event_spots_confirmed(db: Session, event: Event, user_ids: list[UserId]) -> None:
@@ -420,14 +450,10 @@ def meeting_live(db: Session, meeting: Meeting, actor_id: UserId) -> None:
     that would be every user."""
     if meeting.event_id is not None:
         recipients = _event_people(db, meeting.event_id, confirmed_only=True)
-    elif meeting.community_id is not None:
-        recipients = list(
-            db.scalars(
-                select(CommunityMembership.user_id)
-                .where(CommunityMembership.community_id == meeting.community_id)
-                .order_by(CommunityMembership.joined_at)
-            )
-        )
+    elif meeting.chapter_id is not None:
+        from app.services.chapter_access import member_ids
+
+        recipients = member_ids(db, meeting.chapter_id)
     else:
         return
     what = "livestream" if meeting.kind == MeetingKind.LIVESTREAM.value else "meeting"
@@ -439,7 +465,7 @@ def meeting_live(db: Session, meeting: Meeting, actor_id: UserId) -> None:
         body=Text(f"notification.meeting_live.body.{what}"),
         data={
             "meeting_id": meeting.id,
-            "community_id": meeting.community_id,
+            "chapter_id": meeting.chapter_id,
             "event_id": meeting.event_id,
         },
         actor_id=actor_id,
@@ -448,29 +474,25 @@ def meeting_live(db: Session, meeting: Meeting, actor_id: UserId) -> None:
 
 
 def resource_published(db: Session, resource: Resource, actor_id: UserId) -> None:
-    """Tell a community's members about its new resource. App-wide library
+    """Tell a Chapter's Members about its new resource. App-wide library
     additions notify nobody for now."""
-    if resource.community_id is None:
+    if resource.chapter_id is None:
         return
-    recipients = list(
-        db.scalars(
-            select(CommunityMembership.user_id)
-            .where(CommunityMembership.community_id == resource.community_id)
-            .order_by(CommunityMembership.joined_at)
-        )
-    )
-    community = _community_name(db, resource.community_id)
+    from app.services.chapter_access import member_ids
+
+    recipients = member_ids(db, resource.chapter_id)
+    chapter = _chapter_name(db, resource.chapter_id)
     notify(
         db,
         recipients,
         NotificationType.RESOURCE_PUBLISHED,
         title=Text(
             "notification.resource_published.title",
-            community=community,
+            chapter=chapter,
             resource=resource.title,
         ),
         body=_preview(resource.summary),
-        data={"resource_id": resource.id, "community_id": resource.community_id},
+        data={"resource_id": resource.id, "chapter_id": resource.chapter_id},
         actor_id=actor_id,
         dedupe_key=f"resource_published:{resource.id}",
     )

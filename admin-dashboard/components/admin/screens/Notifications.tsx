@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { matches, useAdmin, useLiveList } from "../data";
+import { useMemo, useState } from "react";
+import { api, matches, useAdmin, useChapters, useDirectory, useLiveList } from "../data";
 import { Modal, useToast } from "../dialogs";
 import { Icon, type IconName } from "../icons";
+import type { ApiAudit } from "../mappers";
 import { type NotificationRow, sampleNotifications } from "../sample";
 import {
   Avatar,
@@ -41,7 +42,7 @@ import {
 const TYPE_META: Record<NotificationRow["type"], { icon: IconName; tone: Tone; color: string; tile: string }> = {
   Live: { icon: "megaphone", tone: "red", color: "#c0262d", tile: "bg-brand-soft text-brand" },
   Course: { icon: "cap", tone: "purple", color: "#9333ea", tile: "bg-violet-50 text-violet-600" },
-  Department: { icon: "community", tone: "teal", color: "#0d9488", tile: "bg-teal-50 text-teal-600" },
+  Chapter: { icon: "branch", tone: "teal", color: "#0d9488", tile: "bg-teal-50 text-teal-600" },
   Event: { icon: "calendar", tone: "red", color: "#e11d48", tile: "bg-rose-50 text-rose-600" },
   Security: { icon: "shield", tone: "gray", color: "#64748b", tile: "bg-slate-100 text-slate-600" },
   Resource: { icon: "fileText", tone: "red", color: "#ea580c", tile: "bg-orange-50 text-orange-600" },
@@ -54,8 +55,31 @@ type TabKey = "all" | NotificationRow["status"];
 
 export default function Notifications() {
   const { globalSearch } = useAdmin();
-  // The API has per-user inbox notifications, but no admin "broadcast" endpoint yet.
-  const data = useLiveList<never, NotificationRow>(null, (x) => x, sampleNotifications);
+  // Chapter announcements are recorded in the audit log, which doubles as
+  // the history of what was sent.
+  const data = useLiveList<ApiAudit, NotificationRow & { chapterId?: string | null; actorId?: string | null; recipients?: number }>(
+    "moderation/audit-logs?action=chapter.announcement_sent&limit=50",
+    (a) => ({
+      id: a.id,
+      title: typeof a.data?.title === "string" ? a.data.title : "Announcement",
+      body:
+        typeof a.data?.recipients === "number"
+          ? `Delivered to ${a.data.recipients} member${a.data.recipients === 1 ? "" : "s"}.`
+          : "",
+      type: "Chapter",
+      audience: "Chapter members",
+      status: "Sent",
+      createdBy: "Staff",
+      date: a.created_at,
+      chapterId: a.chapter_id,
+      actorId: a.actor_id,
+      recipients: typeof a.data?.recipients === "number" ? a.data.recipients : 0,
+    }),
+    sampleNotifications,
+  );
+  const sample = data.mode === "sample";
+  const { chapters, name: chapterName } = useChapters();
+  const dir = useDirectory(data.mode === "live");
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");
@@ -64,10 +88,22 @@ export default function Notifications() {
   const [range, setRange] = useState("30");
   const [perPage, setPerPage] = useState("10");
   const [composeOpen, setComposeOpen] = useState(false);
-  const [draft, setDraft] = useState({ title: "", body: "", audience: "All users", type: "System" as NotificationRow["type"] });
+  const [draft, setDraft] = useState({ title: "", body: "", chapterId: "" });
+  const [sending, setSending] = useState(false);
   const toast = useToast();
 
-  const items = data.items;
+  const items = useMemo(
+    () =>
+      data.items.map((n) => ({
+        ...n,
+        audience: n.chapterId ? chapterName(n.chapterId) : n.audience,
+        createdBy: n.actorId ? (dir.get(n.actorId)?.name ?? n.createdBy) : n.createdBy,
+      })),
+    [data.items, chapterName, dir],
+  );
+  const reached = data.items.reduce((sum, n) => sum + (n.recipients ?? 0), 0);
+  const activeChapters = chapters.filter((c) => c.active);
+  const draftChapter = draft.chapterId || activeChapters[0]?.id || "";
   const audiences = [...new Set(items.map((n) => n.audience))];
   const filtered = items.filter(
     (n) =>
@@ -86,36 +122,41 @@ export default function Notifications() {
     .sort((a, b) => b.v - a.v)
     .slice(0, 7);
 
-  const save = (s: NotificationRow["status"]) => {
-    if (!draft.title.trim()) {
-      toast.error("Add a title first.");
+  const send = async () => {
+    if (!draft.title.trim() || !draft.body.trim()) {
+      toast.error("Add a title and a message first.");
       return;
     }
-    const row: NotificationRow = {
-      id: `n-${Date.now()}`,
-      title: draft.title.trim(),
-      body: draft.body.trim(),
-      type: draft.type,
-      audience: draft.audience,
-      status: s,
-      createdBy: "You",
-      date: new Date().toISOString(),
-    };
-    data.setItems((rows) => [row, ...rows]);
-    setComposeOpen(false);
-    setDraft({ title: "", body: "", audience: "All users", type: "System" });
-    toast.success(s === "Draft" ? "Saved as draft (preview only)." : "Added to the list (preview only — sending needs the broadcast API).");
+    if (!draftChapter) {
+      toast.error("Create a chapter first.");
+      return;
+    }
+    setSending(true);
+    try {
+      const result = await api<{ recipients: number }>(`chapters/${draftChapter}/announcements`, {
+        method: "POST",
+        body: JSON.stringify({ title: draft.title.trim(), body: draft.body.trim() }),
+      });
+      setComposeOpen(false);
+      setDraft({ title: "", body: "", chapterId: "" });
+      data.reload();
+      toast.success(`Sent to ${result.recipients} member${result.recipients === 1 ? "" : "s"} of ${chapterName(draftChapter)}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send the announcement.");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
     <>
       <PageHeader
         title="Notifications"
-        subtitle="Send and manage in-app, email and push notifications."
+        subtitle="Send announcements to a chapter's members (in-app and push)."
         action={
           <div className="flex items-center gap-3">
-            <SampleTag reason="Members' inbox notifications exist in the API, but admin broadcasts (send to all / a department) need a new endpoint." />
-            <PrimaryButton onClick={() => setComposeOpen(true)}>New notification</PrimaryButton>
+            {sample ? <SampleTag reason={data.error} /> : null}
+            <PrimaryButton onClick={() => setComposeOpen(true)}>New announcement</PrimaryButton>
           </div>
         }
       />
@@ -214,10 +255,19 @@ export default function Notifications() {
           <Card className="p-5">
             <CardHeader title="Notification overview" action={<RangeSelect value={range} onChange={setRange} />} />
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniStat icon="send" value={String(items.filter((n) => n.status === "Sent").length)} label="Total sent" delta={18} />
-              <MiniStat icon="mail" value="96.2%" label="Delivery rate" delta={4} />
-              <MiniStat icon="eye" value="12.4K" label="Total opens" delta={26} />
-              <MiniStat icon="pointer" value="1.8K" label="Total clicks" delta={14} />
+              <MiniStat icon="send" value={String(items.filter((n) => n.status === "Sent").length)} label="Total sent" delta={sample ? 18 : undefined} />
+              {sample ? (
+                <>
+                  <MiniStat icon="mail" value="96.2%" label="Delivery rate" delta={4} />
+                  <MiniStat icon="eye" value="12.4K" label="Total opens" delta={26} />
+                  <MiniStat icon="pointer" value="1.8K" label="Total clicks" delta={14} />
+                </>
+              ) : (
+                <>
+                  <MiniStat icon="users" value={String(reached)} label="Members reached" />
+                  <MiniStat icon="branch" value={String(new Set(items.map((n) => n.audience)).size)} label="Chapters" />
+                </>
+              )}
             </div>
           </Card>
 
@@ -263,12 +313,12 @@ export default function Notifications() {
 
       <Modal
         open={composeOpen}
-        title="New notification"
+        title="New announcement"
         onClose={() => setComposeOpen(false)}
         footer={
           <>
-            <button type="button" onClick={() => save("Draft")} className="rounded-xl border border-line px-4 py-2.5 text-sm font-medium hover:bg-canvas">Save draft</button>
-            <button type="button" onClick={() => save("Scheduled")} className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">Schedule</button>
+            <button type="button" onClick={() => setComposeOpen(false)} className="rounded-xl border border-line px-4 py-2.5 text-sm font-medium hover:bg-canvas">Cancel</button>
+            <button type="button" disabled={sending} onClick={() => void send()} className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60">{sending ? "Sending…" : "Send now"}</button>
           </>
         }
       >
@@ -281,11 +331,16 @@ export default function Notifications() {
             <span className="mb-1.5 block text-sm font-medium text-ink">Message</span>
             <textarea value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} rows={3} className="w-full rounded-xl border border-line px-3 py-2.5 text-sm outline-none focus:border-brand/50 focus:ring-4 focus:ring-brand-soft" />
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <SelectField label="Type" value={draft.type} onChange={(v) => setDraft({ ...draft, type: v as NotificationRow["type"] })} options={Object.keys(TYPE_META).map((t) => ({ value: t, label: t }))} />
-            <SelectField label="Audience" value={draft.audience} onChange={(v) => setDraft({ ...draft, audience: v })} options={["All users", "Department members", "Registered attendees", "Students", "Youth"].map((a) => ({ value: a, label: a }))} />
-          </div>
-          <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900">Preview only: delivering this needs an admin broadcast endpoint in the API.</p>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-ink">Chapter</span>
+            <SelectField
+              label="Chapter"
+              value={draftChapter}
+              onChange={(v) => setDraft({ ...draft, chapterId: v })}
+              options={activeChapters.length ? activeChapters.map((c) => ({ value: c.id, label: c.name })) : [{ value: "", label: "No chapters yet" }]}
+            />
+          </label>
+          <p className="rounded-xl bg-canvas px-3 py-2 text-[11.5px] text-muted">Every active member of the chapter gets it in their inbox, and as a push notification unless they turned chapter notifications off.</p>
         </div>
       </Modal>
       {toast.element}

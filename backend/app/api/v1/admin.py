@@ -45,7 +45,7 @@ def list_users(
     q: Annotated[str | None, Query(max_length=100)] = None,
     account_role: AccountRole | None = None,
     is_active: bool | None = None,
-    branch_id: UUID | None = None,
+    chapter_id: UUID | None = None,
 ):
     """Newest first. ``q`` matches the email or display name."""
     items, next_cursor = admin.list_users(
@@ -56,7 +56,7 @@ def list_users(
         q=q,
         account_role=account_role,
         is_active=is_active,
-        branch_id=branch_id,
+        chapter_id=chapter_id,
     )
     return Page(items=items, next_cursor=next_cursor)
 
@@ -106,7 +106,7 @@ def assign_user_membership(
         db,
         user_id,
         target_id,
-        data.branch_id,
+        data.chapter_id,
         data.department_id,
     )
 

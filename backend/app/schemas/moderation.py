@@ -55,7 +55,7 @@ class ReportRead(MyReportRead):
 
     reporter_id: UUID | None
     target_owner_id: UUID | None
-    community_id: UUID | None
+    chapter_id: UUID | None
     snapshot: dict
     # Whether the reported thing still exists.
     target_exists: bool
@@ -90,7 +90,7 @@ class ReportResolve(BaseModel):
         return self
 
 
-# Community bans
+# Chapter bans
 
 
 class BanCreate(BaseModel):
@@ -107,7 +107,7 @@ class BanCreate(BaseModel):
 class BanRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    community_id: UUID
+    chapter_id: UUID
     user_id: UUID
     banned_by: UUID | None
     reason: str | None
@@ -125,7 +125,7 @@ class AuditLogRead(BaseModel):
     action: str
     target_type: str
     target_id: UUID
-    community_id: UUID | None
+    chapter_id: UUID | None
     data: dict
     created_at: UtcDatetime
 
@@ -148,8 +148,8 @@ class AdminUserRead(BaseModel):
     is_active: bool
     is_verified: bool
 
-    # Membership assignments
-    branch_id: UUID | None
+    # Official Chapter (only meaningful while membership_status is member)
+    chapter_id: UUID | None
     department_id: UUID | None
 
     # User preference only; does not grant membership
@@ -191,8 +191,9 @@ class AdminOverview(BaseModel):
     active_users: int
     inactive_users: int
     new_users_last_7_days: int
-    communities: int
     posts_last_7_days: int
     open_reports: int
     upcoming_events: int
-    branches: int
+    chapters: int
+    members: int
+    guests: int

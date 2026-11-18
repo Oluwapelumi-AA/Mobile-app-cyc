@@ -26,7 +26,7 @@ class ReportTarget(str, Enum):
     POST = "post"
     COMMENT = "comment"
     USER = "user"
-    COMMUNITY = "community"
+    CHAPTER = "chapter"
     EVENT = "event"
     RESOURCE = "resource"
 
@@ -80,7 +80,7 @@ class ContentReport(Base):
         ),
         # The moderation queue: oldest open first.
         Index("ix_content_reports_status_created", "status", "created_at", "id"),
-        Index("ix_content_reports_community_status", "community_id", "status"),
+        Index("ix_content_reports_chapter_status", "chapter_id", "status"),
         Index("ix_content_reports_target", "target_type", "target_id"),
     )
 
@@ -104,11 +104,11 @@ class ContentReport(Base):
         nullable=True,
         index=True,
     )
-    # The community whose moderators review it. Null means app moderators
-    # (users, communities themselves, and app-wide events and resources).
-    community_id: Mapped[uuid.UUID | None] = mapped_column(
+    # The Chapter whose staff review it. Null means app moderators
+    # (users, Chapters themselves, and app-wide events and resources).
+    chapter_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("communities.id", ondelete="SET NULL"),
+        ForeignKey("chapters.id", ondelete="SET NULL"),
         nullable=True,
     )
     reason: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -144,16 +144,18 @@ class ContentReport(Base):
     )
 
 
-class CommunityBan(Base):
-    """Someone removed from a community who may not join it again."""
+class ChapterBan(Base):
+    """Someone a Chapter's staff barred from posting, commenting, reacting
+    and registering in that Chapter. They keep their membership record but
+    lose access to the Chapter until the ban is lifted."""
 
-    __tablename__ = "community_bans"
+    __tablename__ = "chapter_bans"
 
     __table_args__ = (
         UniqueConstraint(
-            "community_id",
+            "chapter_id",
             "user_id",
-            name="uq_community_bans_community_user",
+            name="uq_chapter_bans_chapter_user",
         ),
     )
 
@@ -162,9 +164,9 @@ class CommunityBan(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    community_id: Mapped[uuid.UUID] = mapped_column(
+    chapter_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("communities.id", ondelete="CASCADE"),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
         nullable=False,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -193,7 +195,7 @@ class AuditLog(Base):
 
     __table_args__ = (
         Index("ix_audit_logs_created", "created_at", "id"),
-        Index("ix_audit_logs_community_created", "community_id", "created_at", "id"),
+        Index("ix_audit_logs_chapter_created", "chapter_id", "created_at", "id"),
         Index("ix_audit_logs_target", "target_type", "target_id"),
         Index("ix_audit_logs_actor_created", "actor_id", "created_at"),
     )
@@ -213,8 +215,8 @@ class AuditLog(Base):
     target_type: Mapped[str] = mapped_column(String(20), nullable=False)
     # No foreign key: the log outlives what it is about.
     target_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
-    # Kept as a plain id (no foreign key) so a deleted community's log stays.
-    community_id: Mapped[uuid.UUID | None] = mapped_column(
+    # Kept as a plain id (no foreign key) so a deleted Chapter's log stays.
+    chapter_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         nullable=True,
     )

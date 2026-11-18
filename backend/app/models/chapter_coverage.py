@@ -63,7 +63,7 @@ class ChapterCoverageArea(Base):
 
     chapter_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("branches.id", ondelete="CASCADE"),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

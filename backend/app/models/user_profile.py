@@ -38,15 +38,16 @@ class UserProfile(Base):
     # User's preferred Chapter; this does not grant membership.
     preferred_chapter_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("branches.id", ondelete="SET NULL"),
+        ForeignKey("chapters.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
 
-    # Official Chapter assignment; retained for backward compatibility.
-    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+    # Official Chapter membership, set by a platform Admin. Only counts while
+    # users.membership_status is 'member'.
+    chapter_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("branches.id", ondelete="SET NULL"),
+        ForeignKey("chapters.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

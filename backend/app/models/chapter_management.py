@@ -1,10 +1,19 @@
-
-"""Chapter coordinator assignments and platform-wide departments."""
+"""Chapter staff (Coordinators and Moderators) and platform-wide departments."""
 
 import uuid
 from datetime import datetime, timezone
+from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -15,12 +24,35 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class ChapterCoordinator(Base):
-    __tablename__ = "branch_coordinators"
+class ChapterStaffRole(str, Enum):
+    """Roles a platform Admin can give someone inside one Chapter.
+
+    - coordinator: runs the Chapter (members, events, meetings, resources,
+      announcements, access requests) and moderates it. One per Chapter.
+    - moderator: moderates the Chapter's posts and comments, reviews its
+      reports and bans people from it. Any number per Chapter.
+    """
+
+    COORDINATOR = "coordinator"
+    MODERATOR = "moderator"
+
+
+class ChapterStaff(Base):
+    __tablename__ = "chapter_staff"
     __table_args__ = (
-        UniqueConstraint(
-            "branch_id",
-            name="uq_branch_coordinators_one_per_chapter",
+        CheckConstraint(
+            "role IN ('coordinator', 'moderator')",
+            name="ck_chapter_staff_role",
+        ),
+        # Someone holds at most one staff role in a Chapter.
+        UniqueConstraint("chapter_id", "user_id", name="uq_chapter_staff_chapter_user"),
+        # One Coordinator per Chapter.
+        Index(
+            "uq_chapter_staff_one_coordinator",
+            "chapter_id",
+            unique=True,
+            sqlite_where=text("role = 'coordinator'"),
+            postgresql_where=text("role = 'coordinator'"),
         ),
     )
 
@@ -29,9 +61,9 @@ class ChapterCoordinator(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    branch_id: Mapped[uuid.UUID] = mapped_column(
+    chapter_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("branches.id", ondelete="CASCADE"),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -40,6 +72,11 @@ class ChapterCoordinator(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    role: Mapped[str] = mapped_column(
+        String(20),
+        default=ChapterStaffRole.COORDINATOR.value,
+        nullable=False,
     )
     assigned_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
@@ -51,10 +88,6 @@ class ChapterCoordinator(Base):
         default=utc_now,
         nullable=False,
     )
-
-
-# Temporary compatibility alias.
-BranchCoordinator = ChapterCoordinator
 
 
 class Department(Base):

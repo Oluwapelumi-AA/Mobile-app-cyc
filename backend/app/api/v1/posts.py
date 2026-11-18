@@ -1,4 +1,4 @@
-"""Post and comment endpoints. Posts are created through /communities."""
+"""Post and comment endpoints. Posts are created through /chapters/{id}/posts."""
 
 from typing import Annotated
 from uuid import UUID

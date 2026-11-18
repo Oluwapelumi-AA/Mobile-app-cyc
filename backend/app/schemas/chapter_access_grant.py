@@ -14,7 +14,7 @@ class ChapterAccessGrantItemCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    chapter_post_id: UUID | None = None
+    post_id: UUID | None = None
     event_id: UUID | None = None
     meeting_id: UUID | None = None
     resource_id: UUID | None = None
@@ -22,7 +22,7 @@ class ChapterAccessGrantItemCreate(BaseModel):
     @model_validator(mode="after")
     def validate_exactly_one_target(self):
         targets = (
-            self.chapter_post_id,
+            self.post_id,
             self.event_id,
             self.meeting_id,
             self.resource_id,
@@ -51,7 +51,7 @@ class ChapterAccessGrantCreate(BaseModel):
     def validate_unique_items(self):
         targets = [
             (
-                item.chapter_post_id,
+                item.post_id,
                 item.event_id,
                 item.meeting_id,
                 item.resource_id,
@@ -72,7 +72,6 @@ class ChapterAccessGrantItemRead(BaseModel):
 
     id: UUID
     grant_id: UUID
-    chapter_post_id: UUID | None
     post_id: UUID | None
     event_id: UUID | None
     meeting_id: UUID | None

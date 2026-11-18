@@ -1,10 +1,10 @@
-
-"""Chapter-scoped coordinator, department, and access APIs."""
+"""Chapter-scoped APIs: feed, staff, members, announcements, dashboard,
+access requests and Guest content grants."""
 
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.models.chapter_access_request import (
     ChapterAccessRequestStatus as ModelRequestStatus,
 )
+from app.models.chapter_management import ChapterStaffRole
 from app.schemas.chapter_access_grant import (
     ChapterAccessGrantCreate,
     ChapterAccessGrantRead,
@@ -22,357 +23,212 @@ from app.schemas.chapter_access_request import (
     ChapterAccessRequestReview,
     ChapterAccessRequestStatus,
 )
-from app.schemas.chapter_content import (
-    ChapterBroadcastCreate,
-    ChapterCommentCreate,
-    ChapterCommentRead,
-    ChapterPostCreate,
-    ChapterPostRead,
-)
 from app.schemas.chapter_management import (
+    AnnouncementCreate,
+    AnnouncementResult,
+    ChapterDashboard,
     ChapterMemberRead,
-    CoordinatorCreate,
-    CoordinatorRead,
-    DepartmentCreate,
     DepartmentMemberRead,
-    DepartmentRead,
-    DepartmentUpdate,
+    MyStaffRoleRead,
+    StaffAssign,
+    StaffCreate,
+    StaffRead,
 )
+from app.schemas.common import Page
+from app.schemas.post import PostCreate, PostRead
 from app.schemas.profile import ProfileRead, ProfileUpdate
 from app.services import (
     chapter_access_grants as grant_service,
     chapter_access_requests as request_service,
+    posts,
 )
 from app.services import chapter_management as service
+from app.services.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 
 router = APIRouter(tags=["Chapter Management"])
 
 CurrentUserId = Annotated[UserId, Depends(get_current_user_id)]
 DbSession = Annotated[Session, Depends(get_db)]
+Limit = Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)]
+Cursor = Annotated[str | None, Query(max_length=200)]
 
 
-@router.get(
-    "/branches/{branch_id}/coordinators",
-    response_model=list[CoordinatorRead],
-)
-def coordinators(branch_id: UUID, user_id: CurrentUserId, db: DbSession):
-    return service.list_coordinators(db, user_id, branch_id)
+# ---------------------------------------------------------------------------
+# Feed
+# ---------------------------------------------------------------------------
 
 
 @router.post(
-    "/branches/{branch_id}/coordinators",
-    response_model=CoordinatorRead,
+    "/chapters/{chapter_id}/posts",
+    response_model=PostRead,
     status_code=status.HTTP_201_CREATED,
+    tags=["Posts"],
 )
-def add_coordinator(
-    branch_id: UUID,
-    data: CoordinatorCreate,
+def create_post(chapter_id: UUID, data: PostCreate, user_id: CurrentUserId, db: DbSession):
+    """Members and staff post to their Chapter."""
+    return posts.create_post(db, user_id, chapter_id, data)
+
+
+@router.get("/chapters/{chapter_id}/posts", response_model=Page[PostRead], tags=["Posts"])
+def chapter_feed(
+    chapter_id: UUID,
     user_id: CurrentUserId,
     db: DbSession,
+    limit: Limit = DEFAULT_PAGE_SIZE,
+    cursor: Cursor = None,
 ):
-    return service.assign_coordinator(db, user_id, branch_id, data)
+    """The Chapter's posts, newest first. Guests see only posts granted to them."""
+    items, next_cursor = posts.list_feed(db, user_id, chapter_id, limit, cursor)
+    return Page(items=items, next_cursor=next_cursor)
 
 
-@router.delete(
-    "/branches/{branch_id}/coordinators/{target_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def remove_coordinator(
-    branch_id: UUID,
+# ---------------------------------------------------------------------------
+# Staff: one Coordinator and any number of Moderators per Chapter
+# ---------------------------------------------------------------------------
+
+
+@router.get("/chapters/{chapter_id}/staff", response_model=list[StaffRead])
+def chapter_staff(
+    chapter_id: UUID,
+    user_id: CurrentUserId,
+    db: DbSession,
+    role: ChapterStaffRole | None = None,
+):
+    """The Coordinator first, then Moderators."""
+    return service.list_staff(db, user_id, chapter_id, role)
+
+
+@router.put("/chapters/{chapter_id}/staff/{target_id}", response_model=StaffRead)
+def assign_chapter_staff(
+    chapter_id: UUID,
     target_id: UUID,
+    data: StaffAssign,
     user_id: CurrentUserId,
     db: DbSession,
 ):
-    service.remove_coordinator(db, user_id, branch_id, target_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.get(
-    "/branches/{branch_id}/members",
-    response_model=list[ChapterMemberRead],
-)
-def chapter_members(branch_id: UUID, user_id: CurrentUserId, db: DbSession):
-    return service.list_members(db, user_id, branch_id)
-
-
-@router.get("/departments", response_model=list[DepartmentRead])
-def departments(user_id: CurrentUserId, db: DbSession):
-    return service.list_departments(db, user_id)
-
-
-@router.post(
-    "/departments",
-    response_model=DepartmentRead,
-    status_code=status.HTTP_201_CREATED,
-)
-def add_department(
-    data: DepartmentCreate,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    return service.create_department(db, user_id, data)
-
-
-@router.patch(
-    "/departments/{department_id}",
-    response_model=DepartmentRead,
-)
-def edit_department(
-    department_id: UUID,
-    data: DepartmentUpdate,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    return service.update_department(db, user_id, department_id, data)
+    """Make someone the Coordinator or a Moderator, or change their role.
+    Platform Admins only."""
+    return service.assign_staff(db, user_id, chapter_id, target_id, data.role)
 
 
 @router.delete(
-    "/departments/{department_id}",
+    "/chapters/{chapter_id}/staff/{target_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def remove_department(
-    department_id: UUID,
-    user_id: CurrentUserId,
-    db: DbSession,
+def remove_chapter_staff(
+    chapter_id: UUID, target_id: UUID, user_id: CurrentUserId, db: DbSession
 ):
-    service.delete_department(db, user_id, department_id)
+    service.remove_staff(db, user_id, chapter_id, target_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _staff_routes(path: str, role: ChapterStaffRole) -> None:
+    """GET/POST/DELETE shortcuts for one staff role."""
+
+    @router.get(f"/chapters/{{chapter_id}}/{path}", response_model=list[StaffRead])
+    def list_role(chapter_id: UUID, user_id: CurrentUserId, db: DbSession):
+        return service.list_staff(db, user_id, chapter_id, role)
+
+    @router.post(
+        f"/chapters/{{chapter_id}}/{path}",
+        response_model=StaffRead,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def add_role(chapter_id: UUID, data: StaffCreate, user_id: CurrentUserId, db: DbSession):
+        return service.assign_staff(db, user_id, chapter_id, data.user_id, role)
+
+    @router.delete(
+        f"/chapters/{{chapter_id}}/{path}/{{target_id}}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def remove_role(chapter_id: UUID, target_id: UUID, user_id: CurrentUserId, db: DbSession):
+        service.remove_staff(db, user_id, chapter_id, target_id, role)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    list_role.__name__ = f"list_chapter_{path}"
+    add_role.__name__ = f"add_chapter_{path}"
+    remove_role.__name__ = f"remove_chapter_{path}"
+
+
+_staff_routes("coordinators", ChapterStaffRole.COORDINATOR)
+_staff_routes("moderators", ChapterStaffRole.MODERATOR)
+
+
+@router.get("/me/chapter-staff", response_model=list[MyStaffRoleRead])
+def my_staff_roles(user_id: CurrentUserId, db: DbSession):
+    """The Chapters you coordinate or moderate."""
+    return service.list_my_staff_roles(db, user_id)
+
+
+# ---------------------------------------------------------------------------
+# Members
+# ---------------------------------------------------------------------------
+
+
+@router.get("/chapters/{chapter_id}/members", response_model=list[ChapterMemberRead])
+def chapter_members(chapter_id: UUID, user_id: CurrentUserId, db: DbSession):
+    """Official Members, for the Chapter's staff and platform staff."""
+    return service.list_members(db, user_id, chapter_id)
+
+
+@router.delete(
+    "/chapters/{chapter_id}/members/{target_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_chapter_member(
+    chapter_id: UUID, target_id: UUID, user_id: CurrentUserId, db: DbSession
+):
+    """Take someone out of the Chapter; they become a Guest. Platform Admins only."""
+    service.remove_member(db, user_id, chapter_id, target_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
-    "/branches/{branch_id}/department-members",
+    "/chapters/{chapter_id}/department-members",
     response_model=list[DepartmentMemberRead],
 )
-def chapter_department_members(
-    branch_id: UUID,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    return service.list_chapter_department_members(db, user_id, branch_id)
-
-
-# Backward-compatible chapter URL aliases. Department records are global;
-# the chapter ID is validated but never stored on the department.
-@router.get(
-    "/branches/{branch_id}/departments",
-    response_model=list[DepartmentRead],
-    include_in_schema=False,
-)
-def legacy_departments(
-    branch_id: UUID,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    from app.models.branch import Branch
-    from app.services.errors import NotFound
-
-    if db.get(Branch, branch_id) is None:
-        raise NotFound("branch_not_found", "Chapter not found.")
-
-    return service.list_departments(db, user_id)
-
-
-@router.post(
-    "/branches/{branch_id}/departments",
-    response_model=DepartmentRead,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
-)
-def legacy_add_department(
-    branch_id: UUID,
-    data: DepartmentCreate,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    from app.models.branch import Branch
-    from app.services.errors import NotFound
-
-    if db.get(Branch, branch_id) is None:
-        raise NotFound("branch_not_found", "Chapter not found.")
-
-    return service.create_department(db, user_id, data)
+def chapter_department_members(chapter_id: UUID, user_id: CurrentUserId, db: DbSession):
+    return service.list_chapter_department_members(db, user_id, chapter_id)
 
 
 @router.patch(
-    "/branches/{branch_id}/departments/{department_id}",
-    response_model=DepartmentRead,
-    include_in_schema=False,
-)
-def legacy_edit_department(
-    branch_id: UUID,
-    department_id: UUID,
-    data: DepartmentUpdate,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    from app.models.branch import Branch
-    from app.services.errors import NotFound
-
-    if db.get(Branch, branch_id) is None:
-        raise NotFound("branch_not_found", "Chapter not found.")
-
-    return service.update_department(db, user_id, department_id, data)
-
-
-@router.delete(
-    "/branches/{branch_id}/departments/{department_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    include_in_schema=False,
-)
-def legacy_remove_department(
-    branch_id: UUID,
-    department_id: UUID,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    from app.models.branch import Branch
-    from app.services.errors import NotFound
-
-    if db.get(Branch, branch_id) is None:
-        raise NotFound("branch_not_found", "Chapter not found.")
-
-    service.delete_department(db, user_id, department_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.patch(
-    "/branches/{branch_id}/members/{target_id}/profile",
+    "/chapters/{chapter_id}/members/{target_id}/profile",
     response_model=ProfileRead,
 )
 def edit_chapter_member_profile(
-    branch_id: UUID,
+    chapter_id: UUID,
     target_id: UUID,
     data: ProfileUpdate,
     user_id: CurrentUserId,
     db: DbSession,
 ):
-    return service.update_member_profile(
-        db,
-        user_id,
-        branch_id,
-        target_id,
-        data,
-    )
+    return service.update_member_profile(db, user_id, chapter_id, target_id, data)
 
 
-@router.get(
-    "/branches/{branch_id}/posts",
-    response_model=list[ChapterPostRead],
-)
-def chapter_posts(branch_id: UUID, user_id: CurrentUserId, db: DbSession):
-    return service.list_chapter_posts(db, user_id, branch_id)
+# ---------------------------------------------------------------------------
+# Announcements and dashboard
+# ---------------------------------------------------------------------------
 
 
 @router.post(
-    "/branches/{branch_id}/posts",
-    response_model=ChapterPostRead,
-    status_code=status.HTTP_201_CREATED,
-)
-def add_chapter_post(
-    branch_id: UUID,
-    data: ChapterPostCreate,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    return service.create_chapter_post(db, user_id, branch_id, data)
-
-
-@router.delete(
-    "/branches/{branch_id}/posts/{post_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def moderate_chapter_post(
-    branch_id: UUID,
-    post_id: UUID,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    from app.services.errors import NotFound
-
-    post = service._chapter_post(db, post_id)
-
-    if post.branch_id != branch_id:
-        raise NotFound("chapter_post_not_found", "Chapter post not found.")
-
-    service.delete_chapter_post(db, user_id, post_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.get(
-    "/chapter-posts/{post_id}/comments",
-    response_model=list[ChapterCommentRead],
-)
-def chapter_post_comments(
-    post_id: UUID,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    return service.list_chapter_comments(db, user_id, post_id)
-
-
-@router.post(
-    "/chapter-posts/{post_id}/comments",
-    response_model=ChapterCommentRead,
-    status_code=status.HTTP_201_CREATED,
-)
-def add_chapter_post_comment(
-    post_id: UUID,
-    data: ChapterCommentCreate,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    return service.create_chapter_comment(db, user_id, post_id, data)
-
-
-@router.delete(
-    "/branches/{branch_id}/posts/{post_id}/comments/{comment_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def moderate_chapter_comment(
-    branch_id: UUID,
-    post_id: UUID,
-    comment_id: UUID,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    from app.services.errors import NotFound
-
-    post = service._chapter_post(db, post_id)
-
-    if post.branch_id != branch_id:
-        raise NotFound("chapter_post_not_found", "Chapter post not found.")
-
-    service.delete_chapter_comment(db, user_id, post_id, comment_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post(
-    "/branches/{branch_id}/push-notifications",
+    "/chapters/{chapter_id}/announcements",
+    response_model=AnnouncementResult,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def broadcast_chapter_notification(
-    branch_id: UUID,
-    data: ChapterBroadcastCreate,
+def send_announcement(
+    chapter_id: UUID,
+    data: AnnouncementCreate,
     user_id: CurrentUserId,
     db: DbSession,
 ):
-    return service.broadcast_chapter_push(db, user_id, branch_id, data)
+    """Notify every Member of the Chapter. Its Coordinator and platform Admins."""
+    return service.send_announcement(db, user_id, chapter_id, data)
 
 
-@router.get("/branches/{branch_id}/dashboard")
-def chapter_dashboard(
-    branch_id: UUID,
-    user_id: CurrentUserId,
-    db: DbSession,
-):
-    """Summary data for a coordinator's independent Chapter dashboard."""
-    return service.chapter_dashboard(db, user_id, branch_id)
-
-
-@router.get("/chapter-coordinator/me")
-def my_coordinator_assignments(user_id: CurrentUserId, db: DbSession):
-    """Return the authenticated user's own coordinator assignments."""
-    return service.list_my_coordinator_assignments(db, user_id)
+@router.get("/chapters/{chapter_id}/dashboard", response_model=ChapterDashboard)
+def chapter_dashboard(chapter_id: UUID, user_id: CurrentUserId, db: DbSession):
+    """Summary numbers for the Chapter's staff and platform staff."""
+    return service.chapter_dashboard(db, user_id, chapter_id)
 
 
 # ---------------------------------------------------------------------------

@@ -28,7 +28,7 @@ _PROFILE_FIELDS = (
     "city",
     "timezone",
     "preferred_chapter_id",
-    "branch_id",
+    "chapter_id",
     "department_id",
 )
 
@@ -52,7 +52,7 @@ class ProfileRecord:
     preferred_chapter_id: uuid.UUID | None = None
 
     # Official Chapter assignment; managed through the membership workflow.
-    branch_id: uuid.UUID | None = None
+    chapter_id: uuid.UUID | None = None
     department_id: uuid.UUID | None = None
 
     onboarding: OnboardingProgress = field(default_factory=OnboardingProgress)

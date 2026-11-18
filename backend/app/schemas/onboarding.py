@@ -12,7 +12,9 @@ class OnboardingStep(StrEnum):
     LANGUAGE = "language"
     REGION = "region"
     TIMEZONE = "timezone"
-    COMMUNITIES = "communities"
+    # Pick the Chapter you want to join (preferred_chapter_id). Official
+    # membership is still assigned by a platform Admin.
+    CHAPTER = "chapter"
 
 
 class StepStatus(StrEnum):
