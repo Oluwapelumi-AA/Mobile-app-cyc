@@ -5,6 +5,10 @@ Everything the CYC mobile app needs, grouped by screen. All paths are under
 sign-up, sign-in, refresh and password reset. Full request and response
 shapes are at `/docs` on the running API.
 
+The phone app is in `../mobile` (see its README). Phones don't need CORS;
+the Expo web preview (`http://localhost:8081`) does, so keep it in
+`CORS_ORIGINS` if you use it.
+
 Errors come back as `{"detail": {"code": "...", "message": "..."}}`. Show
 `message` to the user and branch on `code`.
 

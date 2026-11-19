@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1.router import router as api_v1_router
@@ -10,6 +11,17 @@ app = FastAPI(
     description="Backend API for the CYC Christian community platform.",
     version="0.1.0",
 )
+
+# Browsers only (the phone app doesn't need this): lets the Expo web preview
+# and other browser front ends listed in CORS_ORIGINS call the API.
+if settings.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
+    )
 
 
 @app.exception_handler(DomainError)

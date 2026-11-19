@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:8081",
     ]
 
     # Video provider for meetings and livestreams. "fake" is a built-in
