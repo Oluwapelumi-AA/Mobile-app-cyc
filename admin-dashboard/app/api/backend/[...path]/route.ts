@@ -40,6 +40,7 @@ const ALLOWED: Record<Method, RegExp[]> = {
     /^admin\/overview$/,
     /^admin\/users$/,
     id("^admin/users/{id}$"),
+    /^admin\/team$/,
 
     /^moderation\/reports$/,
     id("^moderation/reports/{id}$"),
@@ -93,7 +94,8 @@ const ALLOWED: Record<Method, RegExp[]> = {
 
     /^departments$/,
 
-    id("^admin/users/{id}/(suspend|reinstate)$"),
+    id("^admin/users/{id}/(suspend|reinstate|temporary-password)$"),
+    /^admin\/(coordinators|platform-staff)$/,
     id("^moderation/reports/{id}/resolve$"),
     /^events$/,
     id("^events/{id}/cancel$"),
@@ -127,6 +129,7 @@ const ALLOWED: Record<Method, RegExp[]> = {
   ],
 
   DELETE: [
+    id("^admin/(coordinators|platform-staff)/{id}$"),
     id("^chapters/{id}/(staff|coordinators|moderators|members|bans)/{id}$"),
     id("^posts/{id}$"),
     id("^comments/{id}$"),

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.api.v1.auth_schemas import (
+    ChangePasswordRequest,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
@@ -266,3 +267,33 @@ def get_me(
 ):
     """Return the authenticated user's account details."""
     return current_user
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Change your password. Use this after signing in with a temporary
+    password from an admin. Signs you out on every other device."""
+    if not verify_password(request.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "wrong_password", "message": "Your current password is wrong."},
+        )
+    if request.new_password == request.current_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "same_password", "message": "Choose a password you haven't used here."},
+        )
+    user = db.get(User, current_user.id)
+    user.password_hash = hash_password(request.new_password)
+    now = datetime.now(timezone.utc)
+    for session in db.scalars(
+        select(RefreshSession).where(
+            RefreshSession.user_id == user.id, RefreshSession.revoked_at.is_(None)
+        )
+    ):
+        session.revoked_at = now
+    db.commit()
