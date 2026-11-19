@@ -24,6 +24,7 @@ import Announcements from "../components/admin/screens/Announcements";
 import ChapterHome from "../components/admin/screens/ChapterHome";
 import Members from "../components/admin/screens/Members";
 import Requests from "../components/admin/screens/Requests";
+import Team from "../components/admin/screens/Team";
 import Audit from "../components/admin/screens/Audit";
 import Chapters from "../components/admin/screens/Chapters";
 import Courses from "../components/admin/screens/Courses";
@@ -43,6 +44,7 @@ const SCREENS: Record<PageKey, () => React.JSX.Element | null> = {
   reports: Reports,
   users: Users,
   chapters: Chapters,
+  team: Team,
   posts: Posts,
   events: Events,
   live: Live,

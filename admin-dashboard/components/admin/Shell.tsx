@@ -12,6 +12,7 @@ export const NAV: NavItemDef[] = [
   { key: "reports", label: "Reports and moderation", icon: "flag", search: "Search users, chapters, posts, reports…" },
   { key: "users", label: "Users", icon: "user", search: "Search users, chapters, posts, courses…" },
   { key: "chapters", label: "Chapters", icon: "branch", search: "Search chapters, cities, countries…" },
+  { key: "team", label: "Admins and coordinators", icon: "shieldCheck", search: "Search admins, coordinators, chapters…" },
   { key: "posts", label: "Posts and comments", icon: "message", search: "Search users, chapters, posts, comments…" },
   { key: "events", label: "Events", icon: "calendar", search: "Search users, chapters, posts, events…" },
   { key: "live", label: "Live and video", icon: "video", search: "Search live sessions, videos, titles, speakers…" },

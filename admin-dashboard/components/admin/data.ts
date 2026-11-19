@@ -25,6 +25,7 @@ export type PageKey =
   | "resources"
   | "courses"
   | "chapters"
+  | "team"
   | "notifications"
   | "audit"
   | "settings"
