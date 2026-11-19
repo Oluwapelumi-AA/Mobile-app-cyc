@@ -27,7 +27,7 @@ export const NAV_SECONDARY: typeof NAV = [
   { key: "settings", label: "Settings", icon: "settings", search: "Search settings, integrations, preferences…" },
 ];
 
-/** Chapter staff workspace. Coordinators see everything; Moderators moderate. */
+/** The Coordinator's chapter workspace. Resources and courses are admin-only. */
 export const CHAPTER_NAV: (NavItemDef & { coordinatorOnly?: boolean })[] = [
   { key: "overview", label: "Overview", icon: "grid", search: "Search posts, events, members…" },
   { key: "members", label: "Members", icon: "users", search: "Search members by name or email…" },
@@ -35,8 +35,6 @@ export const CHAPTER_NAV: (NavItemDef & { coordinatorOnly?: boolean })[] = [
   { key: "posts", label: "Posts and comments", icon: "message", search: "Search posts and comments…" },
   { key: "events", label: "Events", icon: "calendar", search: "Search events…", coordinatorOnly: true },
   { key: "live", label: "Live and video", icon: "video", search: "Search live sessions and videos…", coordinatorOnly: true },
-  { key: "resources", label: "Spiritual resources", icon: "book", search: "Search resources…", coordinatorOnly: true },
-  { key: "courses", label: "Courses and quizzes", icon: "cap", search: "Search courses and quizzes…", coordinatorOnly: true },
 ];
 
 export const CHAPTER_NAV_SECONDARY: (NavItemDef & { coordinatorOnly?: boolean })[] = [

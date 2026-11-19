@@ -22,8 +22,8 @@ Screens and the endpoints they use:
 | Notifications | `chapters/{id}/announcements`; history from `moderation/audit-logs?action=chapter.announcement_sent` |
 | Reports, Audit log | `moderation/reports`, `moderation/audit-logs` |
 
-Signing in: platform admins get the full dashboard. Chapter coordinators and
-moderators (`me/chapter-staff`) get the chapter staff landing page.
+Signing in: platform admins get the full dashboard. Chapter coordinators
+(`me/chapter-staff`) get their chapter's dashboard.
 
 ## Sample data
 

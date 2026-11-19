@@ -28,10 +28,11 @@ def storage(api):
 @pytest.fixture
 def world(api):
     """A Chapter run by a Coordinator ("mod") with a Member ("alice"), a
-    second Chapter ("private_id") run by "owner", a Guest ("outsider") and
-    an app moderator ("staff")."""
+    second Chapter ("private_id") run by "owner", a Guest ("outsider"), an
+    admin ("staff", who manages resources) and an app moderator ("app_mod")."""
     ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "outsider")}
-    ids["staff"] = api.add_user("staff", AccountRole.MODERATOR)
+    ids["staff"] = api.add_user("staff", AccountRole.ADMIN)
+    ids["app_mod"] = api.add_user("app_mod", AccountRole.MODERATOR)
     cid = api.add_chapter("Abuja")
     private_id = api.add_chapter("Leaders Circle")
     api.add_staff(ids["mod"], cid, "coordinator")
@@ -80,7 +81,7 @@ def upload(api, storage, resource_id, content_type="audio/mpeg", size=1_000):
 # Categories
 
 
-def test_app_moderator_manages_categories(api, world):
+def test_admin_manages_categories(api, world):
     api.act_as(world["staff"])
     response = api.client.post(
         CATEGORIES, json={"name": "Bible Study & Prayer", "description": "Go deeper"}
@@ -144,7 +145,7 @@ def test_deleting_a_category_keeps_its_resources(api, world):
 # Creating and publishing
 
 
-def test_app_moderator_adds_to_app_wide_library(api, world):
+def test_admin_adds_to_app_wide_library(api, world):
     api.act_as(world["staff"])
     category = api.client.post(CATEGORIES, json={"name": "Devotionals"}).json()
     resource = create(
@@ -173,16 +174,27 @@ def test_app_moderator_adds_to_app_wide_library(api, world):
     assert body["published_at"] is not None
 
 
-def test_coordinator_creates_chapter_resources(api, world):
-    resource = create(api, world["mod"], chapter_id=world["chapter_id"])
+def test_admin_creates_chapter_resources(api, world):
+    resource = create(api, world["staff"], chapter_id=world["chapter_id"])
     assert resource["chapter_id"] == world["chapter_id"]
+
+
+def test_app_moderators_cannot_manage_categories(api, world):
+    api.act_as(world["app_mod"])
+    assert api.client.post(CATEGORIES, json={"name": "Sermons"}).status_code == 403
 
 
 @pytest.mark.parametrize(
     "who, code",
-    [("alice", "insufficient_role"), ("outsider", "insufficient_role"), ("owner", "insufficient_role")],
+    [
+        ("alice", "insufficient_role"),
+        ("outsider", "insufficient_role"),
+        ("owner", "insufficient_role"),
+        ("mod", "insufficient_role"),  # the Chapter's own Coordinator
+        ("app_mod", "insufficient_role"),
+    ],
 )
-def test_members_and_others_cannot_create_chapter_resources(api, world, who, code):
+def test_only_admins_create_chapter_resources(api, world, who, code):
     api.act_as(world[who])
     response = api.client.post(
         RESOURCES,
@@ -192,7 +204,7 @@ def test_members_and_others_cannot_create_chapter_resources(api, world, who, cod
     assert response.json()["detail"]["code"] == code
 
 
-def test_only_app_moderators_add_to_app_wide_library(api, world):
+def test_only_admins_add_to_app_wide_library(api, world):
     api.act_as(world["owner"])
     response = api.client.post(RESOURCES, json={"kind": "article", "title": "Notes"})
     assert response.status_code == 403
@@ -253,8 +265,8 @@ def test_publishing_twice_keeps_the_date(api, world):
 
 
 def test_members_cannot_publish_or_edit(api, world):
-    resource = create(api, world["mod"], chapter_id=world["chapter_id"])
-    publish(api, world["mod"], resource["id"])
+    resource = create(api, world["staff"], chapter_id=world["chapter_id"])
+    publish(api, world["staff"], resource["id"])
     api.act_as(world["alice"])
     for response in (
         api.client.post(f"{RESOURCES}/{resource['id']}/unpublish"),
@@ -265,11 +277,14 @@ def test_members_cannot_publish_or_edit(api, world):
         assert response.json()["detail"]["code"] == "insufficient_role"
 
 
-def test_app_moderators_manage_chapter_resources(api, world):
-    resource = create(api, world["mod"], chapter_id=world["chapter_id"])
+def test_coordinators_and_app_moderators_cannot_manage_resources(api, world):
+    resource = create(api, world["staff"], chapter_id=world["chapter_id"])
     publish(api, world["staff"], resource["id"])
-    api.act_as(world["staff"])
-    assert api.client.get(f"{RESOURCES}/{resource['id']}").json()["can_manage"] is True
+    for who in ("mod", "app_mod"):
+        api.act_as(world[who])
+        assert api.client.get(f"{RESOURCES}/{resource['id']}").json()["can_manage"] is False
+        response = api.client.patch(f"{RESOURCES}/{resource['id']}", json={"title": "Changed"})
+        assert response.status_code == 403
 
 
 # Editing
@@ -319,7 +334,7 @@ def test_drafts_are_hidden_from_readers(api, world):
 
 
 def test_other_chapters_resources_are_hidden(api, world):
-    resource = published(api, world["owner"], chapter_id=world["private_id"], title="Leaders")
+    resource = published(api, world["staff"], chapter_id=world["private_id"], title="Leaders")
     api.act_as(world["alice"])
     assert api.client.get(f"{RESOURCES}/{resource['id']}").status_code == 404
     assert titles(api.client.get(RESOURCES)) == []
@@ -330,7 +345,7 @@ def test_other_chapters_resources_are_hidden(api, world):
 def test_library_lists_newest_published_first(api, world):
     first = create(api, world["staff"], title="Written first")
     published(api, world["staff"], title="Second")
-    published(api, world["mod"], chapter_id=world["chapter_id"], title="Chapter one")
+    published(api, world["staff"], chapter_id=world["chapter_id"], title="Chapter one")
     publish(api, world["staff"], first["id"])
     api.act_as(world["alice"])
     assert titles(api.client.get(RESOURCES)) == ["Written first", "Chapter one", "Second"]
@@ -340,8 +355,8 @@ def test_library_lists_newest_published_first(api, world):
 
 
 def test_guests_see_granted_chapter_resources(api, world):
-    granted = published(api, world["mod"], chapter_id=world["chapter_id"], title="Granted")
-    published(api, world["mod"], chapter_id=world["chapter_id"], title="Not granted")
+    granted = published(api, world["staff"], chapter_id=world["chapter_id"], title="Granted")
+    published(api, world["staff"], chapter_id=world["chapter_id"], title="Not granted")
     api.grant(world["outsider"], uuid.UUID(world["chapter_id"]), resource_id=uuid.UUID(granted["id"]))
     api.act_as(world["outsider"])
     assert titles(api.client.get(RESOURCES)) == ["Granted"]
@@ -369,7 +384,7 @@ def test_library_filters(api, world):
               language="en-NG", author_name="Pastor Ade")
     published(api, world["staff"], title="Ìfẹ́ Ọlọ́run", language="yo",
               scripture_reference="John 3:16")
-    published(api, world["mod"], chapter_id=world["chapter_id"], title="Youth notes",
+    published(api, world["staff"], chapter_id=world["chapter_id"], title="Youth notes",
               language="en")
 
     api.act_as(world["alice"])
@@ -387,26 +402,15 @@ def test_library_filters(api, world):
     assert response.json()["detail"]["code"] == "invalid_language"
 
 
-def test_drafts_list_shows_what_you_manage(api, world):
+def test_only_admins_see_drafts(api, world):
     create(api, world["staff"], title="App draft")
-    create(api, world["mod"], chapter_id=world["chapter_id"], title="Chapter draft")
-    create(api, world["owner"], chapter_id=world["private_id"], title="Private draft")
+    create(api, world["staff"], chapter_id=world["chapter_id"], title="Chapter draft")
     published(api, world["staff"], title="Live")
 
     api.act_as(world["mod"])
-    assert titles(api.client.get(RESOURCES, params={"drafts": True})) == ["Chapter draft"]
+    assert api.client.get(RESOURCES, params={"drafts": True}).status_code == 403
     api.act_as(world["staff"])
-    assert titles(api.client.get(RESOURCES, params={"drafts": True})) == [
-        "Private draft",
-        "Chapter draft",
-        "App draft",
-    ]
-    api.act_as(world["alice"])
-    assert titles(api.client.get(RESOURCES, params={"drafts": True})) == []
-    response = api.client.get(
-        RESOURCES, params={"drafts": True, "chapter_id": world["chapter_id"]}
-    )
-    assert response.status_code == 403
+    assert titles(api.client.get(RESOURCES, params={"drafts": True})) == ["Chapter draft", "App draft"]
 
 
 def test_delete_removes_file_bookmarks_and_progress(api, world, storage):
@@ -621,7 +625,7 @@ def test_unpublished_bookmarks_drop_out_of_the_list(api, world):
 
 
 def test_leaving_a_chapter_hides_its_bookmarks(api, world):
-    resource = published(api, world["owner"], chapter_id=world["private_id"])
+    resource = published(api, world["staff"], chapter_id=world["private_id"])
     api.act_as(world["owner"])
     api.client.put(f"{RESOURCES}/{resource['id']}/bookmark")
     with api.session_factory() as db:

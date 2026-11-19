@@ -2,12 +2,11 @@
 reading progress.
 
 - Categories (Devotionals, Bible Study, Sermons, ...) are shared by the whole
-  app and managed by app moderators and admins (``users.account_role``).
+  app and managed by platform admins (``users.account_role``).
 - A resource is an ``article`` (text read in the app), ``audio``, ``video``,
   ``document`` (PDF or EPUB) or ``link``. It belongs to a Chapter or to the
-  app-wide library. A Chapter's Coordinator manages its resources; app
-  moderators and admins manage every resource and are the only ones who add
-  to the app-wide library.
+  app-wide library. Only platform admins add and manage resources, for a
+  Chapter or app-wide.
 - Resources start as drafts, seen only by the people who manage them. A
   published Chapter resource is seen by the Chapter's Members and staff, and
   by Guests a Coordinator granted it to; the app-wide library is seen by
@@ -57,7 +56,7 @@ from app.schemas.resource import (
     ResourceUpdate,
 )
 from app.services import chapter_access, notifications, pagination
-from app.services.chapter_access import is_platform_moderator
+from app.services.chapter_access import is_platform_admin, is_platform_moderator
 from app.services.errors import (
     Conflict,
     Forbidden,
@@ -100,10 +99,9 @@ def _now() -> datetime:
 
 
 def _require_platform_moderator(db: Session, user_id: UserId) -> None:
-    if not is_platform_moderator(db, user_id):
-        raise Forbidden(
-            "insufficient_role", "Only app moderators and admins manage categories."
-        )
+    """Categories are managed by platform admins."""
+    if not is_platform_admin(db, user_id):
+        raise Forbidden("insufficient_role", "Only admins manage categories.")
 
 
 def slugify(name: str) -> str:
@@ -199,9 +197,8 @@ def _check_category(db: Session, category_id: uuid.UUID | None) -> None:
 
 
 def _can_manage(db: Session, user_id: UserId, chapter_id: uuid.UUID | None) -> bool:
-    if chapter_id is None:
-        return is_platform_moderator(db, user_id)
-    return chapter_access.can_organize(db, user_id, chapter_id)
+    """Only platform admins manage resources, for a Chapter or app-wide."""
+    return is_platform_admin(db, user_id)
 
 
 def _visible_resource(
@@ -246,16 +243,7 @@ def _managed_resource(
 ) -> Resource:
     resource, can_manage = _visible_resource(db, user_id, resource_id)
     if not can_manage:
-        if resource.chapter_id is None:
-            raise Forbidden(
-                "insufficient_role",
-                "Only app moderators and admins manage the app-wide library.",
-            )
-        raise Forbidden(
-            "insufficient_role",
-            "Only the Chapter's Coordinator and platform moderators or admins "
-            "manage its resources.",
-        )
+        raise Forbidden("insufficient_role", "Only admins manage resources.")
     return resource
 
 
@@ -461,13 +449,9 @@ def list_resources(
             raise chapter_access.CHAPTER_NOT_FOUND
         statement = statement.where(Resource.chapter_id == chapter_id)
     if drafts:
+        if not is_platform_admin(db, user_id):
+            raise Forbidden("insufficient_role", "Only admins see draft resources.")
         statement = statement.where(Resource.status == DRAFT)
-        if chapter_id is not None:
-            chapter_access.require_organize(db, user_id, chapter_id)
-        else:
-            managed = chapter_access.organized_chapter_ids(db, user_id)
-            if managed is not None:
-                statement = statement.where(Resource.chapter_id.in_(managed))
         sort_column, sort_attr = Resource.created_at, "created_at"
     else:
         statement = statement.where(_published_and_visible(db, user_id))
@@ -539,12 +523,8 @@ def _require_complete(resource: Resource) -> None:
 def create_resource(db: Session, user_id: UserId, data: ResourceCreate) -> ResourceRead:
     if data.chapter_id is not None:
         chapter_access.get_active_chapter(db, data.chapter_id)
-        chapter_access.require_organize(db, user_id, data.chapter_id)
-    elif not is_platform_moderator(db, user_id):
-        raise Forbidden(
-            "insufficient_role",
-            "Only app moderators and admins add to the app-wide library.",
-        )
+    if not is_platform_admin(db, user_id):
+        raise Forbidden("insufficient_role", "Only admins add resources.")
     _check_category(db, data.category_id)
 
     resource = Resource(

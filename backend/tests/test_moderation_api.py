@@ -15,10 +15,11 @@ EVENTS = "/api/v1/events"
 
 @pytest.fixture
 def world(api):
-    """The Abuja Fellowship Chapter with a Coordinator ("owner"), a Moderator
-    ("mod", assigned through the API) and two Members; a second Chapter run by
+    """The Abuja Fellowship Chapter with a Coordinator ("owner"), an app
+    moderator ("mod") and two Members; a second Chapter run by
     "other" with a Member ("carol"); an app moderator and an admin."""
-    ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "other", "carol")}
+    ids = {name: api.add_user(name) for name in ("owner", "alice", "bob", "other", "carol")}
+    ids["mod"] = api.add_user("mod", AccountRole.MODERATOR)
     ids["staff"] = api.add_user("staff", AccountRole.MODERATOR)
     ids["admin"] = api.add_user("admin", AccountRole.ADMIN)
     cid = api.add_chapter("Abuja Fellowship")
@@ -30,9 +31,6 @@ def world(api):
         api.add_member(ids[name], cid, name.title())
         api.add_profile(ids[name], bio=f"I am {name}")
     api.add_member(ids["carol"], other_cid, "Carol")
-    api.act_as(ids["admin"])
-    response = api.client.put(f"{CHAPTERS}/{cid}/staff/{ids['mod']}", json={"role": "moderator"})
-    assert response.status_code == 200, response.text
     return {"chapter_id": str(cid), "other_chapter_id": str(other_cid), **ids}
 
 
@@ -190,9 +188,9 @@ def test_user_event_resource_and_chapter_reports(api, world):
     chapter_report = reported(api, world["alice"], "chapter", world["chapter_id"])
 
     # Chapter content goes to the Chapter's staff; the Chapter itself to app staff.
-    mod_ids = {item["id"] for item in queue(api, world["mod"])}
-    assert event_report["id"] in mod_ids
-    assert chapter_report["id"] not in mod_ids
+    coordinator_ids = {item["id"] for item in queue(api, world["owner"])}
+    assert event_report["id"] in coordinator_ids
+    assert chapter_report["id"] not in coordinator_ids
     staff_ids = {item["id"] for item in queue(api, world["staff"], app_wide=True)}
     assert staff_ids == {snapshot["id"], chapter_report["id"]}
 
@@ -206,7 +204,7 @@ def test_queue_is_scoped_to_chapters_you_moderate(api, world):
     other_post = post(api, world["other"], world["other_chapter_id"], body="Hello")
     reported(api, world["carol"], "post", other_post)
 
-    assert len(queue(api, world["mod"])) == 1
+    assert len(queue(api, world["owner"])) == 1
     assert len(queue(api, world["other"])) == 1
     assert len(queue(api, world["staff"])) == 2
     assert queue(api, world["alice"]) == []
@@ -252,7 +250,7 @@ def test_dismissing_closes_every_open_report_on_the_target(api, world):
     assert queue(api, world["mod"]) == []
     assert len(queue(api, world["mod"], status="dismissed")) == 2
     assert len(queue(api, world["mod"], status="any")) == 2
-    assert audit_actions(api) == ["chapter_staff.assigned", "report.dismissed"]
+    assert audit_actions(api) == ["report.dismissed"]
 
     response = resolve(api, world["mod"], first["id"], status="actioned")
     assert response.status_code == 409
@@ -326,13 +324,13 @@ def test_already_deleted_content_is_not_removed_twice(api, world):
     assert response.json()["content_removed"] is False
 
 
-def test_moderators_cannot_review_reports_about_themselves(api, world):
-    post_id = post(api, world["mod"], world["chapter_id"])
+def test_coordinators_cannot_review_reports_about_themselves(api, world):
+    post_id = post(api, world["owner"], world["chapter_id"])
     report_id = reported(api, world["alice"], "post", post_id)["id"]
-    response = resolve(api, world["mod"], report_id, status="dismissed")
+    response = resolve(api, world["owner"], report_id, status="dismissed")
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "cannot_review_own"
-    assert resolve(api, world["owner"], report_id, status="dismissed").status_code == 200
+    assert resolve(api, world["staff"], report_id, status="dismissed").status_code == 200
 
 
 def test_members_cannot_review(api, world):
@@ -410,17 +408,11 @@ def test_ban_someone_who_is_not_a_member(api, world):
 def test_ban_rules(api, world):
     cid = world["chapter_id"]
     assert ban(api, world["alice"], cid, world["bob"]).status_code == 403
-    response = ban(api, world["mod"], cid, world["mod"])
+    response = ban(api, world["owner"], cid, world["owner"])
     assert response.json()["detail"]["code"] == "cannot_ban_self"
-    # A Moderator can't ban the Coordinator, or another Moderator.
-    response = ban(api, world["mod"], cid, world["owner"])
-    assert response.json()["detail"]["code"] == "insufficient_role"
-    api.act_as(world["admin"])
-    api.client.put(f"{CHAPTERS}/{cid}/staff/{world['alice']}", json={"role": "moderator"})
-    response = ban(api, world["mod"], cid, world["alice"])
-    assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "insufficient_role"
-    response = ban(api, world["mod"], cid, uuid.uuid4())
+    # Another Chapter's Coordinator can't ban here.
+    assert ban(api, world["other"], cid, world["bob"]).status_code == 403
+    response = ban(api, world["owner"], cid, uuid.uuid4())
     assert response.json()["detail"]["code"] == "user_not_found"
     # Nobody bans app staff.
     response = ban(api, world["owner"], cid, world["staff"])
@@ -436,21 +428,21 @@ def test_ban_rules(api, world):
 
 def test_audit_log_access(api, world):
     cid = world["chapter_id"]
-    ban(api, world["mod"], cid, world["bob"])
+    ban(api, world["owner"], cid, world["bob"])
 
     api.act_as(world["staff"])
     items = api.client.get(AUDIT).json()["items"]
-    assert [item["action"] for item in items] == ["member.banned", "chapter_staff.assigned"]
-    assert items[0]["actor_id"] == str(world["mod"])
+    assert [item["action"] for item in items] == ["member.banned"]
+    assert items[0]["actor_id"] == str(world["owner"])
     assert items[0]["chapter_id"] == cid
-    assert items[1]["data"] == {"from": None, "to": "moderator"}
     filtered = api.client.get(AUDIT, params={"action": "member.banned"}).json()["items"]
     assert len(filtered) == 1
 
-    api.act_as(world["mod"])
+    # The Coordinator sees their own Chapter's log, not the whole app's.
+    api.act_as(world["owner"])
     response = api.client.get(AUDIT)
     assert response.status_code == 403
-    assert len(api.client.get(AUDIT, params={"chapter_id": cid}).json()["items"]) == 2
+    assert len(api.client.get(AUDIT, params={"chapter_id": cid}).json()["items"]) == 1
 
     api.act_as(world["alice"])
     assert api.client.get(AUDIT, params={"chapter_id": cid}).status_code == 403
@@ -460,7 +452,7 @@ def test_audit_log_access(api, world):
 
 
 def test_audit_log_pages(api, world):
-    for _ in range(3):
+    for _ in range(4):
         post_id = post(api, world["bob"], world["chapter_id"])
         api.act_as(world["mod"])
         api.client.delete(f"/api/v1/posts/{post_id}")

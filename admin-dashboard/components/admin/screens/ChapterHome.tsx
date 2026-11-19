@@ -21,7 +21,6 @@ type Dashboard = {
   is_active: boolean;
   member_count: number;
   coordinator_count: number;
-  moderator_count: number;
   post_count: number;
   upcoming_event_count: number;
   published_resource_count: number;
@@ -76,7 +75,7 @@ export default function ChapterHome() {
     <>
       <PageHeader
         title={scope.name}
-        subtitle={coordinator ? "Run your chapter: members, content, events and announcements." : "Keep your chapter safe: review reports and moderate posts."}
+        subtitle="Run your chapter: members, events, live sessions, announcements and moderation."
       />
 
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -159,9 +158,8 @@ export default function ChapterHome() {
 
           <Card className="p-5">
             <CardHeader title="Chapter team" />
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniStat icon="star" value={n(dash?.coordinator_count)} label="Coordinators" />
-              <MiniStat icon="shield" value={n(dash?.moderator_count)} label="Moderators" />
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              <MiniStat icon="star" value={n(dash?.coordinator_count)} label="Coordinator" />
             </div>
           </Card>
 
@@ -172,7 +170,6 @@ export default function ChapterHome() {
                 <QuickTile primary icon="megaphone" label="Send announcement" onClick={() => navigate("announcements")} />
                 <QuickTile icon="calendar" label="Create event" onClick={() => navigate("events")} />
                 <QuickTile icon="broadcast" label="Go live" onClick={() => navigate("live")} />
-                <QuickTile icon="book" label="Add resource" onClick={() => navigate("resources")} />
               </div>
             </Card>
           ) : null}

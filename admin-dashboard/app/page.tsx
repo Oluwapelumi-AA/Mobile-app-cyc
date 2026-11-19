@@ -64,7 +64,7 @@ const SCOPE_KEY = "cyc.chapterScope";
 
 type ChapterCounts = { pending_access_request_count: number; open_report_count: number };
 
-/** Menu for a chapter staff role. Moderators get the moderation pages only. */
+/** Menu for a chapter Coordinator. */
 function chapterMenu(role: ChapterScope["role"]) {
   const allowed = (item: { coordinatorOnly?: boolean }) => role === "coordinator" || !item.coordinatorOnly;
   return {
@@ -97,7 +97,7 @@ type Me = {
 type CoordinatorAssignment = {
   chapter_id: string;
   chapter_name: string;
-  role: "coordinator" | "moderator";
+  role: "coordinator";
 };
 
 type DashboardMode = "admin" | "coordinator";
@@ -201,7 +201,7 @@ export default function Home() {
 
 
       // A non-admin account can enter only with a chapter staff role
-      // (Coordinator or Moderator).
+      // (Coordinator).
       const assignments = await api<CoordinatorAssignment[]>("me/chapter-staff");
 
       if (!Array.isArray(assignments) || assignments.length === 0) {
@@ -210,7 +210,7 @@ export default function Home() {
         setMode(null);
         setSignedIn(false);
         setError(
-          "Your account isn't a chapter coordinator or moderator. Please contact a platform administrator.",
+          "Your account isn't a chapter coordinator. Please contact a platform administrator.",
         );
         return;
       }
@@ -476,7 +476,7 @@ export default function Home() {
   /* ---------- chapter staff workspace ---------- */
   if (mode === "coordinator" && scope && menu) {
     const Screen = current === "overview" ? ChapterHome : SCREENS[current];
-    const roleLabel = scope.role === "coordinator" ? "Coordinator" : "Moderator";
+    const roleLabel = "Coordinator";
 
     return (
       <AdminContext.Provider value={ctx}>

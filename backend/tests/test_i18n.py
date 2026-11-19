@@ -90,11 +90,12 @@ def test_notifications_use_each_recipients_language(api):
         api.act_as(ids[name])
         api.client.post(PROFILE, json={"display_name": name.title(), "language_code": language})
     admin = api.add_user("admin", AccountRole.ADMIN)
-    cid = api.add_chapter("Abuja Fellowship")
     api.act_as(admin)
+    # One Coordinator per Chapter, so each gets their own.
     for name in ("ana", "luc", "ada"):
+        cid = api.add_chapter("Abuja Fellowship", slug=f"abuja-{name}")
         response = api.client.put(
-            f"{CHAPTERS}/{cid}/staff/{ids[name]}", json={"role": "moderator"}
+            f"{CHAPTERS}/{cid}/staff/{ids[name]}", json={"role": "coordinator"}
         )
         assert response.status_code == 200, response.text
 
@@ -103,9 +104,9 @@ def test_notifications_use_each_recipients_language(api):
             user_id: title
             for user_id, title in db.execute(select(Notification.user_id, Notification.title))
         }
-    assert titles[ids["ana"]] == "Agora você é moderador de Abuja Fellowship"
-    assert titles[ids["luc"]] == "Vous êtes maintenant modérateur de Abuja Fellowship"
-    assert titles[ids["ada"]] == "You are now a Moderator of Abuja Fellowship"
+    assert titles[ids["ana"]] == "Agora você é coordenador de Abuja Fellowship"
+    assert titles[ids["luc"]] == "Vous êtes maintenant coordinateur de Abuja Fellowship"
+    assert titles[ids["ada"]] == "You are now the Coordinator of Abuja Fellowship"
 
 
 def test_email_footer_is_translated(api):

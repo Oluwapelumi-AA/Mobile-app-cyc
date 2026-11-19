@@ -20,7 +20,7 @@ def test_delete_account_anonymises_and_signs_out(api):
     lagos = api.add_chapter("Lagos")
     user_id, headers, refresh = signup(api)
     api.add_member(user_id, lagos, "Ada Obi")
-    api.add_staff(user_id, lagos, "moderator")
+    api.add_staff(user_id, lagos, "coordinator")
     api.act_as(user_id)
     post = api.client.post(f"{V1}/chapters/{lagos}/posts", json={"body": "Hello all"}).json()
 

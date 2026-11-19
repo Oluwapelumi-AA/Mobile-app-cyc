@@ -50,17 +50,15 @@ class ChapterRole(str, Enum):
     PLATFORM_ADMIN = "platform_admin"
     PLATFORM_MODERATOR = "platform_moderator"
     COORDINATOR = "coordinator"
-    MODERATOR = "moderator"
     MEMBER = "member"
 
 
 _RANK = {
     None: 0,
     ChapterRole.MEMBER: 1,
-    ChapterRole.MODERATOR: 2,
-    ChapterRole.COORDINATOR: 3,
-    ChapterRole.PLATFORM_MODERATOR: 4,
-    ChapterRole.PLATFORM_ADMIN: 5,
+    ChapterRole.COORDINATOR: 2,
+    ChapterRole.PLATFORM_MODERATOR: 3,
+    ChapterRole.PLATFORM_ADMIN: 4,
 }
 
 
@@ -136,8 +134,6 @@ def chapter_role(db: Session, user_id: UserId, chapter_id: uuid.UUID) -> Chapter
     staff = staff_role(db, user_id, chapter_id)
     if staff == ChapterStaffRole.COORDINATOR:
         return ChapterRole.COORDINATOR
-    if staff == ChapterStaffRole.MODERATOR:
-        return ChapterRole.MODERATOR
     if member_chapter_id(db, user_id) == chapter_id:
         return ChapterRole.MEMBER
     return None
@@ -255,24 +251,23 @@ def require_participate(db: Session, user_id: UserId, chapter_id: uuid.UUID) -> 
 
 def can_moderate(db: Session, user_id: UserId, chapter_id: uuid.UUID) -> bool:
     """Remove content, review reports and ban people in this Chapter."""
-    return rank(chapter_role(db, user_id, chapter_id)) >= rank(ChapterRole.MODERATOR)
+    return rank(chapter_role(db, user_id, chapter_id)) >= rank(ChapterRole.COORDINATOR)
 
 
 def require_moderate(db: Session, user_id: UserId, chapter_id: uuid.UUID) -> ChapterRole:
     chapter = get_chapter(db, chapter_id)
     _active_or_staff(db, user_id, chapter)
     role = chapter_role(db, user_id, chapter_id)
-    if rank(role) < rank(ChapterRole.MODERATOR):
+    if rank(role) < rank(ChapterRole.COORDINATOR):
         raise Forbidden(
             "insufficient_role",
-            "Only this Chapter's Moderators, its Coordinator and platform "
-            "moderators or admins can do this.",
+            "Only this Chapter's Coordinator and platform moderators or admins can do this.",
         )
     return role
 
 
 def can_organize(db: Session, user_id: UserId, chapter_id: uuid.UUID) -> bool:
-    """Create and manage the Chapter's events, meetings and resources."""
+    """Create and manage the Chapter's events and meetings."""
     return rank(chapter_role(db, user_id, chapter_id)) >= rank(ChapterRole.COORDINATOR)
 
 
@@ -323,7 +318,7 @@ def readable_chapter_ids(db: Session, user_id: UserId) -> Select | None:
 
 
 def organized_chapter_ids(db: Session, user_id: UserId) -> Select | None:
-    """Chapters whose events, meetings and resources the user manages.
+    """Chapters whose events and meetings the user manages.
 
     None means every Chapter (platform staff).
     """

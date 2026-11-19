@@ -1,7 +1,6 @@
 """Running a Chapter: staff, members, announcements and the Chapter dashboard.
 
-- Platform Admins give and take staff roles: one Coordinator per Chapter and
-  any number of Moderators. Someone holds at most one staff role per Chapter.
+- Platform Admins choose each Chapter's Coordinator (one per Chapter).
 - Platform Admins make someone an official Member of a Chapter (with a
   department), move them to another Chapter or remove them from it.
 - A Chapter's Coordinator (and platform Admins) see its Members, edit their
@@ -94,7 +93,7 @@ def list_staff(
     chapter_id: uuid.UUID,
     role: ChapterStaffRole | None = None,
 ) -> list[StaffRead]:
-    """Coordinator first, then Moderators in the order they were added."""
+    """The Chapter's Coordinator."""
     chapter_access.require_read(db, actor_id, chapter_id)
     statement = select(ChapterStaff).where(ChapterStaff.chapter_id == chapter_id)
     if role is not None:
@@ -208,7 +207,7 @@ def remove_staff(
 
 
 def list_my_staff_roles(db: Session, user_id: UserId) -> list[MyStaffRoleRead]:
-    """The authenticated user's own Coordinator and Moderator roles."""
+    """The Chapters the authenticated user coordinates."""
     rows = db.execute(
         select(ChapterStaff.chapter_id, Chapter.name, ChapterStaff.role)
         .join(Chapter, Chapter.id == ChapterStaff.chapter_id)
@@ -485,12 +484,6 @@ def chapter_dashboard(db: Session, actor_id: UserId, chapter_id: uuid.UUID) -> C
             ChapterStaff,
             ChapterStaff.chapter_id == chapter_id,
             ChapterStaff.role == ChapterStaffRole.COORDINATOR.value,
-        ),
-        moderator_count=_count(
-            db,
-            ChapterStaff,
-            ChapterStaff.chapter_id == chapter_id,
-            ChapterStaff.role == ChapterStaffRole.MODERATOR.value,
         ),
         post_count=_count(db, Post, Post.chapter_id == chapter_id),
         upcoming_event_count=_count(

@@ -15,9 +15,11 @@ QUESTIONS = [
 @pytest.fixture
 def world(api):
     """A Chapter run by "coord" with a Member ("alice"), a second Chapter, a
-    Guest ("guest") and an app moderator ("staff")."""
+    Guest ("guest"), an app moderator ("staff") and an admin ("admin", who
+    manages courses)."""
     ids = {name: api.add_user(name) for name in ("coord", "alice", "guest", "other")}
     ids["staff"] = api.add_user("staff", AccountRole.MODERATOR)
+    ids["admin"] = api.add_user("admin", AccountRole.ADMIN)
     cid = api.add_chapter("Abuja")
     other_cid = api.add_chapter("Ibadan")
     api.add_staff(ids["coord"], cid, "coordinator")
@@ -41,7 +43,7 @@ def add_lesson(api, course_id, title="Lesson one"):
 
 
 def published_course(api, world, **fields):
-    course = create_course(api, world["coord"], chapter_id=world["chapter_id"], **fields)
+    course = create_course(api, world["admin"], chapter_id=world["chapter_id"], **fields)
     add_lesson(api, course["id"], "Lesson one")
     course = add_lesson(api, course["id"], "Lesson two")
     quiz = api.client.post(f"{COURSES}/{course['id']}/quizzes", json={"title": "Check", "questions": QUESTIONS})
@@ -51,8 +53,8 @@ def published_course(api, world, **fields):
     return response.json(), quiz.json()
 
 
-def test_coordinator_creates_draft_course(api, world):
-    course = create_course(api, world["coord"], chapter_id=world["chapter_id"], instructor_name="Pastor Ade")
+def test_admin_creates_draft_course(api, world):
+    course = create_course(api, world["admin"], chapter_id=world["chapter_id"], instructor_name="Pastor Ade")
     assert course["status"] == "draft"
     assert course["can_manage"] is True
     assert course["lessons"] == []
@@ -65,22 +67,26 @@ def test_members_cannot_create_courses(api, world):
     assert response.status_code == 403
 
 
-def test_only_platform_staff_create_app_wide_courses(api, world):
-    api.act_as(world["coord"])
-    assert api.client.post(COURSES, json={"title": "Global"}).status_code == 403
-    course = create_course(api, world["staff"], title="Global course")
+def test_only_admins_create_courses(api, world):
+    # Not the Chapter's Coordinator, and not app moderators.
+    for who in ("coord", "staff"):
+        api.act_as(world[who])
+        assert api.client.post(COURSES, json={"title": "Global"}).status_code == 403
+        response = api.client.post(COURSES, json={"title": "Chapter", "chapter_id": world["chapter_id"]})
+        assert response.status_code == 403
+    course = create_course(api, world["admin"], title="Global course")
     assert course["chapter_id"] is None
 
 
 def test_publish_needs_a_lesson(api, world):
-    course = create_course(api, world["coord"], chapter_id=world["chapter_id"])
+    course = create_course(api, world["admin"], chapter_id=world["chapter_id"])
     response = api.client.post(f"{COURSES}/{course['id']}/publish")
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "lessons_required"
 
 
 def test_lessons_are_ordered(api, world):
-    course = create_course(api, world["coord"], chapter_id=world["chapter_id"])
+    course = create_course(api, world["admin"], chapter_id=world["chapter_id"])
     add_lesson(api, course["id"], "First")
     course = add_lesson(api, course["id"], "Second")
     assert [lesson["title"] for lesson in course["lessons"]] == ["First", "Second"]
@@ -94,7 +100,7 @@ def test_lessons_are_ordered(api, world):
 
 
 def test_drafts_are_hidden_from_members(api, world):
-    course = create_course(api, world["coord"], chapter_id=world["chapter_id"])
+    course = create_course(api, world["admin"], chapter_id=world["chapter_id"])
     api.act_as(world["alice"])
     assert api.client.get(f"{COURSES}/{course['id']}").status_code == 404
     assert api.client.get(COURSES).json()["items"] == []
@@ -171,7 +177,7 @@ def test_managers_see_attempts_and_overview(api, world):
     api.act_as(world["alice"])
     assert api.client.get(f"{COURSES}/quiz-attempts").json()["items"] == []
 
-    api.act_as(world["coord"])
+    api.act_as(world["admin"])
     attempts = api.client.get(f"{COURSES}/quiz-attempts").json()["items"]
     assert len(attempts) == 1 and attempts[0]["quiz_title"] == "Check"
     overview = api.client.get(f"{COURSES}/overview").json()
@@ -185,12 +191,14 @@ def test_managers_see_attempts_and_overview(api, world):
     }
     assert len(overview["recent_attempts"]) == 1
 
-    api.act_as(world["staff"])
-    assert api.client.get(f"{COURSES}/overview").json()["courses"] == 1
+    # Coordinators and app moderators don't manage courses.
+    for who in ("coord", "staff"):
+        api.act_as(world[who])
+        assert api.client.get(f"{COURSES}/overview").json()["courses"] == 0
 
 
 def test_quiz_rejects_bad_answer_key(api, world):
-    course = create_course(api, world["coord"], chapter_id=world["chapter_id"])
+    course = create_course(api, world["admin"], chapter_id=world["chapter_id"])
     bad = [{"prompt": "Pick one", "options": ["A", "B"], "correct_index": 5}]
     response = api.client.post(f"{COURSES}/{course['id']}/quizzes", json={"title": "Bad", "questions": bad})
     assert response.status_code == 422
@@ -201,7 +209,7 @@ def test_update_unpublish_and_delete(api, world):
     api.act_as(world["alice"])
     assert api.client.patch(f"{COURSES}/{course['id']}", json={"title": "Hijack"}).status_code == 403
 
-    api.act_as(world["coord"])
+    api.act_as(world["admin"])
     updated = api.client.patch(f"{COURSES}/{course['id']}", json={"title": "Faith 101", "level": "advanced", "summary": None})
     assert updated.status_code == 200
     assert updated.json()["title"] == "Faith 101"
@@ -218,10 +226,12 @@ def test_update_unpublish_and_delete(api, world):
 
 def test_managed_filter(api, world):
     published_course(api, world)
-    create_course(api, world["staff"], title="Global course")
-    api.act_as(world["coord"])
+    create_course(api, world["admin"], title="Global course")
+    api.act_as(world["admin"])
     managed = api.client.get(f"{COURSES}?managed=true").json()["items"]
-    assert [c["title"] for c in managed] == ["Foundations of Faith"]
+    assert {c["title"] for c in managed} == {"Foundations of Faith", "Global course"}
+    api.act_as(world["coord"])
+    assert api.client.get(f"{COURSES}?managed=true").json()["items"] == []
 
 
 def test_certificates_list_completed_learners(api, world):
@@ -233,7 +243,7 @@ def test_certificates_list_completed_learners(api, world):
         api.client.put(f"{LESSONS}/{lesson['id']}/completion")
 
     assert api.client.get(f"{COURSES}/certificates").json()["items"] == []
-    api.act_as(world["coord"])
+    api.act_as(world["admin"])
     certs = api.client.get(f"{COURSES}/certificates").json()["items"]
     assert len(certs) == 1
     assert certs[0]["user_name"] == "Alice"

@@ -56,15 +56,15 @@ announcements. Who can do what is decided in one place,
 
 | Role | Where it's stored | What it allows |
 | --- | --- | --- |
-| Platform admin | `users.account_role = admin` | Everything: chapters, staff, membership |
-| Platform moderator | `users.account_role = moderator` | Read and moderate every chapter; manage events, meetings, resources |
-| Coordinator (one per chapter) | `chapter_staff.role = coordinator` | Runs the chapter: events, meetings, resources, announcements, access requests and grants, moderation |
-| Chapter moderator | `chapter_staff.role = moderator` | Moderates the chapter's posts, comments, reports and bans |
+| Platform admin | `users.account_role = admin` | Everything: chapters, coordinators, membership, resources and courses |
+| Platform moderator | `users.account_role = moderator` | Read and moderate every chapter; manage events and meetings |
+| Coordinator (one per chapter) | `chapter_staff.role = coordinator` | Runs the chapter: events, meetings, announcements, access requests and grants, and moderation (reports, posts, bans) |
 | Member | `user_profiles.chapter_id` + `users.membership_status = member` | Reads the chapter; posts, comments, reacts, registers |
 | Guest | anyone else | Reads only items a coordinator granted them |
 
 Admins make someone a member with `PATCH /api/v1/admin/users/{id}/membership`
-and appoint staff with `PUT /api/v1/chapters/{id}/staff/{user_id}`.
+and appoint a chapter's coordinator with `POST /api/v1/admin/coordinators`.
+Resources and courses are added and managed by platform admins only.
 
 ## The first admin
 

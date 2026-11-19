@@ -10,13 +10,13 @@ CHAPTERS = "/api/v1/chapters"
 
 @pytest.fixture
 def world(api):
-    """A Chapter with a Coordinator ("owner"), a Moderator and two Members,
-    plus an outsider who belongs to another Chapter."""
-    ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "outsider")}
+    """A Chapter with a Coordinator ("owner") and two Members, an app
+    moderator ("mod"), plus an outsider who belongs to another Chapter."""
+    ids = {name: api.add_user(name) for name in ("owner", "alice", "bob", "outsider")}
+    ids["mod"] = api.add_user("mod", AccountRole.MODERATOR)
     cid = api.add_chapter("Abuja")
     other = api.add_chapter("Lagos")
     api.add_staff(ids["owner"], cid, "coordinator")
-    api.add_staff(ids["mod"], cid, "moderator")
     for name in ("alice", "bob"):
         api.add_member(ids[name], cid, name.title())
     api.add_member(ids["outsider"], other, "Outsider")
