@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { api, matches, useAdmin, useLiveList } from "../data";
-import { useToast } from "../dialogs";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { api, matches, useAdmin, useLiveList, scopedPath } from "../data";
+import { useConfirm, useToast } from "../dialogs";
 import { Icon } from "../icons";
 import { type ApiResource, mapResource } from "../mappers";
 import { type ResourceRow, sampleResources } from "../sample";
+import ResourceForm, { type ResourceCategory } from "./ResourceForm";
 import {
   Avatar,
   Badge,
@@ -58,9 +59,25 @@ const TYPE_COLOR: Record<ResourceRow["type"], string> = {
 
 type TabKey = "all" | ResourceRow["type"];
 
+/** Put a resource under a tab by its category name, e.g. "Sermons" → Sermon. */
+function typeFromCategory(
+  name: string | undefined,
+): ResourceRow["type"] | null {
+  const n = (name ?? "").toLowerCase();
+  if (n.includes("sermon")) return "Sermon";
+  if (n.includes("devotion")) return "Devotional";
+  if (n.includes("bible") || n.includes("study")) return "Bible Study";
+  if (n.includes("article")) return "Article";
+  return null;
+}
+
 export default function Resources() {
-  const { globalSearch } = useAdmin();
-  const data = useLiveList<ApiResource, ResourceRow>("resources?limit=50", mapResource, sampleResources);
+  const { globalSearch, scope } = useAdmin();
+  const data = useLiveList<ApiResource, ResourceRow>(
+    scopedPath("resources?limit=50", scope),
+    mapResource,
+    sampleResources,
+  );
   const [tab, setTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");
@@ -69,11 +86,65 @@ export default function Resources() {
   const [sort, setSort] = useState("newest");
   const [range, setRange] = useState("30");
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [form, setForm] = useState<{ id: string | null } | null>(null);
+  const [categoryList, setCategoryList] = useState<ResourceCategory[]>([]);
+  const { ask, dialog } = useConfirm();
   const toast = useToast();
   const sample = data.mode === "sample";
+  const live = data.mode === "live" || data.mode === "empty";
 
-  const items = data.items;
-  const count = (t: ResourceRow["type"]) => items.filter((r) => r.type === t).length;
+  const loadCategories = useCallback(() => {
+    api<ResourceCategory[]>("resource-categories")
+      .then((rows) => setCategoryList(rows ?? []))
+      .catch(() => setCategoryList([]));
+  }, []);
+  useEffect(loadCategories, [loadCategories]);
+
+  const items = useMemo(
+    () =>
+      data.items.map((r) => {
+        if (!r.categoryId)
+          return sample ? r : { ...r, category: "Uncategorized" };
+        const name = categoryList.find((c) => c.id === r.categoryId)?.name;
+        return {
+          ...r,
+          category: name ?? r.category,
+          type: typeFromCategory(name) ?? r.type,
+        };
+      }),
+    [data.items, categoryList, sample],
+  );
+
+  const openForm = (id: string | null) => {
+    if (sample) {
+      toast.error("Connect the backend to add resources.");
+      return;
+    }
+    setForm({ id });
+  };
+
+  const remove = (r: ResourceRow) =>
+    ask({
+      title: "Delete resource",
+      message: `“${r.title}” will be deleted for everyone, with its bookmarks and progress.`,
+      confirmLabel: "Delete",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await api(`resources/${r.id}`, { method: "DELETE" });
+          data.setItems((rows) => rows.filter((x) => x.id !== r.id));
+          toast.success("Resource deleted.");
+        } catch (err) {
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : "Could not delete the resource.",
+          );
+        }
+      },
+    });
+  const count = (t: ResourceRow["type"]) =>
+    items.filter((r) => r.type === t).length;
   const categories = [...new Set(items.map((r) => r.category))];
   const filtered = items
     .filter(
@@ -82,10 +153,20 @@ export default function Resources() {
         (type === "all" || r.type === type) &&
         (category === "all" || r.category === category) &&
         (status === "all" || r.status === status) &&
-        matches(search || globalSearch, r.title, r.summary, r.author, r.category),
+        matches(
+          search || globalSearch,
+          r.title,
+          r.summary,
+          r.author,
+          r.category,
+        ),
     )
     .sort((a, b) =>
-      sort === "views" ? (b.views ?? -1) - (a.views ?? -1) : sort === "oldest" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date),
+      sort === "views"
+        ? (b.views ?? -1) - (a.views ?? -1)
+        : sort === "oldest"
+          ? a.date.localeCompare(b.date)
+          : b.date.localeCompare(a.date),
     );
   const paged = usePaged(filtered, 10);
   const sel = useSelection(paged.slice.map((r) => r.id));
@@ -94,16 +175,39 @@ export default function Resources() {
 
   const setPublished = async (r: ResourceRow, publish: boolean) => {
     try {
-      if (data.mode === "live") await api(`resources/${r.id}/${publish ? "publish" : "unpublish"}`, { method: "POST" });
-      data.setItems((rows) => rows.map((x) => (x.id === r.id ? { ...x, status: publish ? "Published" : "Draft" } : x)));
-      toast.success(publish ? "Resource published." : "Resource moved to drafts.");
+      if (data.mode === "live")
+        await api(`resources/${r.id}/${publish ? "publish" : "unpublish"}`, {
+          method: "POST",
+        });
+      data.setItems((rows) =>
+        rows.map((x) =>
+          x.id === r.id ? { ...x, status: publish ? "Published" : "Draft" } : x,
+        ),
+      );
+      toast.success(
+        publish ? "Resource published." : "Resource moved to drafts.",
+      );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not update the resource.");
+      toast.error(
+        err instanceof Error ? err.message : "Could not update the resource.",
+      );
     }
   };
 
-  const types: ResourceRow["type"][] = ["Sermon", "Devotional", "Bible Study", "Article", "Other"];
-  const plural: Record<ResourceRow["type"], string> = { Sermon: "Sermons", Devotional: "Devotionals", "Bible Study": "Bible studies", Article: "Articles", Other: "Other" };
+  const types: ResourceRow["type"][] = [
+    "Sermon",
+    "Devotional",
+    "Bible Study",
+    "Article",
+    "Other",
+  ];
+  const plural: Record<ResourceRow["type"], string> = {
+    Sermon: "Sermons",
+    Devotional: "Devotionals",
+    "Bible Study": "Bible studies",
+    Article: "Articles",
+    Other: "Other",
+  };
   const totalViews = items.reduce((s, r) => s + (r.views ?? 0), 0);
 
   return (
@@ -119,25 +223,95 @@ export default function Resources() {
           <div className="flex flex-col-reverse gap-3 border-b border-line md:flex-row md:items-end md:justify-between">
             <Tabs
               value={tab}
-              onChange={(k) => { setTab(k); paged.setPage(1); }}
-              tabs={[{ key: "all" as TabKey, label: "All resources", count: items.length }, ...types.map((t) => ({ key: t as TabKey, label: plural[t], count: count(t) }))]}
+              onChange={(k) => {
+                setTab(k);
+                paged.setPage(1);
+              }}
+              tabs={[
+                {
+                  key: "all" as TabKey,
+                  label: "All resources",
+                  count: items.length,
+                },
+                ...types.map((t) => ({
+                  key: t as TabKey,
+                  label: plural[t],
+                  count: count(t),
+                })),
+              ]}
             />
-            <PrimaryButton className="mb-3 self-start md:self-auto" onClick={() => toast.success("The add-resource form is the next piece to wire (POST /resources).")}>Add resource</PrimaryButton>
+            <PrimaryButton
+              className="mb-3 self-start md:self-auto"
+              onClick={() => openForm(null)}
+            >
+              Add resource
+            </PrimaryButton>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
-            <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search resources..." />
-            <SelectField label="Type" value={type} onChange={setType} className="md:w-[106px]" options={[{ value: "all", label: "All types" }, ...types.map((t) => ({ value: t, label: t }))]} />
-            <SelectField label="Category" value={category} onChange={setCategory} className="md:w-[132px]" options={[{ value: "all", label: "All categories" }, ...categories.map((c) => ({ value: c, label: c }))]} />
-            <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[116px]" options={[{ value: "all", label: "All statuses" }, ...["Published", "Draft", "Archived"].map((s) => ({ value: s, label: s }))]} />
-            <SelectField label="Sort" value={sort} onChange={setSort} className="md:w-[132px]" options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }, { value: "views", label: "Most viewed" }]} />
+            <SearchField
+              className="col-span-2 md:min-w-[150px] md:flex-1"
+              value={search}
+              onChange={setSearch}
+              placeholder="Search resources..."
+            />
+            <SelectField
+              label="Type"
+              value={type}
+              onChange={setType}
+              className="md:w-[106px]"
+              options={[
+                { value: "all", label: "All types" },
+                ...types.map((t) => ({ value: t, label: t })),
+              ]}
+            />
+            <SelectField
+              label="Category"
+              value={category}
+              onChange={setCategory}
+              className="md:w-[132px]"
+              options={[
+                { value: "all", label: "All categories" },
+                ...categories.map((c) => ({ value: c, label: c })),
+              ]}
+            />
+            <SelectField
+              label="Status"
+              value={status}
+              onChange={setStatus}
+              className="md:w-[116px]"
+              options={[
+                { value: "all", label: "All statuses" },
+                ...["Published", "Draft", "Archived"].map((s) => ({
+                  value: s,
+                  label: s,
+                })),
+              ]}
+            />
+            <SelectField
+              label="Sort"
+              value={sort}
+              onChange={setSort}
+              className="md:w-[132px]"
+              options={[
+                { value: "newest", label: "Newest first" },
+                { value: "oldest", label: "Oldest first" },
+                { value: "views", label: "Most viewed" },
+              ]}
+            />
           </div>
 
           <div className="mt-4">
             <Table minWidth={820}>
               <thead>
                 <tr>
-                  <Th className="w-10"><Checkbox label="Select all" checked={sel.all} onChange={sel.toggleAll} /></Th>
+                  <Th className="w-10">
+                    <Checkbox
+                      label="Select all"
+                      checked={sel.all}
+                      onChange={sel.toggleAll}
+                    />
+                  </Th>
                   <Th>Title</Th>
                   <Th>Type</Th>
                   <Th>Author</Th>
@@ -153,23 +327,39 @@ export default function Resources() {
                 {paged.slice.map((r) => (
                   <tr
                     key={r.id}
-                    className={cx("cursor-pointer hover:bg-canvas/40", preview?.id === r.id ? "bg-brand-soft/25" : "")}
+                    className={cx(
+                      "cursor-pointer hover:bg-canvas/40",
+                      preview?.id === r.id ? "bg-brand-soft/25" : "",
+                    )}
                     onClick={(e) => {
-                      if ((e.target as HTMLElement).closest("button,input")) return;
+                      if ((e.target as HTMLElement).closest("button,input"))
+                        return;
                       setPreviewId(r.id);
                     }}
                   >
-                    <Td><Checkbox label={`Select ${r.title}`} checked={sel.selected.has(r.id)} onChange={(v) => sel.toggle(r.id, v)} /></Td>
+                    <Td>
+                      <Checkbox
+                        label={`Select ${r.title}`}
+                        checked={sel.selected.has(r.id)}
+                        onChange={(v) => sel.toggle(r.id, v)}
+                      />
+                    </Td>
                     <Td>
                       <div className="flex items-center gap-3">
                         <Thumb seed={r.title} width={64} height={50} />
                         <div className="min-w-0">
-                          <p className="max-w-[170px] truncate font-semibold text-ink">{r.title}</p>
-                          <p className="line-clamp-2 max-w-[170px] text-[11px] leading-snug text-ink/70">{r.summary}</p>
+                          <p className="max-w-[170px] truncate font-semibold text-ink">
+                            {r.title}
+                          </p>
+                          <p className="line-clamp-2 max-w-[170px] text-[11px] leading-snug text-ink/70">
+                            {r.summary}
+                          </p>
                         </div>
                       </div>
                     </Td>
-                    <Td><Badge tone={TYPE_TONE[r.type]}>{r.type}</Badge></Td>
+                    <Td>
+                      <Badge tone={TYPE_TONE[r.type]}>{r.type}</Badge>
+                    </Td>
                     <Td>
                       <div className="flex items-center gap-2">
                         <Avatar name={r.author} size={28} />
@@ -177,62 +367,174 @@ export default function Resources() {
                       </div>
                     </Td>
                     <Td className="whitespace-nowrap">{r.category}</Td>
-                    <Td><StatusBadge status={r.status} /></Td>
+                    <Td>
+                      <StatusBadge status={r.status} />
+                    </Td>
                     <Td>{r.views === null ? "–" : compactNumber(r.views)}</Td>
                     <Td className="whitespace-nowrap">{formatDate(r.date)}</Td>
                     <Td className="text-center">
                       <RowMenu
                         actions={[
-                          { label: "Preview", icon: "eye", onSelect: () => setPreviewId(r.id) },
+                          {
+                            label: "Preview",
+                            icon: "eye",
+                            onSelect: () => setPreviewId(r.id),
+                          },
+                          ...(live
+                            ? [
+                                {
+                                  label: "Edit",
+                                  icon: "edit" as const,
+                                  onSelect: () => openForm(r.id),
+                                },
+                              ]
+                            : []),
                           r.status === "Published"
-                            ? { label: "Unpublish", icon: "x", onSelect: () => void setPublished(r, false) }
-                            : { label: "Publish", icon: "check", onSelect: () => void setPublished(r, true) },
+                            ? {
+                                label: "Unpublish",
+                                icon: "x",
+                                onSelect: () => void setPublished(r, false),
+                              }
+                            : {
+                                label: "Publish",
+                                icon: "check",
+                                onSelect: () => void setPublished(r, true),
+                              },
+                          ...(live
+                            ? [
+                                {
+                                  label: "Delete",
+                                  icon: "trash" as const,
+                                  danger: true,
+                                  onSelect: () => remove(r),
+                                },
+                              ]
+                            : []),
                         ]}
                       />
                     </Td>
                   </tr>
                 ))}
-                {data.mode !== "loading" && filtered.length === 0 ? <EmptyRow cols={9} title="No resources found" /> : null}
+                {data.mode !== "loading" && filtered.length === 0 ? (
+                  <EmptyRow cols={9} title="No resources found" />
+                ) : null}
               </tbody>
             </Table>
           </div>
-          <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}–${paged.to} of ${filtered.length} items`} />
+          <Pagination
+            page={paged.page}
+            pages={paged.pages}
+            onPage={paged.setPage}
+            summary={`Showing ${paged.from}–${paged.to} of ${filtered.length} items`}
+          />
         </Card>
 
         <div className="space-y-5">
           <Card className="p-5">
-            <CardHeader title="Resources overview" action={<RangeSelect value={range} onChange={setRange} />} />
+            <CardHeader
+              title="Resources overview"
+              action={<RangeSelect value={range} onChange={setRange} />}
+            />
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniStat icon="book" value={String(items.length)} label="Total resources" delta={sample ? 18 : undefined} />
-              <MiniStat icon="eye" value={sample ? compactNumber(totalViews) : "—"} label="Total views" delta={sample ? 26 : undefined} />
-              <MiniStat icon="download" value={sample ? "2.1K" : "—"} label="Downloads" delta={sample ? 32 : undefined} />
-              <MiniStat icon="users" value={String(new Set(items.map((r) => r.author)).size)} label="Contributors" delta={sample ? 14 : undefined} />
+              <MiniStat
+                icon="book"
+                value={String(items.length)}
+                label="Total resources"
+                delta={sample ? 18 : undefined}
+              />
+              <MiniStat
+                icon="eye"
+                value={sample ? compactNumber(totalViews) : "—"}
+                label="Total views"
+                delta={sample ? 26 : undefined}
+              />
+              <MiniStat
+                icon="download"
+                value={sample ? "2.1K" : "—"}
+                label="Downloads"
+                delta={sample ? 32 : undefined}
+              />
+              <MiniStat
+                icon="users"
+                value={String(new Set(items.map((r) => r.author)).size)}
+                label="Contributors"
+                delta={sample ? 14 : undefined}
+              />
             </div>
           </Card>
 
           <Card className="p-5">
             <CardHeader title="Top categories" action={<ViewAll />} />
             <div className="mt-4">
-              <BarList items={types.map((t) => ({ label: plural[t], value: count(t), color: TYPE_COLOR[t] }))} />
+              <BarList
+                items={types.map((t) => ({
+                  label: plural[t],
+                  value: count(t),
+                  color: TYPE_COLOR[t],
+                }))}
+              />
             </div>
           </Card>
 
           {preview ? (
             <Card className="p-5">
-              <CardHeader title="Resource preview" action={<button type="button" className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-canvas">Edit</button>} />
-              <Thumb seed={preview.title} icon="cross" width="100%" height={120} rounded="rounded-xl" className="mt-4" />
-              <h3 className="mt-3 text-lg font-bold text-ink">{preview.title}</h3>
+              <CardHeader
+                title="Resource preview"
+                action={
+                  <button
+                    type="button"
+                    onClick={() => openForm(preview.id)}
+                    className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-canvas"
+                  >
+                    Edit
+                  </button>
+                }
+              />
+              <Thumb
+                seed={preview.title}
+                icon="cross"
+                width="100%"
+                height={120}
+                rounded="rounded-xl"
+                className="mt-4"
+              />
+              <h3 className="mt-3 text-lg font-bold text-ink">
+                {preview.title}
+              </h3>
               <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ink/75">
-                <span className="flex items-center gap-1"><Icon name="fileText" size={15} />{preview.type}</span>
-                <span className="flex items-center gap-1"><Icon name="user" size={15} />{preview.author}</span>
-                <span className="flex items-center gap-1"><Icon name="calendar" size={15} />{formatDate(preview.date)}</span>
+                <span className="flex items-center gap-1">
+                  <Icon name="fileText" size={15} />
+                  {preview.type}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Icon name="user" size={15} />
+                  {preview.author}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Icon name="calendar" size={15} />
+                  {formatDate(preview.date)}
+                </span>
               </div>
-              <p className="mt-2 text-sm leading-6 text-ink/80">{preview.summary}</p>
+              <p className="mt-2 text-sm leading-6 text-ink/80">
+                {preview.summary}
+              </p>
               <div className="mt-3 flex flex-wrap items-center gap-5 text-sm text-ink/80">
-                <span className="flex items-center gap-1.5"><Icon name="eye" size={17} />{preview.views !== null ? compactNumber(preview.views) : "—"}</span>
-                <span className="flex items-center gap-1.5"><Icon name="download" size={17} />{preview.downloads ?? "—"}</span>
-                <span className="flex items-center gap-1.5"><Icon name="message" size={17} />{preview.comments ?? "—"}</span>
-                <span className="flex items-center gap-1.5"><Icon name="heart" size={17} />{preview.likes ?? "—"}</span>
+                <span className="flex items-center gap-1.5">
+                  <Icon name="eye" size={17} />
+                  {preview.views !== null ? compactNumber(preview.views) : "—"}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Icon name="download" size={17} />
+                  {preview.downloads ?? "—"}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Icon name="message" size={17} />
+                  {preview.comments ?? "—"}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Icon name="heart" size={17} />
+                  {preview.likes ?? "—"}
+                </span>
               </div>
             </Card>
           ) : null}
@@ -240,14 +542,39 @@ export default function Resources() {
           <Card className="p-5">
             <CardHeader title="Quick actions" />
             <div className="mt-4 grid grid-cols-2 gap-2.5">
-              <QuickTile primary icon="plus" label="Add resource" />
+              <QuickTile
+                primary
+                icon="plus"
+                label="Add resource"
+                onClick={() => openForm(null)}
+              />
               <QuickTile icon="message" label="Manage categories" />
-              <QuickTile icon="upload" label="Upload files" />
+              <QuickTile
+                icon="upload"
+                label="Upload a file"
+                onClick={() => openForm(null)}
+              />
               <QuickTile icon="settings" label="Resource settings" />
             </div>
           </Card>
         </div>
       </div>
+      {form ? (
+        <ResourceForm
+          key={form.id ?? "new"}
+          open
+          resourceId={form.id}
+          categories={categoryList}
+          onCategoriesChanged={loadCategories}
+          onClose={() => setForm(null)}
+          onSaved={(message, warning) => {
+            if (warning) toast.error(message);
+            else toast.success(message);
+            data.reload();
+          }}
+        />
+      ) : null}
+      {dialog}
       {toast.element}
     </>
   );

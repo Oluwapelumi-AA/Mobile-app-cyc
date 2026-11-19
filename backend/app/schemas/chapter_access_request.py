@@ -46,3 +46,6 @@ class ChapterAccessRequestRead(BaseModel):
     reviewed_at: UtcDatetime | None
     created_at: UtcDatetime
     updated_at: UtcDatetime
+    # Who asked, so reviewers can recognise them.
+    user_email: str | None = None
+    user_name: str | None = None

@@ -31,7 +31,7 @@ class PostRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    community_id: UUID
+    chapter_id: UUID
     author_id: UUID
     body: str
     comment_count: int

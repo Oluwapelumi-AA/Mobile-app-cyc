@@ -9,12 +9,11 @@ from app.schemas.common import UtcDatetime
 
 
 class SearchType(str, Enum):
-    COMMUNITIES = "communities"
+    CHAPTERS = "chapters"
     PEOPLE = "people"
     POSTS = "posts"
     EVENTS = "events"
     RESOURCES = "resources"
-    BRANCHES = "branches"
 
 
 class SearchHit(BaseModel):
@@ -22,10 +21,12 @@ class SearchHit(BaseModel):
 
     type: SearchType
     id: UUID
-    # A community, person, event, resource or branch name, or a post preview.
+    # A Chapter, person, event or resource name, or a post preview.
     title: str
     snippet: str | None
-    community_id: UUID | None
+    # The Chapter the result belongs to, if any (a Chapter's own id for
+    # Chapter results).
+    chapter_id: UUID | None
     image_url: str | None = None
     # Events only.
     starts_at: UtcDatetime | None = None
@@ -39,9 +40,8 @@ class SearchOverview(BaseModel):
     """
 
     query: str
-    communities: list[SearchHit]
+    chapters: list[SearchHit]
     people: list[SearchHit]
     posts: list[SearchHit]
     events: list[SearchHit]
     resources: list[SearchHit]
-    branches: list[SearchHit]

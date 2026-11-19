@@ -5,9 +5,9 @@ from sqlalchemy import select
 
 from app import i18n
 from app.i18n import LocalTime, Text
-from app.models import Notification
+from app.models import AccountRole, Notification
 
-COMMUNITIES = "/api/v1/communities"
+CHAPTERS = "/api/v1/chapters"
 PROFILE = "/api/v1/profiles/me"
 
 
@@ -59,12 +59,12 @@ def test_render_nested_text_and_times():
     assert i18n.render(text, "en") == "Starts Fri 06 Nov 2026, 18:00 (Africa/Lagos)."
     assert i18n.render(text, "fr") == "Début le 06/11/2026 18:00 (Africa/Lagos)."
     role = Text(
-        "notification.community_role_changed.title",
-        role=Text("role.admin"),
-        community="Abuja Fellowship",
+        "notification.chapter_role_changed.title",
+        role=Text("role.coordinator"),
+        chapter="Abuja Fellowship",
     )
-    assert i18n.render(role, "en") == "You are now an admin of Abuja Fellowship"
-    assert i18n.render(role, "es") == "Ahora eres administrador de Abuja Fellowship"
+    assert i18n.render(role, "en") == "You are now the Coordinator of Abuja Fellowship"
+    assert i18n.render(role, "es") == "Ahora eres coordinador de Abuja Fellowship"
     assert i18n.render("plain", "fr") == "plain"
     assert i18n.render(None, "fr") is None
 
@@ -89,13 +89,14 @@ def test_notifications_use_each_recipients_language(api):
     for name, language in languages.items():
         api.act_as(ids[name])
         api.client.post(PROFILE, json={"display_name": name.title(), "language_code": language})
-    api.act_as(ids["owner"])
-    cid = api.client.post(COMMUNITIES, json={"name": "Abuja Fellowship"}).json()["id"]
+    admin = api.add_user("admin", AccountRole.ADMIN)
+    cid = api.add_chapter("Abuja Fellowship")
+    api.act_as(admin)
     for name in ("ana", "luc", "ada"):
-        api.act_as(ids[name])
-        api.client.post(f"{COMMUNITIES}/{cid}/join")
-        api.act_as(ids["owner"])
-        api.client.patch(f"{COMMUNITIES}/{cid}/members/{ids[name]}", json={"role": "moderator"})
+        response = api.client.put(
+            f"{CHAPTERS}/{cid}/staff/{ids[name]}", json={"role": "moderator"}
+        )
+        assert response.status_code == 200, response.text
 
     with api.session_factory() as db:
         titles = {
@@ -104,7 +105,7 @@ def test_notifications_use_each_recipients_language(api):
         }
     assert titles[ids["ana"]] == "Agora você é moderador de Abuja Fellowship"
     assert titles[ids["luc"]] == "Vous êtes maintenant modérateur de Abuja Fellowship"
-    assert titles[ids["ada"]] == "You are now a moderator of Abuja Fellowship"
+    assert titles[ids["ada"]] == "You are now a Moderator of Abuja Fellowship"
 
 
 def test_email_footer_is_translated(api):
@@ -119,20 +120,18 @@ def test_email_footer_is_translated(api):
     api.act_as(luc)
     api.client.patch(
         "/api/v1/notifications/preferences",
-        json={"preferences": [{"category": "community", "email": True}]},
+        json={"preferences": [{"category": "chapter", "email": True}]},
     )
-    api.act_as(owner)
-    cid = api.client.post(COMMUNITIES, json={"name": "Paris Jeunesse"}).json()["id"]
-    api.act_as(luc)
-    api.client.post(f"{COMMUNITIES}/{cid}/join")
-    api.act_as(owner)
-    api.client.patch(f"{COMMUNITIES}/{cid}/members/{luc}", json={"role": "admin"})
+    admin = api.add_user("admin", AccountRole.ADMIN)
+    cid = api.add_chapter("Paris Jeunesse")
+    api.act_as(admin)
+    api.client.put(f"{CHAPTERS}/{cid}/staff/{luc}", json={"role": "coordinator"})
 
     email = FakeEmailSender()
     with api.session_factory() as db:
         process_deliveries(db, FakePushProvider(), email)
     [message] = email.outbox
-    assert message.subject == "Vous êtes maintenant administrateur de Paris Jeunesse"
+    assert message.subject == "Vous êtes maintenant coordinateur de Paris Jeunesse"
     assert "Réglages > Notifications" in message.text
 
 

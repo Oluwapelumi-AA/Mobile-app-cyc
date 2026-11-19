@@ -6,23 +6,30 @@ from sqlalchemy import func, select
 
 from app.models import AccountRole, Event, EventRegistration
 
-COMMUNITIES = "/api/v1/communities"
+CHAPTERS = "/api/v1/chapters"
 EVENTS = "/api/v1/events"
 
 
 @pytest.fixture
 def world(api):
-    """A public community with an owner, a moderator and two members."""
+    """A Chapter whose Coordinator ("mod") organizes events, a Chapter
+    Moderator ("owner"), two Members, an outsider from another Chapter and
+    an app moderator ("staff")."""
     ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "outsider")}
     ids["staff"] = api.add_user("staff", AccountRole.MODERATOR)
-    api.act_as(ids["owner"])
-    cid = api.client.post(COMMUNITIES, json={"name": "Abuja Fellowship"}).json()["id"]
-    for name in ("mod", "alice", "bob"):
-        api.act_as(ids[name])
-        api.client.post(f"{COMMUNITIES}/{cid}/join")
-    api.act_as(ids["owner"])
-    api.client.patch(f"{COMMUNITIES}/{cid}/members/{ids['mod']}", json={"role": "moderator"})
-    return {"community_id": cid, **ids}
+    cid = api.add_chapter("Abuja")
+    other = api.add_chapter("Lagos")
+    api.add_staff(ids["mod"], cid, "coordinator")
+    api.add_staff(ids["owner"], cid, "moderator")
+    for name in ("alice", "bob"):
+        api.add_member(ids[name], cid, name.title())
+    api.add_member(ids["outsider"], other, "Outsider")
+    return {"chapter_id": str(cid), "other_chapter_id": str(other), **ids}
+
+
+def grant_event(api, world, user_id, event):
+    """Let a Guest see one Chapter event."""
+    api.grant(user_id, uuid.UUID(world["chapter_id"]), event_id=uuid.UUID(event["id"]))
 
 
 def iso(value: datetime) -> str:
@@ -41,7 +48,7 @@ def event_payload(world=None, **overrides):
         "timezone": "Africa/Lagos",
     }
     if world is not None:
-        payload["community_id"] = world["community_id"]
+        payload["chapter_id"] = world["chapter_id"]
     payload.update(overrides)
     return payload
 
@@ -69,7 +76,7 @@ def move_event(api, event_id, starts_at, ends_at):
 # Creating
 
 
-def test_moderator_creates_community_event(api, world):
+def test_coordinator_creates_chapter_event(api, world):
     api.act_as(world["mod"])
     response = api.client.post(
         EVENTS,
@@ -85,7 +92,7 @@ def test_moderator_creates_community_event(api, world):
     assert response.status_code == 201
     body = response.json()
     assert body["title"] == "Youth Prayer Night"
-    assert body["community_id"] == world["community_id"]
+    assert body["chapter_id"] == world["chapter_id"]
     assert body["created_by"] == str(world["mod"])
     assert body["status"] == "scheduled"
     assert body["capacity"] == 50
@@ -96,20 +103,21 @@ def test_moderator_creates_community_event(api, world):
     assert body["online_url"] == "https://meet.example.com/prayer"
 
 
-@pytest.mark.parametrize("who", ["alice", "outsider"])
-def test_members_and_outsiders_cannot_create_community_events(api, world, who):
+@pytest.mark.parametrize("who", ["alice", "owner", "outsider"])
+def test_members_chapter_moderators_and_outsiders_cannot_create_chapter_events(
+    api, world, who
+):
     api.act_as(world[who])
     response = api.client.post(EVENTS, json=event_payload(world))
     assert response.status_code == 403
-    expected = "membership_required" if who == "outsider" else "insufficient_role"
-    assert response.json()["detail"]["code"] == expected
+    assert response.json()["detail"]["code"] == "insufficient_role"
 
 
 def test_app_moderator_creates_events_anywhere(api, world):
-    community_event = create_event(api, world["staff"], world)
+    chapter_event = create_event(api, world["staff"], world)
     app_event = create_event(api, world["staff"])
-    assert community_event["community_id"] == world["community_id"]
-    assert app_event["community_id"] is None
+    assert chapter_event["chapter_id"] == world["chapter_id"]
+    assert app_event["chapter_id"] is None
 
 
 def test_only_app_moderators_create_app_wide_events(api, world):
@@ -119,11 +127,11 @@ def test_only_app_moderators_create_app_wide_events(api, world):
     assert response.json()["detail"]["code"] == "insufficient_role"
 
 
-def test_cannot_create_event_in_unknown_community(api, world):
+def test_cannot_create_event_in_unknown_chapter(api, world):
     api.act_as(world["staff"])
-    response = api.client.post(EVENTS, json=event_payload(community_id=str(uuid.uuid4())))
+    response = api.client.post(EVENTS, json=event_payload(chapter_id=str(uuid.uuid4())))
     assert response.status_code == 404
-    assert response.json()["detail"]["code"] == "community_not_found"
+    assert response.json()["detail"]["code"] == "chapter_not_found"
 
 
 @pytest.mark.parametrize(
@@ -218,24 +226,25 @@ def test_local_time_skipped_by_clock_change_is_rejected(api, world):
 # Seeing events
 
 
-def test_events_follow_community_visibility(api, world):
-    api.act_as(world["owner"])
-    private = api.client.post(
-        COMMUNITIES, json={"name": "Leaders Circle", "visibility": "private"}
-    ).json()
-    hidden = create_event(api, world["owner"], community_id=private["id"])
-    public = create_event(api, world["mod"], world)
+def test_events_follow_chapter_membership(api, world):
+    ours = create_event(api, world["mod"], world)
+    theirs = create_event(
+        api, world["staff"], None, chapter_id=world["other_chapter_id"], title="Theirs"
+    )
     app_wide = create_event(api, world["staff"])
 
     api.act_as(world["outsider"])
-    assert api.client.get(f"{EVENTS}/{hidden['id']}").status_code == 404
-    assert api.client.get(f"{EVENTS}/{public['id']}").status_code == 200
+    assert api.client.get(f"{EVENTS}/{ours['id']}").status_code == 404
     listed = [e["id"] for e in api.client.get(EVENTS).json()["items"]]
-    assert set(listed) == {public["id"], app_wide["id"]}
+    assert set(listed) == {theirs["id"], app_wide["id"]}
 
-    api.act_as(world["owner"])
+    api.act_as(world["alice"])
     listed = [e["id"] for e in api.client.get(EVENTS).json()["items"]]
-    assert set(listed) == {hidden["id"], public["id"], app_wide["id"]}
+    assert set(listed) == {ours["id"], app_wide["id"]}
+
+    api.act_as(world["staff"])
+    listed = [e["id"] for e in api.client.get(EVENTS).json()["items"]]
+    assert set(listed) == {ours["id"], theirs["id"], app_wide["id"]}
 
 
 def test_upcoming_list_is_soonest_first_and_paginates(api, world):
@@ -269,34 +278,32 @@ def test_past_events_are_listed_separately_most_recent_first(api, world):
     assert past == ["Old", "Older"]
 
 
-def test_filter_by_community_and_mine(api, world):
+def test_filter_by_chapter_and_mine(api, world):
     here = create_event(api, world["mod"], world, title="Here")
     create_event(api, world["staff"], title="App wide")
-    api.act_as(world["bob"])
-    other = api.client.post(COMMUNITIES, json={"name": "Other place"}).json()
-    create_event(api, world["bob"], community_id=other["id"], title="Elsewhere")
+    create_event(api, world["staff"], None, chapter_id=world["other_chapter_id"], title="Elsewhere")
     register(api, world["alice"], here["id"])
 
-    by_community = api.client.get(EVENTS, params={"community_id": world["community_id"]}).json()
-    assert [e["title"] for e in by_community["items"]] == ["Here"]
+    by_chapter = api.client.get(EVENTS, params={"chapter_id": world["chapter_id"]}).json()
+    assert [e["title"] for e in by_chapter["items"]] == ["Here"]
     mine = api.client.get(EVENTS, params={"mine": True}).json()
     assert [e["title"] for e in mine["items"]] == ["Here"]
     assert mine["items"][0]["my_registration"] == "registered"
 
 
-def test_filter_by_hidden_community_is_404(api, world):
-    api.act_as(world["owner"])
-    private = api.client.post(
-        COMMUNITIES, json={"name": "Leaders Circle", "visibility": "private"}
-    ).json()
+def test_filter_by_another_chapter_shows_nothing(api, world):
+    create_event(api, world["mod"], world, title="Here")
     api.act_as(world["outsider"])
-    response = api.client.get(EVENTS, params={"community_id": private["id"]})
+    response = api.client.get(EVENTS, params={"chapter_id": world["chapter_id"]})
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    response = api.client.get(EVENTS, params={"chapter_id": str(uuid.uuid4())})
     assert response.status_code == 404
 
 
 def test_can_manage_flag(api, world):
     event = create_event(api, world["mod"], world)
-    for name, expected in (("owner", True), ("mod", True), ("alice", False), ("staff", True)):
+    for name, expected in (("owner", False), ("mod", True), ("alice", False), ("staff", True)):
         api.act_as(world[name])
         assert api.client.get(f"{EVENTS}/{event['id']}").json()["can_manage"] is expected
         listed = api.client.get(EVENTS).json()["items"][0]
@@ -308,7 +315,12 @@ def test_can_manage_flag(api, world):
 
 def test_organizer_edits_event(api, world):
     event = create_event(api, world["mod"], world, description="Old", capacity=10)
+    # Chapter Moderators don't manage events; the Coordinator does.
     api.act_as(world["owner"])
+    assert api.client.patch(
+        f"{EVENTS}/{event['id']}", json={"title": "Not allowed"}
+    ).status_code == 403
+    api.act_as(world["mod"])
     response = api.client.patch(
         f"{EVENTS}/{event['id']}",
         json={"title": "Worship Night", "description": None, "capacity": None},
@@ -407,14 +419,14 @@ def test_delete_event_removes_registrations(api, world):
         assert db.scalar(select(func.count()).select_from(EventRegistration)) == 0
 
 
-def test_deleting_community_deletes_its_events(api, world):
+def test_archived_chapter_hides_its_events(api, world):
     event = create_event(api, world["mod"], world)
-    register(api, world["alice"], event["id"])
-    api.act_as(world["owner"])
-    assert api.client.delete(f"{COMMUNITIES}/{world['community_id']}").status_code == 204
-    with api.session_factory() as db:
-        assert db.scalar(select(func.count()).select_from(Event)) == 0
-        assert db.scalar(select(func.count()).select_from(EventRegistration)) == 0
+    admin = api.add_user("admin", AccountRole.ADMIN)
+    api.act_as(admin)
+    assert api.client.post(f"{CHAPTERS}/{world['chapter_id']}/archive").status_code == 200
+    api.act_as(world["alice"])
+    assert api.client.get(f"{EVENTS}/{event['id']}").status_code == 404
+    assert api.client.get(EVENTS).json()["items"] == []
 
 
 def test_app_wide_events_are_managed_by_app_moderators_only(api, world):
@@ -452,11 +464,26 @@ def test_cannot_register_twice(api, world):
     assert response.json()["detail"]["code"] == "already_registered"
 
 
-def test_non_member_cannot_register_for_community_event(api, world):
+def test_guest_cannot_register_for_chapter_event(api, world):
     event = create_event(api, world["mod"], world)
-    response = register(api, world["outsider"], event["id"])
+    # Someone from another Chapter can't see it at all.
+    assert register(api, world["outsider"], event["id"]).status_code == 404
+    guest = api.add_user("guest")
+    grant_event(api, world, guest, event)
+    response = register(api, guest, event["id"])
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "membership_required"
+
+
+def test_banned_member_cannot_register(api, world):
+    event = create_event(api, world["mod"], world)
+    api.act_as(world["owner"])
+    assert api.client.put(
+        f"{CHAPTERS}/{world['chapter_id']}/bans/{world['alice']}"
+    ).status_code == 201
+    response = register(api, world["alice"], event["id"])
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "banned"
 
 
 def test_anyone_can_register_for_app_wide_event(api, world):
@@ -541,11 +568,7 @@ def test_registration_closes_when_event_starts(api, world):
 
 
 def test_hidden_event_registration_is_404(api, world):
-    api.act_as(world["owner"])
-    private = api.client.post(
-        COMMUNITIES, json={"name": "Leaders Circle", "visibility": "private"}
-    ).json()
-    event = create_event(api, world["owner"], community_id=private["id"])
+    event = create_event(api, world["mod"], world)
     response = register(api, world["outsider"], event["id"])
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "event_not_found"

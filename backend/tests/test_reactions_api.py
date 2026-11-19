@@ -7,44 +7,37 @@ from sqlalchemy import func, select
 from app.models import Reaction
 
 
-COMMUNITIES = "/api/v1/communities"
+CHAPTERS = "/api/v1/chapters"
 
 
 @pytest.fixture
 def world(api):
-    """Create a public community with members and one outsider."""
+    """A Chapter with a Coordinator and two Members, and one Guest."""
     ids = {
         name: api.add_user(name)
         for name in ("owner", "alice", "bob", "outsider")
     }
-
-    api.act_as(ids["owner"])
-    response = api.client.post(
-        COMMUNITIES,
-        json={"name": "Reaction Test Community"},
-    )
-    assert response.status_code == 201
-    community_id = response.json()["id"]
-
+    chapter_id = api.add_chapter("Reaction Test Chapter")
+    api.add_staff(ids["owner"], chapter_id, "coordinator")
     for name in ("alice", "bob"):
-        api.act_as(ids[name])
-        response = api.client.post(
-            f"{COMMUNITIES}/{community_id}/join"
-        )
-        assert response.status_code in (200, 201)
-
-    return {"community_id": community_id, **ids}
+        api.add_member(ids[name], chapter_id, name.title())
+    return {"chapter_id": str(chapter_id), **ids}
 
 
 def create_post(api, world):
-    """Create a real post as a community member."""
+    """Create a real post as a Chapter Member."""
     api.act_as(world["alice"])
     response = api.client.post(
-        f"{COMMUNITIES}/{world['community_id']}/posts",
+        f"{CHAPTERS}/{world['chapter_id']}/posts",
         json={"body": "A post for reaction testing"},
     )
     assert response.status_code == 201
     return response.json()
+
+
+def grant_post(api, world, post):
+    """Let the outsider (a Guest) read the post, but nothing more."""
+    api.grant(world["outsider"], uuid.UUID(world["chapter_id"]), post_id=uuid.UUID(post["id"]))
 
 
 def create_comment(api, world, post_id):
@@ -216,6 +209,7 @@ def test_cannot_react_to_nonexistent_post(api, world):
 
 def test_non_member_cannot_react_to_post(api, world):
     post = create_post(api, world)
+    grant_post(api, world, post)
     api.act_as(world["outsider"])
 
     response = api.client.put(
@@ -227,9 +221,20 @@ def test_non_member_cannot_react_to_post(api, world):
     assert response.json()["detail"]["code"] == "membership_required"
 
 
+def test_outside_the_chapter_reactions_are_404(api, world):
+    post = create_post(api, world)
+    api.act_as(world["outsider"])
+    response = api.client.put(
+        f"/api/v1/reactions/posts/{post['id']}",
+        json={"reaction_type": "like"},
+    )
+    assert response.status_code == 404
+
+
 def test_non_member_cannot_react_to_comment(api, world):
     post = create_post(api, world)
     comment = create_comment(api, world, post["id"])
+    grant_post(api, world, post)
     api.act_as(world["outsider"])
 
     response = api.client.put(

@@ -49,18 +49,8 @@ class Event(Base):
             "capacity IS NULL OR capacity > 0",
             name="ck_events_capacity_positive",
         ),
-        CheckConstraint(
-            "chapter_id IS NULL OR community_id IS NULL",
-            name="ck_events_single_scope",
-        ),
         # Upcoming lists: soonest first, ties broken by id.
         Index("ix_events_schedule", "starts_at", "id"),
-        Index(
-            "ix_events_community_schedule",
-            "community_id",
-            "starts_at",
-            "id",
-        ),
         Index(
             "ix_events_chapter_schedule",
             "chapter_id",
@@ -75,17 +65,11 @@ class Event(Base):
         default=uuid.uuid4,
     )
 
-    # Null for app-wide events or Chapter-owned events.
-    community_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("communities.id", ondelete="CASCADE"),
-        nullable=True,
-    )
 
-    # Null for app-wide events or Community-owned events.
+    # The Chapter that owns the event; null for app-wide events.
     chapter_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("branches.id", ondelete="CASCADE"),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )

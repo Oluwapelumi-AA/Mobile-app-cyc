@@ -224,7 +224,7 @@ function Meter({ label, value, color }: { label: string; value: number; color: s
 const QUICK_LINKS: { key: PageKey; label: string; icon: IconName }[] = [
   { key: "reports", label: "Reports", icon: "flag" },
   { key: "users", label: "Users", icon: "user" },
-  { key: "communities", label: "Departments", icon: "community" },
+  { key: "chapters", label: "Chapters", icon: "branch" },
   { key: "posts", label: "Posts", icon: "message" },
   { key: "events", label: "Events", icon: "calendar" },
   { key: "live", label: "Live and video", icon: "video" },
@@ -276,11 +276,13 @@ export default function Overview() {
       trend: [4, 5, 4, 6, 5, 7, 6, 8, 9],
     },
     {
-      icon: "community" as const,
-      label: "Departments",
-      value: live ? formatNumber(overview.communities) : "36",
+      icon: "branch" as const,
+      label: "Chapters",
+      value: live ? formatNumber(overview.chapters) : "36",
       delta: live ? undefined : 3,
-      note: live ? `${formatNumber(overview.branches)} chapters` : "4 new this month",
+      note: live
+        ? `${formatNumber(overview.members)} members · ${formatNumber(overview.guests)} guests`
+        : "4 new this month",
       trend: [3, 4, 3, 5, 4, 5, 6, 7, 8],
     },
     {
@@ -437,7 +439,7 @@ export default function Overview() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-semibold text-ink">{r.title}</span>
                     <span className="block truncate text-[11.5px] text-muted">
-                      {r.targetType} · {r.community} · reported by {r.reporter}
+                      {r.targetType} · {r.chapter} · reported by {r.reporter}
                     </span>
                   </span>
                   <span className="hidden sm:block">

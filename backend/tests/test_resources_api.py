@@ -8,7 +8,6 @@ from app.core.config import settings
 from app.models import AccountRole, Resource, ResourceBookmark, ResourceProgress
 from app.services.object_storage import InMemoryObjectStorage, get_object_storage
 
-COMMUNITIES = "/api/v1/communities"
 CATEGORIES = "/api/v1/resource-categories"
 RESOURCES = "/api/v1/resources"
 
@@ -28,21 +27,17 @@ def storage(api):
 
 @pytest.fixture
 def world(api):
-    """A public community with an owner, a moderator and a member, a private
-    community, and an app moderator."""
+    """A Chapter run by a Coordinator ("mod") with a Member ("alice"), a
+    second Chapter ("private_id") run by "owner", a Guest ("outsider") and
+    an app moderator ("staff")."""
     ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "outsider")}
     ids["staff"] = api.add_user("staff", AccountRole.MODERATOR)
-    api.act_as(ids["owner"])
-    cid = api.client.post(COMMUNITIES, json={"name": "Abuja Fellowship"}).json()["id"]
-    private_id = api.client.post(
-        COMMUNITIES, json={"name": "Leaders Circle", "visibility": "private"}
-    ).json()["id"]
-    for name in ("mod", "alice"):
-        api.act_as(ids[name])
-        api.client.post(f"{COMMUNITIES}/{cid}/join")
-    api.act_as(ids["owner"])
-    api.client.patch(f"{COMMUNITIES}/{cid}/members/{ids['mod']}", json={"role": "moderator"})
-    return {"community_id": cid, "private_id": private_id, **ids}
+    cid = api.add_chapter("Abuja")
+    private_id = api.add_chapter("Leaders Circle")
+    api.add_staff(ids["mod"], cid, "coordinator")
+    api.add_staff(ids["owner"], private_id, "coordinator")
+    api.add_member(ids["alice"], cid, "Alice")
+    return {"chapter_id": str(cid), "private_id": str(private_id), **ids}
 
 
 def create(api, user_id, **fields):
@@ -165,7 +160,7 @@ def test_app_moderator_adds_to_app_wide_library(api, world):
     assert resource["title"] == "Morning Devotional"
     assert resource["status"] == "draft"
     assert resource["published_at"] is None
-    assert resource["community_id"] is None
+    assert resource["chapter_id"] is None
     assert resource["category_id"] == category["id"]
     assert resource["language"] == "en-GB"
     assert resource["body"] == "Psalm 23 ..."
@@ -178,19 +173,20 @@ def test_app_moderator_adds_to_app_wide_library(api, world):
     assert body["published_at"] is not None
 
 
-def test_community_moderator_creates_community_resources(api, world):
-    resource = create(api, world["mod"], community_id=world["community_id"])
-    assert resource["community_id"] == world["community_id"]
+def test_coordinator_creates_chapter_resources(api, world):
+    resource = create(api, world["mod"], chapter_id=world["chapter_id"])
+    assert resource["chapter_id"] == world["chapter_id"]
 
 
 @pytest.mark.parametrize(
-    "who, code", [("alice", "insufficient_role"), ("outsider", "membership_required")]
+    "who, code",
+    [("alice", "insufficient_role"), ("outsider", "insufficient_role"), ("owner", "insufficient_role")],
 )
-def test_members_cannot_create_community_resources(api, world, who, code):
+def test_members_and_others_cannot_create_chapter_resources(api, world, who, code):
     api.act_as(world[who])
     response = api.client.post(
         RESOURCES,
-        json={"kind": "article", "title": "Notes", "community_id": world["community_id"]},
+        json={"kind": "article", "title": "Notes", "chapter_id": world["chapter_id"]},
     )
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == code
@@ -257,7 +253,7 @@ def test_publishing_twice_keeps_the_date(api, world):
 
 
 def test_members_cannot_publish_or_edit(api, world):
-    resource = create(api, world["mod"], community_id=world["community_id"])
+    resource = create(api, world["mod"], chapter_id=world["chapter_id"])
     publish(api, world["mod"], resource["id"])
     api.act_as(world["alice"])
     for response in (
@@ -269,8 +265,8 @@ def test_members_cannot_publish_or_edit(api, world):
         assert response.json()["detail"]["code"] == "insufficient_role"
 
 
-def test_app_moderators_manage_community_resources(api, world):
-    resource = create(api, world["mod"], community_id=world["community_id"])
+def test_app_moderators_manage_chapter_resources(api, world):
+    resource = create(api, world["mod"], chapter_id=world["chapter_id"])
     publish(api, world["staff"], resource["id"])
     api.act_as(world["staff"])
     assert api.client.get(f"{RESOURCES}/{resource['id']}").json()["can_manage"] is True
@@ -322,8 +318,8 @@ def test_drafts_are_hidden_from_readers(api, world):
     assert titles(api.client.get(RESOURCES)) == []
 
 
-def test_private_community_resources_are_hidden(api, world):
-    resource = published(api, world["owner"], community_id=world["private_id"], title="Leaders")
+def test_other_chapters_resources_are_hidden(api, world):
+    resource = published(api, world["owner"], chapter_id=world["private_id"], title="Leaders")
     api.act_as(world["alice"])
     assert api.client.get(f"{RESOURCES}/{resource['id']}").status_code == 404
     assert titles(api.client.get(RESOURCES)) == []
@@ -334,10 +330,22 @@ def test_private_community_resources_are_hidden(api, world):
 def test_library_lists_newest_published_first(api, world):
     first = create(api, world["staff"], title="Written first")
     published(api, world["staff"], title="Second")
-    published(api, world["mod"], community_id=world["community_id"], title="Community one")
+    published(api, world["mod"], chapter_id=world["chapter_id"], title="Chapter one")
     publish(api, world["staff"], first["id"])
+    api.act_as(world["alice"])
+    assert titles(api.client.get(RESOURCES)) == ["Written first", "Chapter one", "Second"]
+    # A Guest sees only the app-wide library.
     api.act_as(world["outsider"])
-    assert titles(api.client.get(RESOURCES)) == ["Written first", "Community one", "Second"]
+    assert titles(api.client.get(RESOURCES)) == ["Written first", "Second"]
+
+
+def test_guests_see_granted_chapter_resources(api, world):
+    granted = published(api, world["mod"], chapter_id=world["chapter_id"], title="Granted")
+    published(api, world["mod"], chapter_id=world["chapter_id"], title="Not granted")
+    api.grant(world["outsider"], uuid.UUID(world["chapter_id"]), resource_id=uuid.UUID(granted["id"]))
+    api.act_as(world["outsider"])
+    assert titles(api.client.get(RESOURCES)) == ["Granted"]
+    assert api.client.get(f"{RESOURCES}/{granted['id']}").status_code == 200
 
 
 def test_library_pages(api, world):
@@ -361,7 +369,7 @@ def test_library_filters(api, world):
               language="en-NG", author_name="Pastor Ade")
     published(api, world["staff"], title="Ìfẹ́ Ọlọ́run", language="yo",
               scripture_reference="John 3:16")
-    published(api, world["mod"], community_id=world["community_id"], title="Youth notes",
+    published(api, world["mod"], chapter_id=world["chapter_id"], title="Youth notes",
               language="en")
 
     api.act_as(world["alice"])
@@ -370,7 +378,7 @@ def test_library_filters(api, world):
     assert get(kind="audio") == ["Sermon on grace"]
     assert get(language="EN") == ["Youth notes", "Sermon on grace"]
     assert get(language="yo") == ["Ìfẹ́ Ọlọ́run"]
-    assert get(community_id=world["community_id"]) == ["Youth notes"]
+    assert get(chapter_id=world["chapter_id"]) == ["Youth notes"]
     assert get(q="ade") == ["Sermon on grace"]
     assert get(q="john 3") == ["Ìfẹ́ Ọlọ́run"]
     assert get(q="100%") == []
@@ -381,22 +389,22 @@ def test_library_filters(api, world):
 
 def test_drafts_list_shows_what_you_manage(api, world):
     create(api, world["staff"], title="App draft")
-    create(api, world["mod"], community_id=world["community_id"], title="Community draft")
-    create(api, world["owner"], community_id=world["private_id"], title="Private draft")
+    create(api, world["mod"], chapter_id=world["chapter_id"], title="Chapter draft")
+    create(api, world["owner"], chapter_id=world["private_id"], title="Private draft")
     published(api, world["staff"], title="Live")
 
     api.act_as(world["mod"])
-    assert titles(api.client.get(RESOURCES, params={"drafts": True})) == ["Community draft"]
+    assert titles(api.client.get(RESOURCES, params={"drafts": True})) == ["Chapter draft"]
     api.act_as(world["staff"])
     assert titles(api.client.get(RESOURCES, params={"drafts": True})) == [
         "Private draft",
-        "Community draft",
+        "Chapter draft",
         "App draft",
     ]
     api.act_as(world["alice"])
     assert titles(api.client.get(RESOURCES, params={"drafts": True})) == []
     response = api.client.get(
-        RESOURCES, params={"drafts": True, "community_id": world["community_id"]}
+        RESOURCES, params={"drafts": True, "chapter_id": world["chapter_id"]}
     )
     assert response.status_code == 403
 
@@ -612,17 +620,15 @@ def test_unpublished_bookmarks_drop_out_of_the_list(api, world):
     assert titles(api.client.get(f"{RESOURCES}/bookmarks")) == ["Morning Devotional"]
 
 
-def test_leaving_a_private_community_hides_its_bookmarks(api, world):
-    resource = published(api, world["owner"], community_id=world["private_id"])
+def test_leaving_a_chapter_hides_its_bookmarks(api, world):
+    resource = published(api, world["owner"], chapter_id=world["private_id"])
     api.act_as(world["owner"])
     api.client.put(f"{RESOURCES}/{resource['id']}/bookmark")
     with api.session_factory() as db:
-        from app.models import CommunityMembership
+        from app.models import ChapterStaff
 
         db.execute(
-            CommunityMembership.__table__.delete().where(
-                CommunityMembership.user_id == world["owner"]
-            )
+            ChapterStaff.__table__.delete().where(ChapterStaff.user_id == world["owner"])
         )
         db.commit()
     assert titles(api.client.get(f"{RESOURCES}/bookmarks")) == []

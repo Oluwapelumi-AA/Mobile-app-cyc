@@ -28,7 +28,7 @@ export type ReportRow = {
   id: string;
   title: string;
   targetType: string;
-  community: string;
+  chapter: string;
   reason: string;
   reporter: string;
   status: "New" | "Under review" | "Resolved" | "Dismissed";
@@ -36,23 +36,24 @@ export type ReportRow = {
   details?: string;
   snippet?: string;
   reporterId?: string | null;
+  chapterId?: string | null;
 };
 
 export const sampleReports: ReportRow[] = [
-  { id: "r1", title: "Inappropriate comment", targetType: "Post", community: "Faith & Growth", reason: "Harassment", reporter: "User #2841", status: "New", createdAt: ago(2 * MIN), snippet: "This is not true…" },
-  { id: "r2", title: "Spam link in post", targetType: "Post", community: "General", reason: "Spam", reporter: "User #1093", status: "Under review", createdAt: ago(18 * MIN), snippet: "Check this out: http://…" },
-  { id: "r3", title: "Offensive language", targetType: "Comment", community: "Youth", reason: "Abuse", reporter: "User #4420", status: "Under review", createdAt: ago(1 * HOUR), snippet: "This is wrong…" },
-  { id: "r4", title: "Misleading content", targetType: "Post", community: "Bible Study", reason: "Misinformation", reporter: "User #3310", status: "Resolved", createdAt: ago(3 * HOUR) },
-  { id: "r5", title: "Inappropriate image", targetType: "Post", community: "General", reason: "Explicit content", reporter: "User #2217", status: "Resolved", createdAt: ago(5 * HOUR) },
-  { id: "r6", title: "Hate speech", targetType: "Comment", community: "General", reason: "Hate speech", reporter: "User #1188", status: "Under review", createdAt: ago(6 * HOUR) },
-  { id: "r7", title: "Self-harm content", targetType: "Post", community: "Youth", reason: "Sensitive", reporter: "User #5560", status: "New", createdAt: ago(8 * HOUR) },
-  { id: "r8", title: "Copyright violation", targetType: "Post", community: "Teachings", reason: "Copyright", reporter: "User #7772", status: "Resolved", createdAt: ago(1 * DAY) },
-  { id: "r9", title: "Spam account", targetType: "User profile", community: "—", reason: "Spam", reporter: "User #8821", status: "Dismissed", createdAt: ago(1 * DAY + 2 * HOUR) },
-  { id: "r10", title: "Violent content", targetType: "Post", community: "General", reason: "Violence", reporter: "User #3344", status: "Under review", createdAt: ago(1 * DAY + 4 * HOUR) },
-  { id: "r11", title: "Repeated spam comments", targetType: "Comment", community: "Prayer", reason: "Spam", reporter: "User #6612", status: "Resolved", createdAt: ago(2 * DAY) },
-  { id: "r12", title: "Impersonating a pastor", targetType: "User profile", community: "—", reason: "Other", reporter: "User #2090", status: "Under review", createdAt: ago(2 * DAY + 3 * HOUR) },
-  { id: "r13", title: "Harassing replies", targetType: "Comment", community: "Faith & Growth", reason: "Harassment", reporter: "User #1442", status: "Resolved", createdAt: ago(3 * DAY) },
-  { id: "r14", title: "Fake event link", targetType: "Event", community: "Outreach", reason: "Misinformation", reporter: "User #9003", status: "Dismissed", createdAt: ago(4 * DAY) },
+  { id: "r1", title: "Inappropriate comment", targetType: "Post", chapter: "Faith & Growth", reason: "Harassment", reporter: "User #2841", status: "New", createdAt: ago(2 * MIN), snippet: "This is not true…" },
+  { id: "r2", title: "Spam link in post", targetType: "Post", chapter: "General", reason: "Spam", reporter: "User #1093", status: "Under review", createdAt: ago(18 * MIN), snippet: "Check this out: http://…" },
+  { id: "r3", title: "Offensive language", targetType: "Comment", chapter: "Youth", reason: "Abuse", reporter: "User #4420", status: "Under review", createdAt: ago(1 * HOUR), snippet: "This is wrong…" },
+  { id: "r4", title: "Misleading content", targetType: "Post", chapter: "Bible Study", reason: "Misinformation", reporter: "User #3310", status: "Resolved", createdAt: ago(3 * HOUR) },
+  { id: "r5", title: "Inappropriate image", targetType: "Post", chapter: "General", reason: "Explicit content", reporter: "User #2217", status: "Resolved", createdAt: ago(5 * HOUR) },
+  { id: "r6", title: "Hate speech", targetType: "Comment", chapter: "General", reason: "Hate speech", reporter: "User #1188", status: "Under review", createdAt: ago(6 * HOUR) },
+  { id: "r7", title: "Self-harm content", targetType: "Post", chapter: "Youth", reason: "Sensitive", reporter: "User #5560", status: "New", createdAt: ago(8 * HOUR) },
+  { id: "r8", title: "Copyright violation", targetType: "Post", chapter: "Teachings", reason: "Copyright", reporter: "User #7772", status: "Resolved", createdAt: ago(1 * DAY) },
+  { id: "r9", title: "Spam account", targetType: "User profile", chapter: "—", reason: "Spam", reporter: "User #8821", status: "Dismissed", createdAt: ago(1 * DAY + 2 * HOUR) },
+  { id: "r10", title: "Violent content", targetType: "Post", chapter: "General", reason: "Violence", reporter: "User #3344", status: "Under review", createdAt: ago(1 * DAY + 4 * HOUR) },
+  { id: "r11", title: "Repeated spam comments", targetType: "Comment", chapter: "Prayer", reason: "Spam", reporter: "User #6612", status: "Resolved", createdAt: ago(2 * DAY) },
+  { id: "r12", title: "Impersonating a pastor", targetType: "User profile", chapter: "—", reason: "Other", reporter: "User #2090", status: "Under review", createdAt: ago(2 * DAY + 3 * HOUR) },
+  { id: "r13", title: "Harassing replies", targetType: "Comment", chapter: "Faith & Growth", reason: "Harassment", reporter: "User #1442", status: "Resolved", createdAt: ago(3 * DAY) },
+  { id: "r14", title: "Fake event link", targetType: "Event", chapter: "Outreach", reason: "Misinformation", reporter: "User #9003", status: "Dismissed", createdAt: ago(4 * DAY) },
 ];
 
 /* ---------------- Users ---------------- */
@@ -75,7 +76,6 @@ export type UserRow = {
   departmentId: string | null;
   preferredChapterId: string | null;
 
-  communities: number | null;
   status: "Active" | "Muted" | "Banned" | "Pending" | "Suspended";
   emailVerified: boolean;
   joined: string;
@@ -110,7 +110,7 @@ const userSeed: [
 ];
 
 export const sampleUsers: UserRow[] = userSeed.map(
-  ([name, role, membershipStatus, communities, status, joinedDays, last], i) => ({
+  ([name, role, membershipStatus, , status, joinedDays, last], i) => ({
     id: `u${i + 1}`,
     name,
     email: `${name.split(" ")[0].toLowerCase()}@gmail.com`,
@@ -121,7 +121,6 @@ export const sampleUsers: UserRow[] = userSeed.map(
     chapterId: null,
     departmentId: null,
     preferredChapterId: null,
-    communities,
     status,
     emailVerified: status !== "Pending",
     joined: ago(joinedDays * DAY),
@@ -135,55 +134,27 @@ export const sampleUsers: UserRow[] = userSeed.map(
 
 export const sampleUserActivity = [
   { icon: "message" as const, text: "Commented on “Prayer and Fasting”", at: ago(2 * MIN) },
-  { icon: "community" as const, text: "Joined department “Faith & Growth”", at: ago(1 * HOUR) },
+  { icon: "community" as const, text: "Joined the Lagos chapter", at: ago(1 * HOUR) },
   { icon: "badgeCheck" as const, text: "Completed course “Discipleship Foundations”", at: ago(2 * DAY) },
 ];
 
-/* ---------------- Communities ---------------- */
+/* ---------------- Departments ---------------- */
 
-export type CommunityRow = {
+export type DepartmentRow = {
   id: string;
   name: string;
   description: string;
-  type: string;
-  category: string;
   members: number;
-  posts: number | null;
-  status: "Active" | "Inactive" | "Pending" | "Archived";
   createdAt: string;
+  updatedAt: string;
 };
 
-export const sampleCommunities: CommunityRow[] = [
-  { id: "c1", name: "Youth", description: "A space for young adults to grow in faith.", type: "Group", category: "Youth", members: 1245, posts: 320, status: "Active", createdAt: ago(15 * DAY) },
-  { id: "c2", name: "Faith & Growth", description: "Discipleship and spiritual growth.", type: "Department", category: "Bible Study", members: 982, posts: 218, status: "Active", createdAt: ago(20 * DAY) },
-  { id: "c3", name: "Prayer", description: "A department for prayer requests.", type: "Department", category: "Prayer", members: 856, posts: 410, status: "Active", createdAt: ago(24 * DAY) },
-  { id: "c4", name: "Bible Study", description: "Weekly scripture discussions.", type: "Chapter", category: "Bible Study", members: 426, posts: 156, status: "Active", createdAt: ago(27 * DAY) },
-  { id: "c5", name: "Music & Worship", description: "Worship and creative ministry.", type: "Department", category: "Music & Worship", members: 610, posts: 190, status: "Active", createdAt: ago(30 * DAY) },
-  { id: "c6", name: "Volunteering", description: "Opportunities to serve.", type: "Department", category: "Outreach", members: 214, posts: 98, status: "Inactive", createdAt: ago(35 * DAY) },
-  { id: "c7", name: "Leadership Talk", description: "Discussions on leadership.", type: "Group", category: "Leadership", members: 389, posts: 142, status: "Active", createdAt: ago(37 * DAY) },
-  { id: "c8", name: "Testimonies", description: "Share and celebrate testimonies.", type: "Department", category: "Other", members: 522, posts: 276, status: "Active", createdAt: ago(40 * DAY) },
-  { id: "c9", name: "Mental Health", description: "Faith, wellness and support.", type: "Department", category: "Other", members: 305, posts: 120, status: "Pending", createdAt: ago(43 * DAY) },
-  { id: "c10", name: "Outreach", description: "Community outreach initiatives.", type: "Group", category: "Outreach", members: 198, posts: 84, status: "Active", createdAt: ago(45 * DAY) },
-  { id: "c11", name: "Young Adults", description: "Faith in everyday life.", type: "Group", category: "Youth", members: 344, posts: 101, status: "Active", createdAt: ago(50 * DAY) },
-  { id: "c12", name: "Women of Faith", description: "Fellowship and mentorship.", type: "Department", category: "Leadership", members: 276, posts: 88, status: "Inactive", createdAt: ago(55 * DAY) },
-];
-
-export const communityCategories = [
-  { label: "Youth", value: 8 },
-  { label: "Bible Study", value: 6 },
-  { label: "Prayer", value: 5 },
-  { label: "Leadership", value: 4 },
-  { label: "Music & Worship", value: 4 },
-  { label: "Outreach", value: 3 },
-  { label: "Other", value: 6 },
-];
-
-export const sampleCommunityActivity = [
-  { text: "New department “Testimonies” created", at: ago(5 * MIN) },
-  { text: "25 new members joined “Youth”", at: ago(1 * HOUR) },
-  { text: "Department “Volunteering” set to inactive", at: ago(3 * HOUR) },
-  { text: "New post in “Faith & Growth”", at: ago(5 * HOUR) },
-  { text: "Department “Mental Health” submitted for approval", at: ago(1 * DAY) },
+export const sampleDepartments: DepartmentRow[] = [
+  { id: "d1", name: "Choir", description: "Music and worship ministry.", members: 124, createdAt: ago(60 * DAY), updatedAt: ago(5 * DAY) },
+  { id: "d2", name: "Media", description: "Photography, video and livestreams.", members: 48, createdAt: ago(58 * DAY), updatedAt: ago(9 * DAY) },
+  { id: "d3", name: "Ushering", description: "Welcoming and seating.", members: 66, createdAt: ago(55 * DAY), updatedAt: ago(20 * DAY) },
+  { id: "d4", name: "Prayer", description: "Intercession and prayer requests.", members: 91, createdAt: ago(50 * DAY), updatedAt: ago(2 * DAY) },
+  { id: "d5", name: "Outreach", description: "Evangelism and community service.", members: 37, createdAt: ago(45 * DAY), updatedAt: ago(14 * DAY) },
 ];
 
 /* ---------------- Posts & comments ---------------- */
@@ -193,7 +164,7 @@ export type ContentRow = {
   title: string;
   excerpt: string;
   author: string;
-  community: string;
+  chapter: string;
   kind: "Post" | "Comment";
   status: "Active" | "Flagged" | "Under review" | "Deleted";
   createdAt: string;
@@ -203,18 +174,18 @@ export type ContentRow = {
 };
 
 export const sampleContent: ContentRow[] = [
-  { id: "p1", title: "How to stay consistent in prayer", excerpt: "Prayer has changed my life. Here are 5 practical ways I stay consistent in my prayer life…", author: "Ada Okafor", community: "Faith & Growth", kind: "Post", status: "Active", createdAt: ago(2 * MIN), likes: 124, comments: 36, shares: 12 },
-  { id: "p2", title: "Great message from today", excerpt: "This is so encouraging!", author: "James Carter", community: "Youth", kind: "Post", status: "Flagged", createdAt: ago(18 * MIN), likes: 40, comments: 9, shares: 2 },
-  { id: "p3", title: "Amen! 🙏", excerpt: "So true, this blessed me.", author: "Luciana Mensah", community: "Prayer", kind: "Comment", status: "Active", createdAt: ago(1 * HOUR), likes: 12, comments: 0, shares: 0 },
-  { id: "p4", title: "Check out this resource", excerpt: "This book really helped me grow.", author: "Kasham Ali", community: "Bible Study", kind: "Post", status: "Under review", createdAt: ago(3 * HOUR), likes: 18, comments: 4, shares: 1 },
-  { id: "p5", title: "What do you think about this?", excerpt: "I'd love to hear your thoughts…", author: "Tolu Adebayo", community: "General", kind: "Comment", status: "Active", createdAt: ago(5 * HOUR), likes: 6, comments: 0, shares: 0 },
-  { id: "p6", title: "Amazing worship session!", excerpt: "Such a powerful time together.", author: "Grace Williams", community: "Music & Worship", kind: "Post", status: "Active", createdAt: ago(8 * HOUR), likes: 88, comments: 21, shares: 7 },
-  { id: "p7", title: "Can anyone share more info?", excerpt: "I'm interested in joining.", author: "Daniel Kim", community: "General", kind: "Comment", status: "Flagged", createdAt: ago(1 * DAY), likes: 2, comments: 0, shares: 0 },
-  { id: "p8", title: "Testimony: God is faithful", excerpt: "I wanted to share how God…", author: "Sarah Johnson", community: "Testimonies", kind: "Post", status: "Active", createdAt: ago(1 * DAY + HOUR), likes: 156, comments: 44, shares: 19 },
-  { id: "p9", title: "This is really helpful!", excerpt: "Thank you for sharing this 🙏", author: "Michael Chen", community: "Youth", kind: "Comment", status: "Active", createdAt: ago(1 * DAY + 3 * HOUR), likes: 9, comments: 0, shares: 0 },
-  { id: "p10", title: "Join our prayer circle", excerpt: "We meet every Friday at 7pm…", author: "Fatima Bello", community: "Prayer", kind: "Post", status: "Under review", createdAt: ago(2 * DAY), likes: 31, comments: 8, shares: 5 },
-  { id: "p11", title: "Removed comment", excerpt: "[content removed by moderator]", author: "Peter Obi", community: "General", kind: "Comment", status: "Deleted", createdAt: ago(3 * DAY), likes: 0, comments: 0, shares: 0 },
-  { id: "p12", title: "Bible reading plan for November", excerpt: "Here's the plan we'll follow as a group…", author: "Grace Williams", community: "Bible Study", kind: "Post", status: "Active", createdAt: ago(3 * DAY + 2 * HOUR), likes: 64, comments: 15, shares: 22 },
+  { id: "p1", title: "How to stay consistent in prayer", excerpt: "Prayer has changed my life. Here are 5 practical ways I stay consistent in my prayer life…", author: "Ada Okafor", chapter: "Faith & Growth", kind: "Post", status: "Active", createdAt: ago(2 * MIN), likes: 124, comments: 36, shares: 12 },
+  { id: "p2", title: "Great message from today", excerpt: "This is so encouraging!", author: "James Carter", chapter: "Youth", kind: "Post", status: "Flagged", createdAt: ago(18 * MIN), likes: 40, comments: 9, shares: 2 },
+  { id: "p3", title: "Amen! 🙏", excerpt: "So true, this blessed me.", author: "Luciana Mensah", chapter: "Prayer", kind: "Comment", status: "Active", createdAt: ago(1 * HOUR), likes: 12, comments: 0, shares: 0 },
+  { id: "p4", title: "Check out this resource", excerpt: "This book really helped me grow.", author: "Kasham Ali", chapter: "Bible Study", kind: "Post", status: "Under review", createdAt: ago(3 * HOUR), likes: 18, comments: 4, shares: 1 },
+  { id: "p5", title: "What do you think about this?", excerpt: "I'd love to hear your thoughts…", author: "Tolu Adebayo", chapter: "General", kind: "Comment", status: "Active", createdAt: ago(5 * HOUR), likes: 6, comments: 0, shares: 0 },
+  { id: "p6", title: "Amazing worship session!", excerpt: "Such a powerful time together.", author: "Grace Williams", chapter: "Music & Worship", kind: "Post", status: "Active", createdAt: ago(8 * HOUR), likes: 88, comments: 21, shares: 7 },
+  { id: "p7", title: "Can anyone share more info?", excerpt: "I'm interested in joining.", author: "Daniel Kim", chapter: "General", kind: "Comment", status: "Flagged", createdAt: ago(1 * DAY), likes: 2, comments: 0, shares: 0 },
+  { id: "p8", title: "Testimony: God is faithful", excerpt: "I wanted to share how God…", author: "Sarah Johnson", chapter: "Testimonies", kind: "Post", status: "Active", createdAt: ago(1 * DAY + HOUR), likes: 156, comments: 44, shares: 19 },
+  { id: "p9", title: "This is really helpful!", excerpt: "Thank you for sharing this 🙏", author: "Michael Chen", chapter: "Youth", kind: "Comment", status: "Active", createdAt: ago(1 * DAY + 3 * HOUR), likes: 9, comments: 0, shares: 0 },
+  { id: "p10", title: "Join our prayer circle", excerpt: "We meet every Friday at 7pm…", author: "Fatima Bello", chapter: "Prayer", kind: "Post", status: "Under review", createdAt: ago(2 * DAY), likes: 31, comments: 8, shares: 5 },
+  { id: "p11", title: "Removed comment", excerpt: "[content removed by moderator]", author: "Peter Obi", chapter: "General", kind: "Comment", status: "Deleted", createdAt: ago(3 * DAY), likes: 0, comments: 0, shares: 0 },
+  { id: "p12", title: "Bible reading plan for November", excerpt: "Here's the plan we'll follow as a group…", author: "Grace Williams", chapter: "Bible Study", kind: "Post", status: "Active", createdAt: ago(3 * DAY + 2 * HOUR), likes: 64, comments: 15, shares: 22 },
 ];
 
 /* ---------------- Events ---------------- */
@@ -232,6 +203,7 @@ export type EventRow = {
   attendees: number;
   shares: number;
   ongoing?: boolean;
+  chapterId?: string | null;
 };
 
 export const sampleEvents: EventRow[] = [
@@ -255,28 +227,29 @@ export type VideoRow = {
   subtitle: string;
   kind: "Live" | "Video";
   host: string;
-  community: string;
-  status: "Live now" | "Published" | "Ended" | "Draft" | "Scheduled";
+  chapter: string;
+  status: "Live now" | "Published" | "Ended" | "Draft" | "Scheduled" | "Cancelled";
   date: string;
   views: number | null;
   duration: string;
   watching?: number;
   likes?: number;
   comments?: number;
+  chapterId?: string | null;
 };
 
 export const sampleVideos: VideoRow[] = [
-  { id: "v1", title: "Sunday Worship Live", subtitle: "A time of worship and the word", kind: "Live", host: "Pastor Daniel", community: "CYC Global", status: "Live now", date: ago(40 * MIN), views: 1200, duration: "1:24:30", watching: 1245, likes: 320, comments: 86 },
-  { id: "v2", title: "Bible Study: John 3", subtitle: "Understanding new birth", kind: "Video", host: "Grace Williams", community: "Bible Study", status: "Published", date: ago(2 * DAY), views: 842, duration: "48:15" },
-  { id: "v3", title: "Prayer Night", subtitle: "An evening of intercession", kind: "Live", host: "Kasham Ali", community: "Prayer", status: "Ended", date: ago(5 * DAY), views: 2100, duration: "1:05:20" },
-  { id: "v4", title: "Faith & Growth Talk", subtitle: "Practical steps for spiritual growth", kind: "Video", host: "James Carter", community: "Faith & Growth", status: "Published", date: ago(7 * DAY), views: 960, duration: "56:10" },
-  { id: "v5", title: "Youth Q&A Session", subtitle: "Real questions, honest answers", kind: "Live", host: "Luciana Mensah", community: "Youth", status: "Ended", date: ago(9 * DAY), views: 1400, duration: "1:12:05" },
-  { id: "v6", title: "Worship Moments", subtitle: "Songs and spontaneous worship", kind: "Video", host: "Tolu Adebayo", community: "Music & Worship", status: "Published", date: ago(12 * DAY), views: 670, duration: "42:30" },
-  { id: "v7", title: "Leadership Webinar", subtitle: "Leading with purpose", kind: "Video", host: "Michael Chen", community: "Leadership", status: "Published", date: ago(15 * DAY), views: 520, duration: "38:22" },
-  { id: "v8", title: "Testimony Night", subtitle: "Stories of God's faithfulness", kind: "Live", host: "Fatima Bello", community: "General", status: "Ended", date: ago(17 * DAY), views: 1800, duration: "1:18:13" },
-  { id: "v9", title: "Young Adults Discussion", subtitle: "Faith in everyday life", kind: "Video", host: "Ada Okafor", community: "Young Adults", status: "Draft", date: ago(19 * DAY), views: null, duration: "50:40" },
-  { id: "v10", title: "How to Study the Bible", subtitle: "A practical guide", kind: "Video", host: "Daniel Kim", community: "Bible Study", status: "Published", date: ago(22 * DAY), views: 690, duration: "29:10" },
-  { id: "v11", title: "Midweek Service", subtitle: "Teaching and prayer", kind: "Live", host: "Pastor Daniel", community: "CYC Global", status: "Scheduled", date: ahead(3 * DAY), views: null, duration: "—" },
+  { id: "v1", title: "Sunday Worship Live", subtitle: "A time of worship and the word", kind: "Live", host: "Pastor Daniel", chapter: "CYC Global", status: "Live now", date: ago(40 * MIN), views: 1200, duration: "1:24:30", watching: 1245, likes: 320, comments: 86 },
+  { id: "v2", title: "Bible Study: John 3", subtitle: "Understanding new birth", kind: "Video", host: "Grace Williams", chapter: "Bible Study", status: "Published", date: ago(2 * DAY), views: 842, duration: "48:15" },
+  { id: "v3", title: "Prayer Night", subtitle: "An evening of intercession", kind: "Live", host: "Kasham Ali", chapter: "Prayer", status: "Ended", date: ago(5 * DAY), views: 2100, duration: "1:05:20" },
+  { id: "v4", title: "Faith & Growth Talk", subtitle: "Practical steps for spiritual growth", kind: "Video", host: "James Carter", chapter: "Faith & Growth", status: "Published", date: ago(7 * DAY), views: 960, duration: "56:10" },
+  { id: "v5", title: "Youth Q&A Session", subtitle: "Real questions, honest answers", kind: "Live", host: "Luciana Mensah", chapter: "Youth", status: "Ended", date: ago(9 * DAY), views: 1400, duration: "1:12:05" },
+  { id: "v6", title: "Worship Moments", subtitle: "Songs and spontaneous worship", kind: "Video", host: "Tolu Adebayo", chapter: "Music & Worship", status: "Published", date: ago(12 * DAY), views: 670, duration: "42:30" },
+  { id: "v7", title: "Leadership Webinar", subtitle: "Leading with purpose", kind: "Video", host: "Michael Chen", chapter: "Leadership", status: "Published", date: ago(15 * DAY), views: 520, duration: "38:22" },
+  { id: "v8", title: "Testimony Night", subtitle: "Stories of God's faithfulness", kind: "Live", host: "Fatima Bello", chapter: "General", status: "Ended", date: ago(17 * DAY), views: 1800, duration: "1:18:13" },
+  { id: "v9", title: "Young Adults Discussion", subtitle: "Faith in everyday life", kind: "Video", host: "Ada Okafor", chapter: "Young Adults", status: "Draft", date: ago(19 * DAY), views: null, duration: "50:40" },
+  { id: "v10", title: "How to Study the Bible", subtitle: "A practical guide", kind: "Video", host: "Daniel Kim", chapter: "Bible Study", status: "Published", date: ago(22 * DAY), views: 690, duration: "29:10" },
+  { id: "v11", title: "Midweek Service", subtitle: "Teaching and prayer", kind: "Live", host: "Pastor Daniel", chapter: "CYC Global", status: "Scheduled", date: ahead(3 * DAY), views: null, duration: "—" },
 ];
 
 /* ---------------- Spiritual resources ---------------- */
@@ -294,6 +267,8 @@ export type ResourceRow = {
   downloads?: number;
   comments?: number;
   likes?: number;
+  chapterId?: string | null;
+  categoryId?: string | null;
 };
 
 export const sampleResources: ResourceRow[] = [
@@ -322,6 +297,8 @@ export type CourseRow = {
   lessons: number;
   students: number;
   status: "Published" | "Draft";
+  quizzes?: number;
+  chapterId?: string | null;
 };
 
 export const sampleCourses: CourseRow[] = [
@@ -345,28 +322,30 @@ export const sampleQuizAttempts = [
   { student: "Sarah J.", quiz: "Module 2 Quiz", score: 60, at: ago(4 * DAY) },
 ];
 
-/* ---------------- Branches ---------------- */
+/* ---------------- Chapters ---------------- */
 
-export type BranchRow = {
+export type ChapterRow = {
   id: string;
   name: string;
+  slug: string;
+  description: string;
   city: string;
   country: string;
   timezone: string;
+  language: string | null;
   members: number;
-  communities: number;
   contact: string;
   active: boolean;
   createdAt: string;
 };
 
-export const sampleBranches: BranchRow[] = [
-  { id: "b1", name: "CYC Ikorodu", city: "Ikorodu", country: "NG", timezone: "Africa/Lagos", members: 1240, communities: 12, contact: "ikorodu@cyc.org", active: true, createdAt: ago(400 * DAY) },
-  { id: "b2", name: "CYC Lagos Island", city: "Lagos", country: "NG", timezone: "Africa/Lagos", members: 860, communities: 8, contact: "lagos@cyc.org", active: true, createdAt: ago(320 * DAY) },
-  { id: "b3", name: "CYC Abuja", city: "Abuja", country: "NG", timezone: "Africa/Lagos", members: 512, communities: 6, contact: "abuja@cyc.org", active: true, createdAt: ago(260 * DAY) },
-  { id: "b4", name: "CYC Accra", city: "Accra", country: "GH", timezone: "Africa/Accra", members: 298, communities: 4, contact: "accra@cyc.org", active: true, createdAt: ago(190 * DAY) },
-  { id: "b5", name: "CYC London", city: "London", country: "GB", timezone: "Europe/London", members: 184, communities: 3, contact: "london@cyc.org", active: true, createdAt: ago(120 * DAY) },
-  { id: "b6", name: "CYC Houston", city: "Houston", country: "US", timezone: "America/Chicago", members: 96, communities: 2, contact: "houston@cyc.org", active: false, createdAt: ago(80 * DAY) },
+export const sampleChapters: ChapterRow[] = [
+  { id: "b1", name: "CYC Ikorodu", slug: "cyc-ikorodu", description: "", city: "Ikorodu", country: "NG", timezone: "Africa/Lagos", language: "en-NG", members: 1240, contact: "ikorodu@cyc.org", active: true, createdAt: ago(400 * DAY) },
+  { id: "b2", name: "CYC Lagos Island", slug: "cyc-lagos-island", description: "", city: "Lagos", country: "NG", timezone: "Africa/Lagos", language: "en-NG", members: 860, contact: "lagos@cyc.org", active: true, createdAt: ago(320 * DAY) },
+  { id: "b3", name: "CYC Abuja", slug: "cyc-abuja", description: "", city: "Abuja", country: "NG", timezone: "Africa/Lagos", language: "en-NG", members: 512, contact: "abuja@cyc.org", active: true, createdAt: ago(260 * DAY) },
+  { id: "b4", name: "CYC Accra", slug: "cyc-accra", description: "", city: "Accra", country: "GH", timezone: "Africa/Accra", language: "en-GH", members: 298, contact: "accra@cyc.org", active: true, createdAt: ago(190 * DAY) },
+  { id: "b5", name: "CYC London", slug: "cyc-london", description: "", city: "London", country: "GB", timezone: "Europe/London", language: "en-GB", members: 184, contact: "london@cyc.org", active: true, createdAt: ago(120 * DAY) },
+  { id: "b6", name: "CYC Houston", slug: "cyc-houston", description: "", city: "Houston", country: "US", timezone: "America/Chicago", language: "en-US", members: 96, contact: "houston@cyc.org", active: false, createdAt: ago(80 * DAY) },
 ];
 
 /* ---------------- Notifications ---------------- */
@@ -375,7 +354,7 @@ export type NotificationRow = {
   id: string;
   title: string;
   body: string;
-  type: "Live" | "Course" | "Department" | "Event" | "Security" | "Resource" | "System" | "Newsletter" | "Update";
+  type: "Live" | "Course" | "Chapter" | "Event" | "Security" | "Resource" | "System" | "Newsletter" | "Update";
   audience: string;
   status: "Sent" | "Scheduled" | "Draft";
   createdBy: string;
@@ -385,7 +364,7 @@ export type NotificationRow = {
 export const sampleNotifications: NotificationRow[] = [
   { id: "n1", title: "Upcoming Live Session", body: "Join us for Sunday Worship Live tomorrow at 10 AM.", type: "Live", audience: "All users", status: "Sent", createdBy: "Daniel Kim", date: ago(1 * DAY) },
   { id: "n2", title: "New Course Available", body: "Our new course “Growing in Faith” is now live!", type: "Course", audience: "All users", status: "Sent", createdBy: "Grace Williams", date: ago(3 * DAY) },
-  { id: "n3", title: "Department Update", body: "New discussions in your departments.", type: "Department", audience: "Department members", status: "Scheduled", createdBy: "James Carter", date: ahead(1 * DAY) },
+  { id: "n3", title: "Chapter Update", body: "New discussions in your chapter.", type: "Chapter", audience: "Chapter members", status: "Scheduled", createdBy: "James Carter", date: ahead(1 * DAY) },
   { id: "n4", title: "Event Reminder", body: "Don't forget! Prayer Night starts in 1 hour.", type: "Event", audience: "Registered attendees", status: "Sent", createdBy: "Fatima Bello", date: ago(5 * DAY) },
   { id: "n5", title: "Account Security", body: "We noticed a new login to your account.", type: "Security", audience: "Specific users", status: "Sent", createdBy: "System", date: ago(7 * DAY) },
   { id: "n6", title: "New Sermon Published", body: "Check out this week's sermon: The Power of Prayer.", type: "Resource", audience: "All users", status: "Sent", createdBy: "Tolu Adebayo", date: ago(9 * DAY) },

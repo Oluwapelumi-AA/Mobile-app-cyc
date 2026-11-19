@@ -1,9 +1,9 @@
 from app.db.session import Base
-from app.models.branch import Branch, Chapter
+from app.models.chapter import Chapter
 from app.models.chapter_coverage import ChapterCoverageArea
 from app.models.chapter_management import (
-    BranchCoordinator,
-    ChapterCoordinator,
+    ChapterStaff,
+    ChapterStaffRole,
     Department,
 )
 from app.models.chapter_access_grant import (
@@ -14,12 +14,15 @@ from app.models.chapter_access_request import (
     ChapterAccessRequest,
     ChapterAccessRequestStatus,
 )
-from app.models.chapter_content import ChapterPost, ChapterPostComment
-from app.models.community import (
-    Community,
-    CommunityMembership,
-    CommunityRole,
-    CommunityVisibility,
+from app.models.course import (
+    Course,
+    CourseEnrollment,
+    CourseLesson,
+    CourseLessonCompletion,
+    CourseLevel,
+    CourseQuiz,
+    CourseStatus,
+    QuizAttempt,
 )
 from app.models.event import (
     Event,
@@ -37,7 +40,7 @@ from app.models.meeting import (
 )
 from app.models.moderation import (
     AuditLog,
-    CommunityBan,
+    ChapterBan,
     ContentReport,
     ReportReason,
     ReportStatus,
@@ -72,11 +75,10 @@ __all__ = [
     "Base",
     "AccountRole",
     "AuditLog",
-    "Branch",
-    "BranchCoordinator",
-    "ChapterPost",
-    "ChapterPostComment",
-    "ChapterCoordinator",
+    "Chapter",
+    "ChapterBan",
+    "ChapterStaff",
+    "ChapterStaffRole",
     "ChapterCoverageArea",
     "ChapterAccessGrant",
     "ChapterAccessGrantItem",
@@ -84,11 +86,14 @@ __all__ = [
     "ChapterAccessRequestStatus",
     "Department",
     "Comment",
-    "Community",
-    "CommunityBan",
-    "CommunityMembership",
-    "CommunityRole",
-    "CommunityVisibility",
+    "Course",
+    "CourseEnrollment",
+    "CourseLesson",
+    "CourseLessonCompletion",
+    "CourseLevel",
+    "CourseQuiz",
+    "CourseStatus",
+    "QuizAttempt",
     "ContentReport",
     "DeliveryChannel",
     "DeliveryStatus",

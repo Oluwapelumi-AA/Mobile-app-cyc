@@ -4,12 +4,12 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from app.models.branch import Chapter
+from app.models.chapter import Chapter
 from app.models.chapter_access_grant import (
     ChapterAccessGrant,
     ChapterAccessGrantItem,
 )
-from app.models.chapter_management import ChapterCoordinator
+from app.models.chapter_management import ChapterStaff
 from app.models.user import MembershipStatus, User
 from app.models.user_profile import UserProfile
 
@@ -37,7 +37,7 @@ def create_profile(api, user_id, name="Test User", chapter_id=None):
             user_id=user_id,
             display_name=name,
             onboarding_steps={},
-            branch_id=chapter_id,
+            chapter_id=chapter_id,
         )
         db.add(profile)
         db.commit()
@@ -59,8 +59,9 @@ def make_official_member(api, user_id, chapter_id):
 
 def assign_coordinator(api, chapter_id, user_id):
     with api.session_factory() as db:
-        assignment = ChapterCoordinator(
-            branch_id=chapter_id,
+        assignment = ChapterStaff(
+            role="coordinator",
+            chapter_id=chapter_id,
             user_id=user_id,
         )
         db.add(assignment)
@@ -115,7 +116,6 @@ def test_coordinator_can_create_chapter_event(api):
     event = create_chapter_event(api, chapter_id, coordinator)
 
     assert event["chapter_id"] == str(chapter_id)
-    assert event["community_id"] is None
     assert event["can_manage"] is True
 
 

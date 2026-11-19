@@ -2,9 +2,9 @@
 import pytest
 
 from app.models import AccountRole, User
-from app.models.branch import Chapter
+from app.models.chapter import Chapter
 from app.models.user_profile import UserProfile
-from app.models.chapter_management import ChapterCoordinator
+from app.models.chapter_management import ChapterStaff
 
 
 def create_chapter(api, name="Nigeria Chapter"):
@@ -34,8 +34,9 @@ def create_profile(api, user_id, display_name="Test User"):
 
 def assign_coordinator(api, chapter_id, coordinator_id):
     with api.session_factory() as db:
-        assignment = ChapterCoordinator(
-            branch_id=chapter_id,
+        assignment = ChapterStaff(
+            role="coordinator",
+            chapter_id=chapter_id,
             user_id=coordinator_id,
         )
         db.add(assignment)
@@ -64,7 +65,7 @@ def test_user_can_submit_chapter_access_request(api):
         profile = db.get(UserProfile, user_id)
 
         assert profile.preferred_chapter_id == chapter_id
-        assert profile.branch_id is None
+        assert profile.chapter_id is None
 
 
 def test_user_can_view_own_chapter_access_requests(api):
@@ -115,6 +116,8 @@ def test_chapter_coordinator_can_view_requests_for_own_chapter(api):
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["user_id"] == str(user_id)
+    assert response.json()[0]["user_name"] == "Test User"
+    assert response.json()[0]["user_email"].startswith("requester")
 
 
 @pytest.mark.parametrize("decision", ["approved", "declined"])
@@ -159,7 +162,7 @@ def test_coordinator_can_review_chapter_access_request(api, decision):
         profile = db.get(UserProfile, user_id)
 
         assert user.membership_status == MembershipStatus.GUEST
-        assert profile.branch_id is None
+        assert profile.chapter_id is None
         assert profile.department_id is None
 
 

@@ -127,7 +127,7 @@ class ResourceCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # Leave out for the app-wide library (app moderators and admins only).
-    community_id: UUID | None = None
+    chapter_id: UUID | None = None
     category_id: UUID | None = None
     kind: ResourceKind
     title: ResourceTitle
@@ -171,7 +171,7 @@ class ProgressRead(BaseModel):
 
 class ResourceSummary(BaseModel):
     id: UUID
-    community_id: UUID | None
+    chapter_id: UUID | None
     category_id: UUID | None
     created_by: UUID | None
     kind: ResourceKind

@@ -2,13 +2,32 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { ALL_NAV, ShellFrame, Sidebar, Topbar } from "../components/admin/Shell";
+import {
+  ALL_NAV,
+  CHAPTER_NAV,
+  CHAPTER_NAV_SECONDARY,
+  NAV,
+  NAV_SECONDARY,
+  ShellFrame,
+  Sidebar,
+  Topbar,
+} from "../components/admin/Shell";
 import { Icon } from "../components/admin/icons";
-import { AdminContext, type AdminOverview, type PageKey, api } from "../components/admin/data";
+import {
+  AdminContext,
+  type AdminOverview,
+  type ChapterScope,
+  type PageKey,
+  api,
+} from "../components/admin/data";
+import Announcements from "../components/admin/screens/Announcements";
+import ChapterHome from "../components/admin/screens/ChapterHome";
+import Members from "../components/admin/screens/Members";
+import Requests from "../components/admin/screens/Requests";
 import Audit from "../components/admin/screens/Audit";
-import Branches from "../components/admin/screens/Branches";
-import Communities from "../components/admin/screens/Communities";
+import Chapters from "../components/admin/screens/Chapters";
 import Courses from "../components/admin/screens/Courses";
+import Departments from "../components/admin/screens/Departments";
 import Events from "../components/admin/screens/Events";
 import Live from "../components/admin/screens/Live";
 import Notifications from "../components/admin/screens/Notifications";
@@ -19,21 +38,38 @@ import Resources from "../components/admin/screens/Resources";
 import Settings from "../components/admin/screens/Settings";
 import Users from "../components/admin/screens/Users";
 
-const SCREENS: Record<PageKey, () => React.JSX.Element> = {
+const SCREENS: Record<PageKey, () => React.JSX.Element | null> = {
   overview: Overview,
   reports: Reports,
   users: Users,
-  communities: Communities,
+  chapters: Chapters,
   posts: Posts,
   events: Events,
   live: Live,
   resources: Resources,
   courses: Courses,
-  branches: Branches,
+  departments: Departments,
   notifications: Notifications,
   audit: Audit,
   settings: Settings,
+  members: Members,
+  requests: Requests,
+  announcements: Announcements,
 };
+
+const ADMIN_PAGES = new Set<PageKey>([...NAV, ...NAV_SECONDARY].map((item) => item.key));
+const SCOPE_KEY = "cyc.chapterScope";
+
+type ChapterCounts = { pending_access_request_count: number; open_report_count: number };
+
+/** Menu for a chapter staff role. Moderators get the moderation pages only. */
+function chapterMenu(role: ChapterScope["role"]) {
+  const allowed = (item: { coordinatorOnly?: boolean }) => role === "coordinator" || !item.coordinatorOnly;
+  return {
+    primary: CHAPTER_NAV.filter(allowed),
+    secondary: CHAPTER_NAV_SECONDARY.filter(allowed),
+  };
+}
 
 const isPageKey = (value: string): value is PageKey =>
   Object.prototype.hasOwnProperty.call(SCREENS, value);
@@ -57,8 +93,9 @@ type Me = {
 };
 
 type CoordinatorAssignment = {
-  branch_id: string;
-  branch_name: string;
+  chapter_id: string;
+  chapter_name: string;
+  role: "coordinator" | "moderator";
 };
 
 type DashboardMode = "admin" | "coordinator";
@@ -96,6 +133,8 @@ export default function Home() {
   const [me, setMe] = useState<Me | null>(null);
   const [mode, setMode] = useState<DashboardMode | null>(null);
   const [coordinatorAssignments, setCoordinatorAssignments] = useState<CoordinatorAssignment[]>([]);
+  const [scope, setScope] = useState<ChapterScope | null>(null);
+  const [counts, setCounts] = useState<ChapterCounts | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [checkingSession, setCheckingSession] = useState(true);
@@ -159,8 +198,9 @@ export default function Home() {
       }
 
 
-      // A non-admin account can enter this dashboard only when assigned as coordinator.
-      const assignments = await api<CoordinatorAssignment[]>("chapter-coordinator/me");
+      // A non-admin account can enter only with a chapter staff role
+      // (Coordinator or Moderator).
+      const assignments = await api<CoordinatorAssignment[]>("me/chapter-staff");
 
       if (!Array.isArray(assignments) || assignments.length === 0) {
         setOverview(null);
@@ -168,10 +208,24 @@ export default function Home() {
         setMode(null);
         setSignedIn(false);
         setError(
-          "Your account is not assigned as a chapter coordinator. Please contact a platform administrator.",
+          "Your account isn't a chapter coordinator or moderator. Please contact a platform administrator.",
         );
         return;
       }
+
+      // Reopen the chapter used last time, if still assigned.
+      let saved: string | null = null;
+      try {
+        saved = window.localStorage.getItem(SCOPE_KEY);
+      } catch {
+        saved = null;
+      }
+      // Otherwise start in a chapter they coordinate.
+      const chosen =
+        assignments.find((a) => a.chapter_id === saved) ??
+        assignments.find((a) => a.role === "coordinator") ??
+        assignments[0];
+      setScope({ id: chosen.chapter_id, name: chosen.chapter_name, role: chosen.role });
 
       setOverview(null);
       setCoordinatorAssignments(assignments);
@@ -231,6 +285,8 @@ export default function Home() {
       setMe(null);
       setMode(null);
       setCoordinatorAssignments([]);
+      setScope(null);
+      setCounts(null);
       setPassword("");
       setError("");
       navigate("overview");
@@ -238,14 +294,55 @@ export default function Home() {
   }
 
   const ctx = useMemo(
-    () => ({ navigate, overview, globalSearch: search }),
-    [navigate, overview, search],
+    () => ({ navigate, overview, globalSearch: search, scope: mode === "coordinator" ? scope : null }),
+    [navigate, overview, search, mode, scope],
   );
-  const navItem = ALL_NAV.find((item) => item.key === page) ?? ALL_NAV[0];
+
+  const menu = scope ? chapterMenu(scope.role) : null;
+  const allowedPages = useMemo(
+    () =>
+      mode === "coordinator" && menu
+        ? new Set<PageKey>([...menu.primary, ...menu.secondary].map((item) => item.key))
+        : ADMIN_PAGES,
+    [mode, menu],
+  );
+  // Fall back to the overview for pages this role doesn't have.
+  const current: PageKey = allowedPages.has(page) ? page : "overview";
+  const navItem =
+    (mode === "coordinator" ? [...CHAPTER_NAV, ...CHAPTER_NAV_SECONDARY] : ALL_NAV).find((item) => item.key === current) ??
+    ALL_NAV[0];
 
   useEffect(() => {
-    document.title = `${mode === "coordinator" ? "Chapter Coordinator" : navItem.label} | CYC`;
-  }, [mode, navItem.label]);
+    document.title = `${navItem.label}${mode === "coordinator" && scope ? ` · ${scope.name}` : ""} | CYC`;
+  }, [mode, navItem.label, scope]);
+
+  /* ---------- chapter staff: badge counts ---------- */
+  const loadCounts = useCallback(() => {
+    if (!scope) return;
+    api<ChapterCounts>(`chapters/${scope.id}/dashboard`)
+      .then(setCounts)
+      .catch(() => setCounts(null));
+  }, [scope]);
+
+  useEffect(() => {
+    if (mode !== "coordinator") return;
+    loadCounts();
+    const timer = window.setInterval(loadCounts, 60_000);
+    return () => window.clearInterval(timer);
+  }, [mode, loadCounts, page]);
+
+  const switchChapter = (chapterId: string) => {
+    const next = coordinatorAssignments.find((a) => a.chapter_id === chapterId);
+    if (!next) return;
+    try {
+      window.localStorage.setItem(SCOPE_KEY, next.chapter_id);
+    } catch {
+      // Private browsing: the choice just isn't remembered.
+    }
+    setCounts(null);
+    setScope({ id: next.chapter_id, name: next.chapter_name, role: next.role });
+    navigate("overview");
+  };
 
   /* ---------- loading state ---------- */
   if (checkingSession) {
@@ -374,76 +471,80 @@ export default function Home() {
     );
   }
 
-  /* ---------- restricted coordinator landing page ---------- */
-  if (mode === "coordinator") {
+  /* ---------- chapter staff workspace ---------- */
+  if (mode === "coordinator" && scope && menu) {
+    const Screen = current === "overview" ? ChapterHome : SCREENS[current];
+    const roleLabel = scope.role === "coordinator" ? "Coordinator" : "Moderator";
+
     return (
-      <main className="min-h-screen bg-canvas px-5 py-8 sm:px-8">
-        <div className="mx-auto max-w-4xl">
-          <header className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <Image
-                src="/cyc-crest.png"
-                alt="Christ Youth Club logo"
-                width={48}
-                height={48}
-                className="h-12 w-12 object-contain"
-              />
-              <div>
-                <h1 className="text-xl font-bold text-ink">CYC Chapter Dashboard</h1>
-                <p className="text-sm text-muted">Chapter Coordinator</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="rounded-full border border-line bg-white px-5 py-2.5 text-sm font-semibold text-ink hover:bg-canvas"
-            >
-              Sign out
-            </button>
-          </header>
-
-          <section className="mt-10">
-            <h2 className="text-2xl font-bold text-ink">Welcome, {me?.name || "Coordinator"}</h2>
-            <p className="mt-2 text-sm text-muted">
-              You have coordinator access to the following chapters.
-            </p>
-          </section>
-
-          <section className="mt-7 grid gap-4 sm:grid-cols-2">
-            {coordinatorAssignments.map((assignment) => (
-              <article
-                key={assignment.branch_id}
-                className="rounded-2xl border border-line bg-white p-6 shadow-sm"
-              >
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-                  Assigned Chapter
-                </p>
-                <h3 className="mt-3 text-lg font-bold text-ink">{assignment.branch_name}</h3>
-                <p className="mt-2 break-all text-xs text-muted">
-                  Chapter ID: {assignment.branch_id}
-                </p>
-                <p className="mt-4 text-sm text-muted">
-                  Your chapter management workspace will appear here.
-                </p>
-              </article>
-            ))}
-          </section>
-        </div>
-      </main>
+      <AdminContext.Provider value={ctx}>
+        <ShellFrame
+          sidebar={
+            <Sidebar
+              active={current}
+              onNavigate={navigate}
+              open={menuOpen}
+              onClose={() => setMenuOpen(false)}
+              primary={menu.primary}
+              secondary={menu.secondary}
+              subtitle="Chapter Dashboard"
+              badges={{
+                requests: counts?.pending_access_request_count,
+                reports: counts?.open_report_count,
+              }}
+              header={
+                <div className="rounded-2xl bg-white/10 p-3">
+                  <p className="text-[10.5px] font-semibold uppercase tracking-wider text-white/60">{roleLabel}</p>
+                  {coordinatorAssignments.length > 1 ? (
+                    <select
+                      aria-label="Switch chapter"
+                      value={scope.id}
+                      onChange={(e) => switchChapter(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-white/20 bg-transparent px-2 py-1.5 text-sm font-semibold text-white outline-none [&>option]:text-ink"
+                    >
+                      {coordinatorAssignments.map((a) => (
+                        <option key={a.chapter_id} value={a.chapter_id}>
+                          {a.chapter_name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="mt-0.5 truncate text-sm font-semibold text-white">{scope.name}</p>
+                  )}
+                </div>
+              }
+            />
+          }
+        >
+          <Topbar
+            placeholder={navItem.search}
+            search={search}
+            onSearch={setSearch}
+            onMenu={() => setMenuOpen(true)}
+            onSignOut={signOut}
+            onBell={() => navigate("reports")}
+            me={me ? { ...me, role: roleLabel } : null}
+            hasUnread={(counts?.open_report_count ?? 0) > 0}
+          />
+          <main className="pt-2">
+            <Screen key={`${scope.id}-${current}`} />
+          </main>
+        </ShellFrame>
+      </AdminContext.Provider>
     );
   }
 
   // Never render the platform administrator screens without confirmed admin mode.
   if (mode !== "admin") return null;
 
-  const Screen = SCREENS[page];
+  const Screen = SCREENS[current];
 
   return (
     <AdminContext.Provider value={ctx}>
       <ShellFrame
         sidebar={
           <Sidebar
-            active={page}
+            active={current}
             onNavigate={navigate}
             open={menuOpen}
             onClose={() => setMenuOpen(false)}
@@ -461,7 +562,7 @@ export default function Home() {
           hasUnread={(overview?.open_reports ?? 0) > 0}
         />
         <main className="pt-2">
-          <Screen key={page} />
+          <Screen key={current} />
         </main>
       </ShellFrame>
     </AdminContext.Provider>

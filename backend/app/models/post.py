@@ -16,8 +16,8 @@ class Post(Base):
     __tablename__ = "posts"
 
     __table_args__ = (
-        # Community feed: newest first, ties broken by id.
-        Index("ix_posts_community_feed", "community_id", "created_at", "id"),
+        # Chapter feed: newest first, ties broken by id.
+        Index("ix_posts_chapter_feed", "chapter_id", "created_at", "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -25,9 +25,9 @@ class Post(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    community_id: Mapped[uuid.UUID] = mapped_column(
+    chapter_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("communities.id", ondelete="CASCADE"),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
         nullable=False,
     )
     author_id: Mapped[uuid.UUID] = mapped_column(

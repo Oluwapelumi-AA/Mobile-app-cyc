@@ -33,7 +33,7 @@ Account creation and sign-in come first and belong to the auth workstream.
 | `language` | yes | profile has a language (clients can prefill from device locale) |
 | `region` | no | profile has a country |
 | `timezone` | no | profile has a time zone (clients can prefill from device) |
-| `communities` | no | always (will check memberships once communities exist) |
+| `chapter` | no | profile has a preferred chapter (`preferred_chapter_id`); official membership is still assigned by an admin |
 
 Rules: required steps cannot be skipped; a skipped step can be completed
 later; a completed step cannot be skipped; onboarding completes only when
@@ -84,9 +84,10 @@ As implemented: `users` holds `account_role` as user/moderator/admin and
    to `users.id` with `ON DELETE CASCADE`, the fields above, onboarding step
    statuses and `onboarding_completed_at`. One row per user, created by
    `POST /profiles/me` after sign-up, not by auth.
-4. **Roles:** account role on `User` only. Community roles (owner, moderator,
-   member) live on a community membership table owned by communities, never on
-   `User`.
+4. **Roles:** account role on `User` only. Chapter roles (coordinator,
+   moderator) live on `chapter_staff`, and official chapter membership on
+   `user_profiles.chapter_id` with `users.membership_status`, never as a
+   separate role on `User`.
 5. **Current user:** auth provides `get_current_user_id()` (or a
    `get_current_user()` returning at least `id` and account status) in
    `app/api/deps.py`, which rejects missing, invalid or inactive accounts with

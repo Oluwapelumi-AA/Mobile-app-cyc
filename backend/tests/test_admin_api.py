@@ -151,8 +151,9 @@ def test_only_admins_change_roles(api, world):
 
 
 def test_overview(api, world):
-    api.act_as(world["alice"])
-    api.client.post("/api/v1/communities", json={"name": "Abuja Fellowship"})
+    api.add_chapter("Abuja Fellowship")
+    api.add_chapter("Old Town", is_active=False)
+    api.add_member(world["alice"], api.add_chapter("Lagos"))
     api.act_as(world["mod"])
     api.client.post(f"{USERS}/{world['bob']}/suspend", json={"reason": "Spam"})
     body = api.client.get(f"{ADMIN}/overview").json()
@@ -160,6 +161,8 @@ def test_overview(api, world):
     assert body["active_users"] == 4
     assert body["inactive_users"] == 1
     assert body["new_users_last_7_days"] == 5
-    assert body["communities"] == 1
     assert body["open_reports"] == 0
-    assert body["branches"] == 0
+    # Archived Chapters aren't counted.
+    assert body["chapters"] == 2
+    assert body["members"] == 1
+    assert body["guests"] == 4

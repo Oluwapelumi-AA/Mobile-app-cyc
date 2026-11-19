@@ -8,11 +8,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.identity import UserId
-from app.models.branch import Chapter
+from app.models.chapter import Chapter
+from app.models.chapter_management import ChapterStaff
 from app.models.user import AccountRole, MembershipStatus, User
 from app.models.user_profile import UserProfile
 from app.schemas.chapter import ChapterCreate, ChapterRead, ChapterUpdate
-from app.services import audit
+from app.services import audit, chapter_access
 from app.services.errors import Conflict, Forbidden, InvalidInput, NotFound
 from app.services.resources import slugify
 
@@ -83,15 +84,15 @@ def _member_count(
 
     rows = db.execute(
         select(
-            UserProfile.branch_id,
+            UserProfile.chapter_id,
             func.count(User.id),
         )
         .join(User, User.id == UserProfile.user_id)
         .where(
-            UserProfile.branch_id.in_(chapter_ids),
+            UserProfile.chapter_id.in_(chapter_ids),
             User.membership_status == MembershipStatus.MEMBER,
         )
-        .group_by(UserProfile.branch_id)
+        .group_by(UserProfile.chapter_id)
     )
 
     return dict(rows.all())
@@ -102,7 +103,7 @@ def _my_chapter(
     user_id: UserId,
 ) -> uuid.UUID | None:
     return db.scalar(
-        select(UserProfile.branch_id)
+        select(UserProfile.chapter_id)
         .join(User, User.id == UserProfile.user_id)
         .where(
             UserProfile.user_id == user_id,
@@ -120,6 +121,30 @@ def _serialize(
 
     member_counts = _member_count(db, chapter_ids)
     my_chapter_id = _my_chapter(db, user_id)
+    staff_roles = (
+        dict(
+            db.execute(
+                select(ChapterStaff.chapter_id, ChapterStaff.role).where(
+                    ChapterStaff.user_id == user_id,
+                    ChapterStaff.chapter_id.in_(chapter_ids),
+                )
+            ).all()
+        )
+        if chapter_ids
+        else {}
+    )
+    platform_role = chapter_access.account_role(db, user_id)
+
+    def my_role(chapter_id: uuid.UUID) -> str | None:
+        if platform_role == AccountRole.ADMIN:
+            return chapter_access.ChapterRole.PLATFORM_ADMIN.value
+        if platform_role == AccountRole.MODERATOR:
+            return chapter_access.ChapterRole.PLATFORM_MODERATOR.value
+        if chapter_id in staff_roles:
+            return staff_roles[chapter_id]
+        if chapter_id == my_chapter_id:
+            return chapter_access.ChapterRole.MEMBER.value
+        return None
 
     return [
         ChapterRead(
@@ -135,6 +160,7 @@ def _serialize(
             is_active=chapter.is_active,
             member_count=member_counts.get(chapter.id, 0),
             is_mine=chapter.id == my_chapter_id,
+            my_role=my_role(chapter.id),
             created_at=chapter.created_at,
             updated_at=chapter.updated_at,
         )

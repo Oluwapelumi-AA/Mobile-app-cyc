@@ -76,6 +76,10 @@ class ChapterRead(BaseModel):
     contact_email: str | None
     is_active: bool
     member_count: int
+    # True if this is the user's own Chapter (they are an official Member).
     is_mine: bool
+    # The user's strongest role here: platform_admin, platform_moderator,
+    # coordinator, moderator, member, or null for a Guest.
+    my_role: str | None = None
     created_at: UtcDatetime
     updated_at: UtcDatetime

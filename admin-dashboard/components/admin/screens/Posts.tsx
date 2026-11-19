@@ -1,265 +1,315 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { matches, useAdmin, useLiveList } from "../data";
+import { useEffect, useMemo, useState } from "react";
+import { api, matches, useAdmin, useChapters, useDirectory, useLiveList } from "../data";
 import { useConfirm, useToast } from "../dialogs";
 import { Icon } from "../icons";
-import { type ContentRow, sampleContent } from "../sample";
+import type { ApiComment, ApiPost } from "../mappers";
 import {
   Avatar,
   Card,
   CardHeader,
-  Checkbox,
-  DateRangeChip,
   EmptyRow,
+  LoadingRows,
   MiniStat,
   PageHeader,
   Pagination,
-  PrimaryButton,
-  RangeSelect,
   RowMenu,
-  SampleTag,
   SearchField,
   SelectField,
-  StatusBadge,
   Table,
-  Tabs,
   Td,
   Th,
-  Thumb,
   ViewAll,
   cx,
   formatDate,
   timeAgo,
   usePaged,
-  useSelection,
 } from "../ui";
 
-type TabKey = "all" | "Post" | "Comment" | "Flagged" | "Deleted";
+type PostRow = {
+  id: string;
+  body: string;
+  authorId: string;
+  chapterId: string;
+  comments: number;
+  createdAt: string;
+  edited: boolean;
+};
 
+const mapPost = (p: ApiPost): PostRow => ({
+  id: p.id,
+  body: p.body,
+  authorId: p.author_id,
+  chapterId: p.chapter_id,
+  comments: p.comment_count,
+  createdAt: p.created_at,
+  edited: p.edited_at !== null,
+});
+
+const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
+
+/**
+ * Posts live inside chapters. Platform admins and moderators can read and
+ * remove posts and comments in every chapter; removals are logged and the
+ * author is told.
+ */
 export default function Posts() {
-  const { globalSearch, navigate } = useAdmin();
-  // There is no admin-wide posts list in the API yet (only per-department feeds),
-  // so this screen runs on sample data until one is added.
-  const data = useLiveList<never, ContentRow>(null, (x) => x, sampleContent);
-  const [tab, setTab] = useState<TabKey>("all");
+  const { globalSearch, navigate, scope } = useAdmin();
+  const { chapters, name: chapterName } = useChapters();
+  const [chapterId, setChapterId] = useState("");
   const [search, setSearch] = useState("");
-  const [kind, setKind] = useState("all");
-  const [community, setCommunity] = useState("all");
-  const [status, setStatus] = useState("all");
-  const [range, setRange] = useState("30");
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
   const { ask, dialog } = useConfirm();
   const toast = useToast();
 
-  const items = data.items;
-  const communities = useMemo(() => [...new Set(items.map((c) => c.community))], [items]);
-  const filtered = items.filter(
-    (c) =>
-      (tab === "all" ? c.status !== "Deleted" : tab === "Flagged" || tab === "Deleted" ? c.status === tab : c.kind === tab && c.status !== "Deleted") &&
-      (kind === "all" || c.kind === kind) &&
-      (community === "all" || c.community === community) &&
-      (status === "all" || c.status === status) &&
-      matches(search || globalSearch, c.title, c.excerpt, c.author, c.community),
+  const activeChapters = chapters.filter((c) => c.active);
+  // Start on the largest chapter; the picker is alphabetical.
+  const largest = [...activeChapters].sort((a, b) => b.members - a.members)[0];
+  const selectedChapter = scope?.id || chapterId || largest?.id || "";
+
+  const data = useLiveList<ApiPost, PostRow>(
+    selectedChapter ? `chapters/${selectedChapter}/posts?limit=50` : null,
+    mapPost,
+    [],
   );
+  const dir = useDirectory(data.mode === "live");
+  const author = (id: string) => dir.get(id)?.name ?? `User #${id.replace(/-/g, "").slice(-4).toUpperCase()}`;
+
+  const items = data.items;
+  const filtered = items.filter((p) => matches(search || globalSearch, p.body, author(p.authorId)));
   const paged = usePaged(filtered, 10);
-  const sel = useSelection(paged.slice.map((c) => c.id));
+  const preview = items.find((p) => p.id === previewId) ?? items[0] ?? null;
 
-  const preview = items.find((c) => c.id === previewId) ?? items[0] ?? null;
-
-  const setStatusOf = (c: ContentRow, s: ContentRow["status"], msg: string) => {
-    data.setItems((rows) => rows.map((r) => (r.id === c.id ? { ...r, status: s } : r)));
-    toast.success(msg);
-  };
-  const del = (c: ContentRow) =>
+  const removePost = (p: PostRow) =>
     ask({
-      title: `Delete ${c.kind.toLowerCase()}`,
-      message: `“${c.title}” will be removed for everyone.`,
-      confirmLabel: "Delete",
+      title: "Remove post",
+      message: "The post, its comments and reactions are deleted. The author is told and it goes in the audit log.",
+      confirmLabel: "Remove",
       danger: true,
-      input: { label: "Reason", placeholder: "Optional note for the audit log" },
-      onConfirm: () => setStatusOf(c, "Deleted", `${c.kind} deleted.`),
+      onConfirm: async () => {
+        try {
+          await api(`posts/${p.id}`, { method: "DELETE" });
+          data.setItems((rows) => rows.filter((r) => r.id !== p.id));
+          toast.success("Post removed.");
+        } catch (err) {
+          toast.error(errorText(err, "Could not remove the post."));
+        }
+      },
     });
 
-  const flagged = items.filter((c) => c.status === "Flagged" || c.status === "Under review").slice(0, 3);
-  const posts = items.filter((c) => c.kind === "Post").length;
-  const comments = items.filter((c) => c.kind === "Comment").length;
+  const totalComments = items.reduce((sum, p) => sum + p.comments, 0);
 
   return (
     <>
-      <PageHeader
-        title="Posts and comments"
-        subtitle="Moderate posts and comments across the platform."
-        action={<SampleTag reason="The API has no platform-wide posts list yet (only per-department feeds). Add GET /admin/posts to make this live." />}
-      />
+      <PageHeader title="Posts and comments" subtitle={scope ? `Read and moderate what members post in ${scope.name}.` : "Read and moderate what members post in each chapter."} />
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_370px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
         <Card className="p-4 sm:p-5">
-          <div className="flex flex-col-reverse gap-3 border-b border-line md:flex-row md:items-end md:justify-between">
-            <Tabs
-              value={tab}
-              onChange={(k) => { setTab(k); paged.setPage(1); }}
-              tabs={[
-                { key: "all", label: "All content", count: items.filter((c) => c.status !== "Deleted").length },
-                { key: "Post", label: "Posts", count: items.filter((c) => c.kind === "Post" && c.status !== "Deleted").length },
-                { key: "Comment", label: "Comments", count: items.filter((c) => c.kind === "Comment" && c.status !== "Deleted").length },
-                { key: "Flagged", label: "Flagged", count: items.filter((c) => c.status === "Flagged").length },
-                { key: "Deleted", label: "Deleted", count: items.filter((c) => c.status === "Deleted").length },
-              ]}
+          <div className="grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
+            {scope ? null : (
+            <SelectField
+              label="Chapter"
+              value={selectedChapter}
+              onChange={(value) => {
+                setChapterId(value);
+                setPreviewId(null);
+                paged.setPage(1);
+              }}
+              className="col-span-2 md:w-[220px]"
+              options={
+                activeChapters.length
+                  ? activeChapters.map((c) => ({ value: c.id, label: c.name }))
+                  : [{ value: "", label: "No chapters yet" }]
+              }
             />
-            <PrimaryButton className="mb-3 self-start md:self-auto" onClick={() => toast.success("Posts are written in the CYC app.")}>Create post</PrimaryButton>
+            )}
+            <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search posts or authors..." />
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2.5 md:flex md:flex-wrap">
-            <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search content..." />
-            <SelectField label="Type" value={kind} onChange={setKind} className="md:w-[106px]" options={[{ value: "all", label: "All types" }, { value: "Post", label: "Posts" }, { value: "Comment", label: "Comments" }]} />
-            <SelectField label="Department" value={community} onChange={setCommunity} className="md:w-[138px]" options={[{ value: "all", label: "All departments" }, ...communities.map((c) => ({ value: c, label: c }))]} />
-            <SelectField label="Status" value={status} onChange={setStatus} className="md:w-[106px]" options={[{ value: "all", label: "All status" }, ...["Active", "Flagged", "Under review", "Deleted"].map((s) => ({ value: s, label: s }))]} />
-            <DateRangeChip days={Number(range)} />
-          </div>
+          {data.mode === "empty" && data.error && data.error !== "The API returned no records yet." ? (
+            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{data.error}</p>
+          ) : null}
 
           <div className="mt-4">
-            <Table minWidth={800}>
+            <Table minWidth={720}>
               <thead>
                 <tr>
-                  <Th className="w-10"><Checkbox label="Select all" checked={sel.all} onChange={sel.toggleAll} /></Th>
-                  <Th>Content</Th>
+                  <Th>Post</Th>
                   <Th>Author</Th>
-                  <Th>Department</Th>
-                  <Th>Type</Th>
-                  <Th sortable>Status</Th>
-                  <Th>Date</Th>
+                  <Th>Comments</Th>
+                  <Th>Posted</Th>
                   <Th className="text-center">Actions</Th>
                 </tr>
               </thead>
               <tbody>
-                {paged.slice.map((c) => (
+                {data.mode === "loading" ? <LoadingRows cols={5} /> : null}
+                {paged.slice.map((p) => (
                   <tr
-                    key={c.id}
-                    className={cx("cursor-pointer hover:bg-canvas/40", preview?.id === c.id ? "bg-brand-soft/25" : "")}
+                    key={p.id}
+                    className={cx("cursor-pointer hover:bg-canvas/40", preview?.id === p.id ? "bg-brand-soft/25" : "")}
                     onClick={(e) => {
-                      if ((e.target as HTMLElement).closest("button,input")) return;
-                      setPreviewId(c.id);
-                      setExpanded(false);
+                      if ((e.target as HTMLElement).closest("button")) return;
+                      setPreviewId(p.id);
                     }}
                   >
-                    <Td><Checkbox label={`Select ${c.title}`} checked={sel.selected.has(c.id)} onChange={(v) => sel.toggle(c.id, v)} /></Td>
                     <Td>
-                      <div className="flex items-center gap-3">
-                        {c.kind === "Post" ? (
-                          <Thumb seed={c.title} width={46} height={46} />
-                        ) : (
-                          <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-lg border border-line bg-white">
-                            <Icon name="message" size={20} />
-                          </span>
-                        )}
-                        <div className="min-w-0">
-                          <p className="max-w-[200px] truncate font-medium text-ink">{c.title}</p>
-                          <p className="max-w-[200px] truncate text-[11.5px] text-ink/70">{c.excerpt}</p>
-                        </div>
-                      </div>
+                      <p className="line-clamp-2 max-w-[340px] text-ink">{p.body}</p>
+                      {p.edited ? <p className="text-[11px] text-muted">Edited</p> : null}
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2">
-                        <Avatar name={c.author} size={30} />
-                        <span className="whitespace-nowrap">{c.author}</span>
+                        <Avatar name={author(p.authorId)} size={30} />
+                        <span className="whitespace-nowrap">{author(p.authorId)}</span>
                       </div>
                     </Td>
-                    <Td className="whitespace-nowrap">{c.community}</Td>
-                    <Td>{c.kind}</Td>
-                    <Td><StatusBadge status={c.status} /></Td>
-                    <Td className="whitespace-nowrap">{timeAgo(c.createdAt)}</Td>
+                    <Td>{p.comments}</Td>
+                    <Td className="whitespace-nowrap">{timeAgo(p.createdAt)}</Td>
                     <Td className="text-center">
                       <RowMenu
                         actions={[
-                          { label: "Preview", icon: "eye", onSelect: () => setPreviewId(c.id) },
-                          { label: "Approve", icon: "check", onSelect: () => setStatusOf(c, "Active", "Content approved.") },
-                          { label: "Flag", icon: "flag", onSelect: () => setStatusOf(c, "Flagged", "Content flagged for review.") },
-                          { label: "Delete", icon: "trash", danger: true, onSelect: () => del(c) },
+                          { label: "View comments", icon: "message", onSelect: () => setPreviewId(p.id) },
+                          { label: "Remove post", icon: "trash", danger: true, onSelect: () => removePost(p) },
                         ]}
                       />
                     </Td>
                   </tr>
                 ))}
-                {filtered.length === 0 ? <EmptyRow cols={8} title="No content found" /> : null}
+                {data.mode !== "loading" && filtered.length === 0 ? (
+                  <EmptyRow
+                    cols={5}
+                    title={selectedChapter ? "No posts in this chapter yet" : "No chapters yet"}
+                    hint={selectedChapter ? "Members post from the CYC app." : "Create a chapter first."}
+                  />
+                ) : null}
               </tbody>
             </Table>
           </div>
-          <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}–${paged.to} of ${filtered.length} items`} />
+          <Pagination page={paged.page} pages={paged.pages} onPage={paged.setPage} summary={`Showing ${paged.from}–${paged.to} of ${filtered.length} posts`} />
+          {data.nextCursor ? (
+            <div className="mt-3 text-center">
+              <button type="button" disabled={data.loadingMore} onClick={() => void data.loadMore()} className="text-sm font-semibold text-brand hover:text-brand-dark disabled:opacity-50">
+                {data.loadingMore ? "Loading…" : "Load older posts"}
+              </button>
+            </div>
+          ) : null}
         </Card>
 
         <div className="space-y-5">
           <Card className="p-5">
-            <CardHeader title="Content overview" action={<RangeSelect value={range} onChange={setRange} />} />
+            <CardHeader title={selectedChapter ? chapterName(selectedChapter) : "Content overview"} action={<ViewAll label="Reports" onClick={() => navigate("reports")} />} />
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniStat icon="file" value={String(posts)} label="Posts" delta={12} />
-              <MiniStat icon="message" value={String(comments)} label="Comments" delta={8} />
-              <MiniStat icon="flag" value={String(items.filter((c) => c.status === "Flagged").length)} label="Flagged" delta={-24} goodWhenUp={false} />
-              <MiniStat icon="trash" value={String(items.filter((c) => c.status === "Deleted").length)} label="Deleted" delta={-15} goodWhenUp={false} />
+              <MiniStat icon="file" value={String(items.length)} label="Posts loaded" />
+              <MiniStat icon="message" value={String(totalComments)} label="Comments" />
             </div>
           </Card>
 
-          <Card className="p-5">
-            <CardHeader title="Recent flagged content" action={<ViewAll onClick={() => navigate("reports")} />} />
-            <ul className="mt-4 space-y-3">
-              {flagged.map((c) => (
-                <li key={c.id} className="flex items-center gap-3">
-                  <Thumb seed={c.title} width={48} height={48} />
-                  <Icon name="flag" size={18} className="shrink-0 text-brand" />
-                  <button type="button" onClick={() => setPreviewId(c.id)} className="min-w-0 flex-1 text-left text-sm">
-                    <span className="block truncate font-medium text-ink">{c.title}</span>
-                    <span className="block truncate text-ink/70">“{c.excerpt}”</span>
-                    <span className="block text-xs text-muted">{timeAgo(c.createdAt)}</span>
-                  </button>
-                  <RowMenu actions={[{ label: "Approve", icon: "check", onSelect: () => setStatusOf(c, "Active", "Content approved.") }, { label: "Delete", icon: "trash", danger: true, onSelect: () => del(c) }]} />
-                </li>
-              ))}
-              {flagged.length === 0 ? <li className="text-sm text-muted">Nothing flagged. 🎉</li> : null}
-            </ul>
-          </Card>
-
           {preview ? (
-            <Card className="p-5">
-              <CardHeader title="Content preview" />
-              <div className="mt-4 flex gap-3">
-                <Thumb seed={preview.title} width={64} height={64} rounded="rounded-xl" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold leading-snug text-ink">{preview.title}</p>
-                    <StatusBadge status={preview.status} />
-                  </div>
-                  <p className="mt-1 text-[11.5px] text-muted">
-                    by {preview.author} • {formatDate(preview.createdAt)}
-                  </p>
-                </div>
-              </div>
-              <p className={cx("mt-3 text-sm leading-6 text-ink/80", expanded ? "" : "line-clamp-2")}>{preview.excerpt}</p>
-              <button type="button" onClick={() => setExpanded((v) => !v)} className="text-sm font-medium text-sky-700 hover:underline">
-                {expanded ? "Show less" : "Show more"}
-              </button>
-              <div className="mt-3 flex items-center gap-6 text-sm text-ink/80">
-                <span className="flex items-center gap-1.5"><Icon name="heart" size={18} className="fill-brand text-brand" />{preview.likes}</span>
-                <span className="flex items-center gap-1.5"><Icon name="message" size={17} />{preview.comments}</span>
-                <span className="flex items-center gap-1.5"><Icon name="share" size={17} />{preview.shares}</span>
-              </div>
-
-              <h3 className="mb-2 mt-5 font-semibold text-ink">Moderation actions</h3>
-              <div className="grid grid-cols-3 gap-2">
-                <button type="button" onClick={() => setStatusOf(preview, "Active", "Content approved.")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100"><Icon name="check" size={17} />Approve</button>
-                <button type="button" onClick={() => setStatusOf(preview, "Flagged", "Content flagged.")} className="flex items-center justify-center gap-2 rounded-xl border border-brand/30 px-3 py-2.5 text-sm font-medium text-brand hover:bg-brand-soft"><Icon name="flag" size={17} />Flag</button>
-                <button type="button" onClick={() => del(preview)} className="flex items-center justify-center gap-2 rounded-xl bg-brand-soft px-3 py-2.5 text-sm font-medium text-brand hover:bg-brand-tint"><Icon name="trash" size={17} />Delete</button>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => navigate("users")} className="flex items-center justify-center gap-2 rounded-xl border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-canvas"><Icon name="ban" size={17} />Mute author</button>
-                <button type="button" onClick={() => navigate("users")} className="flex items-center justify-center gap-2 rounded-xl border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-canvas"><Icon name="user" size={17} />View author</button>
-              </div>
-            </Card>
+            <PostPreview
+              key={preview.id}
+              post={preview}
+              author={author}
+              onRemove={() => removePost(preview)}
+              onCommentRemoved={() =>
+                data.setItems((rows) => rows.map((r) => (r.id === preview.id ? { ...r, comments: Math.max(0, r.comments - 1) } : r)))
+              }
+              onToast={toast}
+            />
           ) : null}
         </div>
       </div>
       {dialog}
       {toast.element}
     </>
+  );
+}
+
+function PostPreview({
+  post,
+  author,
+  onRemove,
+  onCommentRemoved,
+  onToast,
+}: {
+  post: PostRow;
+  author: (id: string) => string;
+  onRemove: () => void;
+  onCommentRemoved: () => void;
+  onToast: { success: (text: string) => void; error: (text: string) => void };
+}) {
+  const [comments, setComments] = useState<ApiComment[] | null>(null);
+  const [error, setError] = useState("");
+  const { ask, dialog } = useConfirm();
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ items: ApiComment[] }>(`posts/${post.id}/comments?limit=50`)
+      .then((page) => !cancelled && setComments(page.items ?? []))
+      .catch((err) => !cancelled && setError(errorText(err, "Could not load comments.")));
+    return () => {
+      cancelled = true;
+    };
+  }, [post.id]);
+
+  const removeComment = (c: ApiComment) =>
+    ask({
+      title: "Remove comment",
+      message: "The comment and its reactions are deleted. The author is told and it goes in the audit log.",
+      confirmLabel: "Remove",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await api(`comments/${c.id}`, { method: "DELETE" });
+          setComments((rows) => (rows ?? []).filter((r) => r.id !== c.id));
+          onCommentRemoved();
+          onToast.success("Comment removed.");
+        } catch (err) {
+          onToast.error(errorText(err, "Could not remove the comment."));
+        }
+      },
+    });
+
+  const sorted = useMemo(() => comments ?? [], [comments]);
+
+  return (
+    <Card className="p-5">
+      <CardHeader title="Post" />
+      <div className="mt-4 flex items-center gap-3">
+        <Avatar name={author(post.authorId)} size={40} />
+        <div>
+          <p className="font-semibold text-ink">{author(post.authorId)}</p>
+          <p className="text-xs text-muted">{formatDate(post.createdAt)}</p>
+        </div>
+      </div>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/85">{post.body}</p>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-soft px-3 py-2.5 text-sm font-medium text-brand hover:bg-brand-tint"
+      >
+        <Icon name="trash" size={17} />
+        Remove post
+      </button>
+
+      <h3 className="mb-2 mt-5 font-semibold text-ink">Comments</h3>
+      {error ? <p className="text-sm text-brand">{error}</p> : null}
+      {comments === null && !error ? <p className="text-sm text-muted">Loading…</p> : null}
+      {comments !== null && sorted.length === 0 ? <p className="text-sm text-muted">No comments yet.</p> : null}
+      <ul className="space-y-3">
+        {sorted.map((c) => (
+          <li key={c.id} className="flex gap-3">
+            <Avatar name={author(c.author_id)} size={30} />
+            <div className="min-w-0 flex-1 rounded-xl bg-canvas px-3 py-2">
+              <p className="text-xs font-semibold text-ink">
+                {author(c.author_id)} <span className="font-normal text-muted">· {timeAgo(c.created_at)}</span>
+              </p>
+              <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink/85">{c.body}</p>
+            </div>
+            <RowMenu actions={[{ label: "Remove comment", icon: "trash", danger: true, onSelect: () => removeComment(c) }]} />
+          </li>
+        ))}
+      </ul>
+      {dialog}
+    </Card>
   );
 }

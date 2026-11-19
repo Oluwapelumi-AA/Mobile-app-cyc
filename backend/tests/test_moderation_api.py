@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.models import AccountRole, AuditLog, Comment, Notification, Post, Reaction
 
-COMMUNITIES = "/api/v1/communities"
+CHAPTERS = "/api/v1/chapters"
 PROFILE = "/api/v1/profiles/me"
 REPORTS = "/api/v1/reports"
 QUEUE = "/api/v1/moderation/reports"
@@ -15,28 +15,30 @@ EVENTS = "/api/v1/events"
 
 @pytest.fixture
 def world(api):
-    """A public community with an owner, a moderator and two members, a
-    second community moderated by someone else, and an app moderator."""
-    ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "other")}
+    """The Abuja Fellowship Chapter with a Coordinator ("owner"), a Moderator
+    ("mod", assigned through the API) and two Members; a second Chapter run by
+    "other" with a Member ("carol"); an app moderator and an admin."""
+    ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "other", "carol")}
     ids["staff"] = api.add_user("staff", AccountRole.MODERATOR)
-    for name in ("owner", "alice", "bob"):
-        api.act_as(ids[name])
-        api.client.post(PROFILE, json={"display_name": name.title(), "bio": f"I am {name}"})
-    api.act_as(ids["owner"])
-    cid = api.client.post(COMMUNITIES, json={"name": "Abuja Fellowship"}).json()["id"]
-    for name in ("mod", "alice", "bob"):
-        api.act_as(ids[name])
-        api.client.post(f"{COMMUNITIES}/{cid}/join")
-    api.act_as(ids["owner"])
-    api.client.patch(f"{COMMUNITIES}/{cid}/members/{ids['mod']}", json={"role": "moderator"})
-    api.act_as(ids["other"])
-    other_cid = api.client.post(COMMUNITIES, json={"name": "Lagos Youth"}).json()["id"]
-    return {"community_id": cid, "other_community_id": other_cid, **ids}
+    ids["admin"] = api.add_user("admin", AccountRole.ADMIN)
+    cid = api.add_chapter("Abuja Fellowship")
+    other_cid = api.add_chapter("Lagos Youth")
+    api.add_staff(ids["owner"], cid, "coordinator")
+    api.add_staff(ids["other"], other_cid, "coordinator")
+    api.add_profile(ids["owner"], "Owner", bio="I am owner")
+    for name in ("alice", "bob"):
+        api.add_member(ids[name], cid, name.title())
+        api.add_profile(ids[name], bio=f"I am {name}")
+    api.add_member(ids["carol"], other_cid, "Carol")
+    api.act_as(ids["admin"])
+    response = api.client.put(f"{CHAPTERS}/{cid}/staff/{ids['mod']}", json={"role": "moderator"})
+    assert response.status_code == 200, response.text
+    return {"chapter_id": str(cid), "other_chapter_id": str(other_cid), **ids}
 
 
-def post(api, user_id, community_id, body="Buy cheap followers at spam.example"):
+def post(api, user_id, chapter_id, body="Buy cheap followers at spam.example"):
     api.act_as(user_id)
-    response = api.client.post(f"{COMMUNITIES}/{community_id}/posts", json={"body": body})
+    response = api.client.post(f"{CHAPTERS}/{chapter_id}/posts", json={"body": body})
     assert response.status_code == 201, response.text
     return response.json()["id"]
 
@@ -86,7 +88,7 @@ def audit_actions(api, **params):
 
 
 def test_member_reports_a_post(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
+    post_id = post(api, world["bob"], world["chapter_id"])
     body = reported(api, world["alice"], "post", post_id, details="  Selling followers  ")
     assert body["status"] == "open"
     assert body["details"] == "Selling followers"
@@ -100,19 +102,19 @@ def test_member_reports_a_post(api, world):
 
 
 def test_report_keeps_a_snapshot_after_an_edit(api, world):
-    post_id = post(api, world["bob"], world["community_id"], body="Original text")
+    post_id = post(api, world["bob"], world["chapter_id"], body="Original text")
     reported(api, world["alice"], "post", post_id)
     api.act_as(world["bob"])
     api.client.patch(f"/api/v1/posts/{post_id}", json={"body": "Edited text"})
     [item] = queue(api, world["mod"])
     assert item["snapshot"] == {"body": "Original text"}
     assert item["target_owner_id"] == str(world["bob"])
-    assert item["community_id"] == world["community_id"]
+    assert item["chapter_id"] == world["chapter_id"]
     assert item["target_exists"] is True
 
 
 def test_cannot_report_yourself_or_twice(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
+    post_id = post(api, world["bob"], world["chapter_id"])
     response = report(api, world["bob"], "post", post_id)
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "cannot_report_self"
@@ -126,7 +128,7 @@ def test_cannot_report_yourself_or_twice(api, world):
 
 
 def test_reporting_again_after_review_reopens(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
+    post_id = post(api, world["bob"], world["chapter_id"])
     first = reported(api, world["alice"], "post", post_id)
     assert resolve(api, world["mod"], first["id"], status="dismissed").status_code == 200
     again = reported(api, world["alice"], "post", post_id, reason="harassment")
@@ -137,16 +139,12 @@ def test_reporting_again_after_review_reopens(api, world):
 
 
 def test_hidden_or_missing_targets_are_not_found(api, world):
-    api.act_as(world["other"])
-    private_id = api.client.post(
-        COMMUNITIES, json={"name": "Leaders Circle", "visibility": "private"}
-    ).json()["id"]
-    hidden = post(api, world["other"], private_id)
+    hidden = post(api, world["other"], world["other_chapter_id"])
     response = report(api, world["alice"], "post", hidden)
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "post_not_found"
-    response = report(api, world["alice"], "community", private_id)
-    assert response.json()["detail"]["code"] == "community_not_found"
+    response = report(api, world["alice"], "chapter", uuid.uuid4())
+    assert response.json()["detail"]["code"] == "chapter_not_found"
     response = report(api, world["alice"], "user", uuid.uuid4())
     assert response.json()["detail"]["code"] == "user_not_found"
     response = report(api, world["alice"], "comment", uuid.uuid4())
@@ -167,21 +165,21 @@ def test_bad_reports_are_rejected(api, world, payload):
     assert api.client.post(REPORTS, json=payload).status_code == 422
 
 
-def test_user_event_resource_and_community_reports(api, world):
+def test_user_event_resource_and_chapter_reports(api, world):
     from datetime import UTC, datetime, timedelta
 
     snapshot = reported(api, world["alice"], "user", world["bob"], reason="impersonation")
     api.act_as(world["staff"])
     item = api.client.get(f"{QUEUE}/{snapshot['id']}").json()
     assert item["snapshot"]["display_name"] == "Bob"
-    assert item["community_id"] is None
+    assert item["chapter_id"] is None
 
     api.act_as(world["owner"])
     starts = datetime.now(UTC) + timedelta(days=2)
     event_id = api.client.post(
         EVENTS,
         json={
-            "community_id": world["community_id"],
+            "chapter_id": world["chapter_id"],
             "title": "Prayer Night",
             "starts_at": starts.isoformat(),
             "ends_at": (starts + timedelta(hours=2)).isoformat(),
@@ -189,26 +187,24 @@ def test_user_event_resource_and_community_reports(api, world):
         },
     ).json()["id"]
     event_report = reported(api, world["alice"], "event", event_id)
-    community_report = reported(api, world["alice"], "community", world["community_id"])
+    chapter_report = reported(api, world["alice"], "chapter", world["chapter_id"])
 
-    # Community content goes to the community; the community itself to staff.
+    # Chapter content goes to the Chapter's staff; the Chapter itself to app staff.
     mod_ids = {item["id"] for item in queue(api, world["mod"])}
     assert event_report["id"] in mod_ids
-    assert community_report["id"] not in mod_ids
+    assert chapter_report["id"] not in mod_ids
     staff_ids = {item["id"] for item in queue(api, world["staff"], app_wide=True)}
-    assert staff_ids == {snapshot["id"], community_report["id"]}
+    assert staff_ids == {snapshot["id"], chapter_report["id"]}
 
 
 # The queue
 
 
-def test_queue_is_scoped_to_communities_you_moderate(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
+def test_queue_is_scoped_to_chapters_you_moderate(api, world):
+    post_id = post(api, world["bob"], world["chapter_id"])
     reported(api, world["alice"], "post", post_id)
-    other_post = post(api, world["other"], world["other_community_id"], body="Hello")
-    api.act_as(world["alice"])
-    api.client.post(f"{COMMUNITIES}/{world['other_community_id']}/join")
-    reported(api, world["alice"], "post", other_post)
+    other_post = post(api, world["other"], world["other_chapter_id"], body="Hello")
+    reported(api, world["carol"], "post", other_post)
 
     assert len(queue(api, world["mod"])) == 1
     assert len(queue(api, world["other"])) == 1
@@ -216,14 +212,14 @@ def test_queue_is_scoped_to_communities_you_moderate(api, world):
     assert queue(api, world["alice"]) == []
 
     api.act_as(world["alice"])
-    response = api.client.get(QUEUE, params={"community_id": world["community_id"]})
+    response = api.client.get(QUEUE, params={"chapter_id": world["chapter_id"]})
     assert response.status_code == 403
     response = api.client.get(QUEUE, params={"app_wide": True})
     assert response.status_code == 403
 
 
 def test_queue_counts_reports_on_the_same_target(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
+    post_id = post(api, world["bob"], world["chapter_id"])
     reported(api, world["alice"], "post", post_id)
     reported(api, world["owner"], "post", post_id, reason="hate")
     items = queue(api, world["mod"])
@@ -231,7 +227,7 @@ def test_queue_counts_reports_on_the_same_target(api, world):
 
 
 def test_others_cannot_read_a_report(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
+    post_id = post(api, world["bob"], world["chapter_id"])
     report_id = reported(api, world["alice"], "post", post_id)["id"]
     for who in ("alice", "other"):
         api.act_as(world[who])
@@ -244,7 +240,7 @@ def test_others_cannot_read_a_report(api, world):
 
 
 def test_dismissing_closes_every_open_report_on_the_target(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
+    post_id = post(api, world["bob"], world["chapter_id"])
     first = reported(api, world["alice"], "post", post_id)
     reported(api, world["owner"], "post", post_id)
     response = resolve(api, world["mod"], first["id"], status="dismissed", note="Not spam")
@@ -256,7 +252,7 @@ def test_dismissing_closes_every_open_report_on_the_target(api, world):
     assert queue(api, world["mod"]) == []
     assert len(queue(api, world["mod"], status="dismissed")) == 2
     assert len(queue(api, world["mod"], status="any")) == 2
-    assert audit_actions(api) == ["member.role_changed", "report.dismissed"]
+    assert audit_actions(api) == ["chapter_staff.assigned", "report.dismissed"]
 
     response = resolve(api, world["mod"], first["id"], status="actioned")
     assert response.status_code == 409
@@ -269,7 +265,7 @@ def test_dismissing_closes_every_open_report_on_the_target(api, world):
 
 
 def test_removing_a_reported_post(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
+    post_id = post(api, world["bob"], world["chapter_id"])
     comment(api, world["alice"], post_id)
     report_id = reported(api, world["alice"], "post", post_id)["id"]
     response = resolve(
@@ -295,7 +291,7 @@ def test_removing_a_reported_post(api, world):
 
 
 def test_removing_a_reported_comment(api, world):
-    post_id = post(api, world["alice"], world["community_id"], body="Prayer request")
+    post_id = post(api, world["alice"], world["chapter_id"], body="Prayer request")
     comment_id = comment(api, world["bob"], post_id)
     api.act_as(world["alice"])
     response = api.client.put(f"/api/v1/reactions/comments/{comment_id}", json={"reaction_type": "like"})
@@ -306,7 +302,7 @@ def test_removing_a_reported_comment(api, world):
     with api.session_factory() as db:
         assert db.get(Comment, uuid.UUID(comment_id)) is None
         assert db.scalars(select(Reaction)).all() == []
-    assert "comment.removed" in audit_actions(api, community_id=uuid.UUID(world["community_id"]))
+    assert "comment.removed" in audit_actions(api, chapter_id=uuid.UUID(world["chapter_id"]))
 
 
 def test_remove_content_only_for_posts_and_comments(api, world):
@@ -321,7 +317,7 @@ def test_remove_content_only_for_posts_and_comments(api, world):
 
 
 def test_already_deleted_content_is_not_removed_twice(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
+    post_id = post(api, world["bob"], world["chapter_id"])
     report_id = reported(api, world["alice"], "post", post_id)["id"]
     api.act_as(world["bob"])
     api.client.delete(f"/api/v1/posts/{post_id}")
@@ -331,7 +327,7 @@ def test_already_deleted_content_is_not_removed_twice(api, world):
 
 
 def test_moderators_cannot_review_reports_about_themselves(api, world):
-    post_id = post(api, world["mod"], world["community_id"])
+    post_id = post(api, world["mod"], world["chapter_id"])
     report_id = reported(api, world["alice"], "post", post_id)["id"]
     response = resolve(api, world["mod"], report_id, status="dismissed")
     assert response.status_code == 403
@@ -340,7 +336,7 @@ def test_moderators_cannot_review_reports_about_themselves(api, world):
 
 
 def test_members_cannot_review(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
+    post_id = post(api, world["bob"], world["chapter_id"])
     report_id = reported(api, world["alice"], "post", post_id)["id"]
     response = resolve(api, world["alice"], report_id, status="dismissed")
     assert response.status_code == 404
@@ -350,8 +346,8 @@ def test_members_cannot_review(api, world):
 
 
 def test_moderator_delete_is_logged_and_author_told(api, world):
-    post_id = post(api, world["bob"], world["community_id"])
-    own = post(api, world["alice"], world["community_id"], body="Mine")
+    post_id = post(api, world["bob"], world["chapter_id"])
+    own = post(api, world["alice"], world["chapter_id"], body="Mine")
     api.act_as(world["mod"])
     assert api.client.delete(f"/api/v1/posts/{post_id}").status_code == 204
     api.act_as(world["alice"])
@@ -366,20 +362,21 @@ def test_moderator_delete_is_logged_and_author_told(api, world):
 # Bans
 
 
-def ban(api, user_id, community_id, target_id, **payload):
+def ban(api, user_id, chapter_id, target_id, **payload):
     api.act_as(user_id)
-    return api.client.put(f"{COMMUNITIES}/{community_id}/bans/{target_id}", json=payload or None)
+    return api.client.put(f"{CHAPTERS}/{chapter_id}/bans/{target_id}", json=payload or None)
 
 
-def test_ban_removes_and_blocks_rejoining(api, world):
-    cid = world["community_id"]
+def test_ban_blocks_taking_part(api, world):
+    cid = world["chapter_id"]
     response = ban(api, world["mod"], cid, world["bob"], reason="Repeated spam")
     assert response.status_code == 201, response.text
     assert response.json()["reason"] == "Repeated spam"
 
     api.act_as(world["bob"])
-    assert api.client.get(f"{COMMUNITIES}/{cid}").json()["my_role"] is None
-    response = api.client.post(f"{COMMUNITIES}/{cid}/join")
+    # Still a Member who can read, but can't post.
+    assert api.client.get(f"{CHAPTERS}/{cid}").json()["my_role"] == "member"
+    response = api.client.post(f"{CHAPTERS}/{cid}/posts", json={"body": "Hi"})
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "banned"
 
@@ -388,77 +385,83 @@ def test_ban_removes_and_blocks_rejoining(api, world):
     assert response.json()["detail"]["code"] == "already_banned"
 
     api.act_as(world["mod"])
-    bans = api.client.get(f"{COMMUNITIES}/{cid}/bans").json()["items"]
+    bans = api.client.get(f"{CHAPTERS}/{cid}/bans").json()["items"]
     assert [item["user_id"] for item in bans] == [str(world["bob"])]
-    assert api.client.delete(f"{COMMUNITIES}/{cid}/bans/{world['bob']}").status_code == 204
-    response = api.client.delete(f"{COMMUNITIES}/{cid}/bans/{world['bob']}")
+    assert api.client.delete(f"{CHAPTERS}/{cid}/bans/{world['bob']}").status_code == 204
+    response = api.client.delete(f"{CHAPTERS}/{cid}/bans/{world['bob']}")
     assert response.json()["detail"]["code"] == "ban_not_found"
 
     api.act_as(world["bob"])
-    assert api.client.post(f"{COMMUNITIES}/{cid}/join").status_code == 201
+    assert api.client.post(f"{CHAPTERS}/{cid}/posts", json={"body": "Back"}).status_code == 201
     assert audit_actions(api, target_id=world["bob"]) == ["member.banned", "member.unbanned"]
     with api.session_factory() as db:
         [notice] = db.scalars(select(Notification).where(Notification.user_id == world["bob"]))
-    assert notice.type == "community_banned"
+    assert notice.type == "chapter_banned"
 
 
 def test_ban_someone_who_is_not_a_member(api, world):
-    response = ban(api, world["owner"], world["community_id"], world["other"])
+    response = ban(api, world["owner"], world["chapter_id"], world["carol"])
     assert response.status_code == 201
-    api.act_as(world["other"])
-    assert api.client.post(f"{COMMUNITIES}/{world['community_id']}/join").status_code == 403
+    api.act_as(world["owner"])
+    bans = api.client.get(f"{CHAPTERS}/{world['chapter_id']}/bans").json()["items"]
+    assert [item["user_id"] for item in bans] == [str(world["carol"])]
 
 
 def test_ban_rules(api, world):
-    cid = world["community_id"]
+    cid = world["chapter_id"]
     assert ban(api, world["alice"], cid, world["bob"]).status_code == 403
     response = ban(api, world["mod"], cid, world["mod"])
     assert response.json()["detail"]["code"] == "cannot_ban_self"
+    # A Moderator can't ban the Coordinator, or another Moderator.
     response = ban(api, world["mod"], cid, world["owner"])
-    assert response.json()["detail"]["code"] == "cannot_ban_owner"
-    api.act_as(world["owner"])
-    api.client.patch(f"{COMMUNITIES}/{cid}/members/{world['alice']}", json={"role": "moderator"})
+    assert response.json()["detail"]["code"] == "insufficient_role"
+    api.act_as(world["admin"])
+    api.client.put(f"{CHAPTERS}/{cid}/staff/{world['alice']}", json={"role": "moderator"})
     response = ban(api, world["mod"], cid, world["alice"])
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "insufficient_role"
     response = ban(api, world["mod"], cid, uuid.uuid4())
     assert response.json()["detail"]["code"] == "user_not_found"
-    # App moderators can ban in any community.
+    # Nobody bans app staff.
+    response = ban(api, world["owner"], cid, world["staff"])
+    assert response.json()["detail"]["code"] == "cannot_ban_staff"
+    # App moderators can ban in any Chapter.
     assert ban(api, world["staff"], cid, world["alice"]).status_code == 201
-    api.act_as(world["alice"])
-    assert api.client.get(f"{COMMUNITIES}/{cid}/bans").status_code == 403
+    api.act_as(world["bob"])
+    assert api.client.get(f"{CHAPTERS}/{cid}/bans").status_code == 403
 
 
 # The audit log
 
 
 def test_audit_log_access(api, world):
-    cid = world["community_id"]
+    cid = world["chapter_id"]
     ban(api, world["mod"], cid, world["bob"])
 
     api.act_as(world["staff"])
     items = api.client.get(AUDIT).json()["items"]
-    assert [item["action"] for item in items] == ["member.banned", "member.role_changed"]
+    assert [item["action"] for item in items] == ["member.banned", "chapter_staff.assigned"]
     assert items[0]["actor_id"] == str(world["mod"])
-    assert items[1]["data"] == {"from": "member", "to": "moderator"}
+    assert items[0]["chapter_id"] == cid
+    assert items[1]["data"] == {"from": None, "to": "moderator"}
     filtered = api.client.get(AUDIT, params={"action": "member.banned"}).json()["items"]
     assert len(filtered) == 1
 
     api.act_as(world["mod"])
     response = api.client.get(AUDIT)
     assert response.status_code == 403
-    assert len(api.client.get(AUDIT, params={"community_id": cid}).json()["items"]) == 2
+    assert len(api.client.get(AUDIT, params={"chapter_id": cid}).json()["items"]) == 2
 
     api.act_as(world["alice"])
-    assert api.client.get(AUDIT, params={"community_id": cid}).status_code == 403
+    assert api.client.get(AUDIT, params={"chapter_id": cid}).status_code == 403
     api.act_as(world["other"])
-    response = api.client.get(AUDIT, params={"community_id": world["other_community_id"]})
+    response = api.client.get(AUDIT, params={"chapter_id": world["other_chapter_id"]})
     assert response.json()["items"] == []
 
 
 def test_audit_log_pages(api, world):
     for _ in range(3):
-        post_id = post(api, world["bob"], world["community_id"])
+        post_id = post(api, world["bob"], world["chapter_id"])
         api.act_as(world["mod"])
         api.client.delete(f"/api/v1/posts/{post_id}")
     api.act_as(world["staff"])
@@ -469,7 +472,7 @@ def test_audit_log_pages(api, world):
     assert rest["next_cursor"] is None
 
 
-def test_deleting_a_community_is_logged(api, world):
-    api.act_as(world["other"])
-    assert api.client.delete(f"{COMMUNITIES}/{world['other_community_id']}").status_code == 204
-    assert audit_actions(api, action="community.deleted") == ["community.deleted"]
+def test_archiving_a_chapter_is_logged(api, world):
+    api.act_as(world["admin"])
+    assert api.client.post(f"{CHAPTERS}/{world['other_chapter_id']}/archive").status_code == 200
+    assert audit_actions(api, action="chapter.archived") == ["chapter.archived"]

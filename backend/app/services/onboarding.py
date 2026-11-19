@@ -29,15 +29,14 @@ from app.schemas.onboarding import (
 
 REQUIRED_STEPS = frozenset({OnboardingStep.PROFILE_BASICS, OnboardingStep.LANGUAGE})
 
-# Profile field each step collects. Community selection has no profile field;
-# it will be checked against memberships once communities exist.
+# Profile field each step collects.
 _STEP_FIELDS: dict[OnboardingStep, str | None] = {
     OnboardingStep.PROFILE_BASICS: "display_name",
     OnboardingStep.AVATAR: "avatar_url",
     OnboardingStep.LANGUAGE: "language_code",
     OnboardingStep.REGION: "country_code",
     OnboardingStep.TIMEZONE: "timezone",
-    OnboardingStep.COMMUNITIES: None,
+    OnboardingStep.CHAPTER: "preferred_chapter_id",
 }
 
 

@@ -1,7 +1,12 @@
-from fastapi import APIRouter, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
 
 from app.api.v1.profiles import CurrentUserId, Profiles, error, get_existing_profile
+from app.db.session import get_db
 from app.schemas.onboarding import OnboardingStatusRead, OnboardingStep
+from app.services import membership
 from app.services.onboarding import (
     OnboardingAlreadyCompleted,
     OnboardingError,
@@ -47,11 +52,18 @@ def skip_onboarding_step(step: OnboardingStep, user_id: CurrentUserId, profiles:
 
 
 @router.post("/me/complete", response_model=OnboardingStatusRead)
-def complete_onboarding(user_id: CurrentUserId, profiles: Profiles):
+def complete_onboarding(
+    user_id: CurrentUserId,
+    profiles: Profiles,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Finish onboarding. If you chose a Chapter, you become a Member of it
+    straight away, with no approval needed."""
     record = get_existing_profile(user_id, profiles)
     try:
         record.onboarding.complete()
     except OnboardingError as exc:
         raise onboarding_error(exc)
     profiles.save(record)
+    membership.join_after_onboarding(db, user_id)
     return record.onboarding.to_read()

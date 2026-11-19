@@ -46,7 +46,7 @@ class RecordingStatus(str, Enum):
 
 
 class Meeting(Base):
-    """A video meeting or livestream, optionally tied to a Community or Chapter event."""
+    """A video meeting or livestream, optionally tied to a Chapter or an event."""
 
     __tablename__ = "meetings"
 
@@ -59,22 +59,12 @@ class Meeting(Base):
             "status IN ('scheduled', 'live', 'ended', 'cancelled')",
             name="ck_meetings_status",
         ),
-        CheckConstraint(
-            "chapter_id IS NULL OR community_id IS NULL",
-            name="ck_meetings_single_scope",
-        ),
         UniqueConstraint(
             "provider",
             "provider_room_id",
             name="uq_meetings_provider_room",
         ),
         Index("ix_meetings_created", "created_at", "id"),
-        Index(
-            "ix_meetings_community_created",
-            "community_id",
-            "created_at",
-            "id",
-        ),
         Index(
             "ix_meetings_chapter_created",
             "chapter_id",
@@ -89,17 +79,11 @@ class Meeting(Base):
         default=uuid.uuid4,
     )
 
-    # Null for app-wide meetings or Chapter-owned meetings.
-    community_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("communities.id", ondelete="CASCADE"),
-        nullable=True,
-    )
 
-    # Null for app-wide meetings or Community-owned meetings.
+    # The Chapter that owns the meeting; null for app-wide meetings.
     chapter_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("branches.id", ondelete="CASCADE"),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )

@@ -6,11 +6,12 @@ export type AdminOverview = {
   active_users: number;
   inactive_users: number;
   new_users_last_7_days: number;
-  communities: number;
   posts_last_7_days: number;
   open_reports: number;
   upcoming_events: number;
-  branches: number;
+  chapters: number;
+  members: number;
+  guests: number;
 };
 
 export async function apiRequest<T>(

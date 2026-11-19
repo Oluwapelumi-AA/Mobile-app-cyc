@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const API_BASE =
   process.env.API_BASE_URL ||
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     "q",
     "account_role",
     "is_active",
-    "branch_id",
+    "chapter_id",
   ]) {
     const value = incoming.get(key);
     if (value !== null && value !== "") {

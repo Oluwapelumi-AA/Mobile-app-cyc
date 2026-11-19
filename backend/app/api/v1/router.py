@@ -4,10 +4,10 @@ from fastapi import APIRouter
 from app.api.v1.auth import router as auth_router
 from app.api.v1 import (
     admin,
-    branches,
     chapters,
     chapter_management,
-    communities,
+    courses,
+    membership,
     departments,
     events,
     locales,
@@ -29,18 +29,20 @@ router.include_router(auth_router)
 router.include_router(profiles.router)
 router.include_router(onboarding.router)
 router.include_router(reactions.router)
-router.include_router(communities.router)
 router.include_router(posts.router)
 router.include_router(events.router)
 router.include_router(meetings.router)
 router.include_router(video_webhooks.router)
 router.include_router(resources.categories_router)
 router.include_router(resources.router)
+router.include_router(membership.router)
+router.include_router(courses.router)
+router.include_router(courses.lessons_router)
+router.include_router(courses.quizzes_router)
 router.include_router(notifications.router)
 router.include_router(moderation.router)
 router.include_router(admin.router)
 router.include_router(search.router)
-router.include_router(branches.router)
 router.include_router(chapters.router)
 router.include_router(chapter_management.router)
 router.include_router(departments.router)

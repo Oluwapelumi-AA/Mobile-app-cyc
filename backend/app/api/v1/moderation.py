@@ -1,4 +1,4 @@
-"""Reporting, the moderation queue, community bans and the audit log."""
+"""Reporting, the moderation queue, Chapter bans and the audit log."""
 
 from typing import Annotated, Literal
 from uuid import UUID
@@ -36,7 +36,7 @@ Cursor = Annotated[str | None, Query(max_length=200)]
 
 @router.post("/reports", response_model=MyReportRead, status_code=status.HTTP_201_CREATED)
 def create_report(data: ReportCreate, user_id: CurrentUserId, db: DbSession):
-    """Report a post, comment, event, resource, community or user."""
+    """Report a post, comment, event, resource, Chapter or user."""
     return moderation.create_report(db, user_id, data)
 
 
@@ -63,12 +63,12 @@ def list_reports(
     cursor: Cursor = None,
     status: Literal["open", "actioned", "dismissed", "any"] = "open",
     target_type: ReportTarget | None = None,
-    community_id: UUID | None = None,
+    chapter_id: UUID | None = None,
     app_wide: bool = False,
 ):
     """Reports you can review. Open ones oldest first, others newest first.
 
-    Community moderators see their communities' reports; app moderators and
+    Chapter Moderators and Coordinators see their Chapter's reports; app moderators and
     admins see all, and ``app_wide=true`` shows only those for app staff.
     """
     items, next_cursor = moderation.list_reports(
@@ -78,7 +78,7 @@ def list_reports(
         cursor,
         status=None if status == "any" else ReportStatus(status),
         target_type=target_type,
-        community_id=community_id,
+        chapter_id=chapter_id,
         app_wide=app_wide,
     )
     return Page(items=items, next_cursor=next_cursor)
@@ -106,19 +106,19 @@ def list_audit_logs(
     db: DbSession,
     limit: Limit = DEFAULT_PAGE_SIZE,
     cursor: Cursor = None,
-    community_id: UUID | None = None,
+    chapter_id: UUID | None = None,
     actor_id: UUID | None = None,
     action: Annotated[str | None, Query(max_length=50)] = None,
     target_type: Annotated[str | None, Query(max_length=20)] = None,
     target_id: UUID | None = None,
 ):
-    """Newest first. Community moderators must pass their ``community_id``."""
+    """Newest first. Chapter staff must pass their ``chapter_id``."""
     items, next_cursor = audit.list_entries(
         db,
         user_id,
         limit,
         cursor,
-        community_id=community_id,
+        chapter_id=chapter_id,
         actor_id=actor_id,
         action=action,
         target_type=target_type,
@@ -127,43 +127,43 @@ def list_audit_logs(
     return Page(items=items, next_cursor=next_cursor)
 
 
-# Community bans
+# Chapter bans
 
 
-@router.get("/communities/{community_id}/bans", response_model=Page[BanRead])
+@router.get("/chapters/{chapter_id}/bans", response_model=Page[BanRead])
 def list_bans(
-    community_id: UUID,
+    chapter_id: UUID,
     user_id: CurrentUserId,
     db: DbSession,
     limit: Limit = DEFAULT_PAGE_SIZE,
     cursor: Cursor = None,
 ):
-    items, next_cursor = moderation.list_bans(db, user_id, community_id, limit, cursor)
+    items, next_cursor = moderation.list_bans(db, user_id, chapter_id, limit, cursor)
     return Page(items=items, next_cursor=next_cursor)
 
 
 @router.put(
-    "/communities/{community_id}/bans/{target_user_id}",
+    "/chapters/{chapter_id}/bans/{target_user_id}",
     response_model=BanRead,
     status_code=status.HTTP_201_CREATED,
 )
 def ban_member(
-    community_id: UUID,
+    chapter_id: UUID,
     target_user_id: UUID,
     user_id: CurrentUserId,
     db: DbSession,
     data: BanCreate | None = None,
 ):
-    """Remove someone from the community and stop them joining again."""
-    return moderation.ban_member(db, user_id, community_id, target_user_id, data or BanCreate())
+    """Bar someone from posting, commenting, reacting and registering in the Chapter."""
+    return moderation.ban_member(db, user_id, chapter_id, target_user_id, data or BanCreate())
 
 
 @router.delete(
-    "/communities/{community_id}/bans/{target_user_id}",
+    "/chapters/{chapter_id}/bans/{target_user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def unban_member(
-    community_id: UUID, target_user_id: UUID, user_id: CurrentUserId, db: DbSession
+    chapter_id: UUID, target_user_id: UUID, user_id: CurrentUserId, db: DbSession
 ):
-    moderation.unban_member(db, user_id, community_id, target_user_id)
+    moderation.unban_member(db, user_id, chapter_id, target_user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

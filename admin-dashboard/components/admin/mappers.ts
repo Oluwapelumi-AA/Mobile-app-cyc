@@ -4,8 +4,9 @@
  */
 import type {
   AuditRow,
-  BranchRow,
-  CommunityRow,
+  ChapterRow,
+  CourseRow,
+  DepartmentRow,
   EventRow,
   ReportRow,
   ResourceRow,
@@ -28,7 +29,7 @@ export type ApiReport = {
   created_at: string;
   reviewed_at: string | null;
   reporter_id: string | null;
-  community_id: string | null;
+  chapter_id: string | null;
   snapshot: Record<string, unknown>;
   open_reports_on_target?: number;
 };
@@ -59,7 +60,8 @@ export function mapReport(r: ApiReport): ReportRow {
     id: r.id,
     title: snapshotTitle(r.snapshot, `${reason} report`),
     targetType: r.target_type === "user" ? "User profile" : titleCase(r.target_type),
-    community: r.community_id ? `Department ${shortId(r.community_id)}` : "App-wide",
+    chapter: r.chapter_id ? `Chapter ${shortId(r.chapter_id)}` : "App-wide",
+    chapterId: r.chapter_id,
     reason,
     reporter: r.reporter_id ? `User #${shortId(r.reporter_id)}` : "Anonymous",
     status: r.status === "actioned" ? "Resolved" : r.status === "dismissed" ? "Dismissed" : r.reviewed_at ? "Under review" : "New",
@@ -85,8 +87,8 @@ export type ApiUser = {
   is_active: boolean;
   is_verified: boolean;
 
-  // Official Chapter and Department assignments.
-  branch_id: string | null;
+  // Official Chapter and Department assignments (only while a member).
+  chapter_id: string | null;
   department_id: string | null;
 
   // A preference does not grant Chapter membership.
@@ -113,10 +115,9 @@ export function mapUser(u: ApiUser): UserRow {
     role,
     apiRole: u.account_role,
     membershipStatus: u.membership_status === "member" ? "Member" : "Guest",
-    chapterId: u.branch_id,
+    chapterId: u.chapter_id,
     departmentId: u.department_id,
     preferredChapterId: u.preferred_chapter_id,
-    communities: null,
     status: !u.is_active ? "Suspended" : !u.is_verified ? "Pending" : "Active",
     emailVerified: u.is_verified,
     joined: u.created_at,
@@ -126,30 +127,50 @@ export function mapUser(u: ApiUser): UserRow {
   };
 }
 
-/* ---------- Communities ---------- */
+/* ---------- Departments (platform-wide) ---------- */
 
-export type ApiCommunity = {
+export type ApiDepartment = {
   id: string;
   name: string;
   description: string | null;
-  visibility: "public" | "private";
   member_count: number;
   created_at: string;
+  updated_at: string;
 };
 
-export function mapCommunity(c: ApiCommunity): CommunityRow {
+export function mapDepartment(d: ApiDepartment): DepartmentRow {
   return {
-    id: c.id,
-    name: c.name,
-    description: c.description ?? "",
-    type: c.visibility === "private" ? "Private group" : "Department",
-    category: "Other",
-    members: c.member_count,
-    posts: null,
-    status: "Active",
-    createdAt: c.created_at,
+    id: d.id,
+    name: d.name,
+    description: d.description ?? "",
+    members: d.member_count ?? 0,
+    createdAt: d.created_at,
+    updatedAt: d.updated_at,
   };
 }
+
+/* ---------- Posts and comments ---------- */
+
+export type ApiPost = {
+  id: string;
+  chapter_id: string;
+  author_id: string;
+  body: string;
+  comment_count: number;
+  created_at: string;
+  updated_at: string;
+  edited_at: string | null;
+};
+
+export type ApiComment = {
+  id: string;
+  post_id: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  edited_at: string | null;
+};
 
 /* ---------- Events ---------- */
 
@@ -164,6 +185,7 @@ export type ApiEvent = {
   timezone: string;
   status: "scheduled" | "cancelled";
   registered_count: number;
+  chapter_id: string | null;
 };
 
 export function mapEvent(e: ApiEvent): EventRow {
@@ -182,6 +204,7 @@ export function mapEvent(e: ApiEvent): EventRow {
     location: e.location || (e.online_url ? "Online" : "—"),
     status: e.status === "cancelled" ? "Cancelled" : end < now ? "Completed" : "Published",
     attendees: e.registered_count,
+    chapterId: e.chapter_id,
     shares: 0,
     ongoing: e.status !== "cancelled" && start <= now && end >= now,
   };
@@ -199,7 +222,7 @@ export type ApiMeeting = {
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
-  community_id: string | null;
+  chapter_id: string | null;
 };
 
 function duration(start: string | null, end: string | null) {
@@ -219,8 +242,9 @@ export function mapMeeting(m: ApiMeeting): VideoRow {
     subtitle: m.description ?? (m.kind === "livestream" ? "Livestream" : "Meeting"),
     kind: m.status === "ended" && m.kind === "meeting" ? "Video" : "Live",
     host: "—",
-    community: m.community_id ? `Department ${shortId(m.community_id)}` : "CYC Global",
-    status: m.status === "live" ? "Live now" : m.status === "ended" ? "Ended" : m.status === "scheduled" ? "Scheduled" : "Draft",
+    chapter: m.chapter_id ? `Chapter ${shortId(m.chapter_id)}` : "CYC Global",
+    chapterId: m.chapter_id,
+    status: m.status === "live" ? "Live now" : m.status === "ended" ? "Ended" : m.status === "scheduled" ? "Scheduled" : "Cancelled",
     date: m.started_at ?? m.scheduled_start_at ?? m.created_at,
     views: null,
     duration: duration(m.started_at, m.ended_at),
@@ -239,6 +263,8 @@ export type ApiResource = {
   scripture_reference: string | null;
   published_at: string | null;
   created_at: string;
+  chapter_id: string | null;
+  category_id: string | null;
 };
 
 const KIND_TYPE: Record<string, ResourceRow["type"]> = {
@@ -260,38 +286,174 @@ export function mapResource(r: ApiResource): ResourceRow {
     status: r.status === "published" ? "Published" : "Draft",
     views: null,
     date: r.published_at ?? r.created_at,
+    chapterId: r.chapter_id,
+    categoryId: r.category_id,
   };
 }
 
-/* ---------- Branches ---------- */
+/* ---------- Courses ---------- */
 
-export type ApiBranch = {
+export type ApiCourse = {
   id: string;
-  name: string;
-  city: string | null;
-  country_code: string;
-  timezone: string;
-  member_count: number;
-  community_count: number;
-  contact_email: string | null;
-  is_active: boolean;
+  chapter_id: string | null;
+  title: string;
+  summary: string | null;
+  category: string | null;
+  level: "beginner" | "intermediate" | "advanced";
+  instructor_name: string | null;
+  status: "draft" | "published";
+  lesson_count: number;
+  quiz_count: number;
+  student_count: number;
   created_at: string;
 };
 
-export function mapBranch(b: ApiBranch): BranchRow {
+export type ApiLesson = {
+  id: string;
+  position: number;
+  title: string;
+  body: string | null;
+  video_url: string | null;
+  duration_minutes: number | null;
+};
+
+export type ApiQuiz = {
+  id: string;
+  course_id: string;
+  lesson_id: string | null;
+  title: string;
+  pass_mark: number;
+  question_count: number;
+  questions: { prompt: string; options: string[]; correct_index: number | null }[];
+  attempt_count: number;
+};
+
+export type ApiCourseDetail = ApiCourse & {
+  description: string | null;
+  lessons: ApiLesson[];
+  quizzes: ApiQuiz[];
+};
+
+export type ApiAttempt = {
+  id: string;
+  quiz_id: string;
+  quiz_title: string;
+  course_id: string;
+  user_id: string;
+  user_name: string | null;
+  score: number;
+  passed: boolean;
+  correct_count: number;
+  question_count: number;
+  created_at: string;
+};
+
+export type ApiCertificate = {
+  course_id: string;
+  course_title: string;
+  user_id: string;
+  user_name: string | null;
+  best_score: number | null;
+  completed_at: string;
+};
+
+export type ApiCourseOverview = {
+  courses: number;
+  published: number;
+  students: number;
+  quizzes: number;
+  certificates: number;
+  recent_attempts: ApiAttempt[];
+};
+
+export function mapCourse(c: ApiCourse): CourseRow {
   return {
-    id: b.id,
-    name: b.name,
-    city: b.city ?? "—",
-    country: b.country_code,
-    timezone: b.timezone,
-    members: b.member_count,
-    communities: b.community_count,
-    contact: b.contact_email ?? "—",
-    active: b.is_active,
-    createdAt: b.created_at,
+    id: c.id,
+    title: c.title,
+    summary: c.summary ?? "",
+    instructor: c.instructor_name ?? "—",
+    category: c.category ?? "Uncategorized",
+    level: titleCase(c.level) as CourseRow["level"],
+    lessons: c.lesson_count,
+    students: c.student_count,
+    status: c.status === "published" ? "Published" : "Draft",
+    quizzes: c.quiz_count,
+    chapterId: c.chapter_id,
   };
 }
+
+/* ---------- Chapters ---------- */
+
+export type ApiChapter = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  city: string | null;
+  country_code: string;
+  timezone: string;
+  language_code: string | null;
+  member_count: number;
+  contact_email: string | null;
+  is_active: boolean;
+  my_role?: string | null;
+  created_at: string;
+};
+
+export function mapChapter(c: ApiChapter): ChapterRow {
+  return {
+    id: c.id,
+    name: c.name,
+    slug: c.slug,
+    description: c.description ?? "",
+    city: c.city ?? "—",
+    country: c.country_code,
+    timezone: c.timezone,
+    language: c.language_code,
+    members: c.member_count,
+    contact: c.contact_email ?? "—",
+    active: c.is_active,
+    createdAt: c.created_at,
+  };
+}
+
+export type ApiStaff = {
+  id: string;
+  chapter_id: string;
+  user_id: string;
+  role: "coordinator" | "moderator";
+  email: string | null;
+  display_name: string | null;
+  created_at: string;
+};
+
+export type ApiChapterMember = {
+  user_id: string;
+  email: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  is_active: boolean;
+  department_id: string | null;
+  department_name: string | null;
+  staff_role: "coordinator" | "moderator" | null;
+  is_banned: boolean;
+  joined_at: string;
+};
+
+export type ApiChapterDashboard = {
+  chapter_id: string;
+  chapter_name: string;
+  is_active: boolean;
+  member_count: number;
+  coordinator_count: number;
+  moderator_count: number;
+  post_count: number;
+  upcoming_event_count: number;
+  published_resource_count: number;
+  open_report_count: number;
+  pending_access_request_count: number;
+  ban_count: number;
+};
 
 /** Swap "Admin #1A2B" / "User #1A2B" placeholders for real names when known. */
 export function withNames<T extends { actorId?: string | null; actor?: string; actorRole?: string; reporterId?: string | null; reporter?: string }>(
@@ -319,7 +481,7 @@ export type ApiAudit = {
   action: string;
   target_type: string;
   target_id: string;
-  community_id: string | null;
+  chapter_id: string | null;
   data: Record<string, unknown>;
   created_at: string;
 };
@@ -336,10 +498,12 @@ const VERB: Record<string, AuditRow["action"]> = {
   suspended: "Suspended",
   reinstated: "Reinstated",
   role_changed: "Updated",
+  assigned: "Assigned",
+  announcement_sent: "Sent",
 };
 
-// Communities are called "departments" and branches "chapters" in the CYC UI.
-const nounLabel = (noun: string) => (noun === "community" ? "department" : noun === "branch" ? "chapter" : noun);
+// Audit nouns as shown in the dashboard.
+const nounLabel = (noun: string) => (noun === "chapter_staff" ? "chapter staff" : noun);
 
 export function auditSentence(a: ApiAudit) {
   const [noun, verb = ""] = a.action.split(".");
@@ -358,7 +522,7 @@ export function auditSentence(a: ApiAudit) {
 export function mapAudit(a: ApiAudit): AuditRow {
   const [noun, verb = ""] = a.action.split(".");
   const action = VERB[verb] ?? titleCase(verb || a.action);
-  const moduleName = titleCase(noun === "member" ? "department" : nounLabel(noun));
+  const moduleName = titleCase(noun === "member" || noun === "chapter_staff" ? "chapter" : nounLabel(noun));
   return {
     id: a.id,
     at: a.created_at,

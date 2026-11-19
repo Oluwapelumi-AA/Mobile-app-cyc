@@ -82,19 +82,8 @@ class Resource(Base):
             "duration_seconds IS NULL OR duration_seconds > 0",
             name="ck_resources_duration_positive",
         ),
-        CheckConstraint(
-            "chapter_id IS NULL OR community_id IS NULL",
-            name="ck_resources_single_scope",
-        ),
         # The library: newest published first, ties broken by id.
         Index("ix_resources_status_published", "status", "published_at", "id"),
-        Index(
-            "ix_resources_community_status_published",
-            "community_id",
-            "status",
-            "published_at",
-            "id",
-        ),
         Index(
             "ix_resources_chapter_status_published",
             "chapter_id",
@@ -110,17 +99,11 @@ class Resource(Base):
         default=uuid.uuid4,
     )
 
-    # Null for app-wide resources or Chapter-owned resources.
-    community_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("communities.id", ondelete="CASCADE"),
-        nullable=True,
-    )
 
-    # Null for app-wide resources or Community-owned resources.
+    # The Chapter that owns the resource; null for app-wide resources.
     chapter_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("branches.id", ondelete="CASCADE"),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )

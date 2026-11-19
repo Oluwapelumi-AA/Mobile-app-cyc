@@ -19,14 +19,13 @@ from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.identity import UserId
-from app.models.branch import Branch
-from app.models.community import Community
+from app.models.chapter import Chapter
 from app.models.event import Event, EventStatus
 from app.models.moderation import ContentReport, ReportStatus
 from app.models.notification import NotificationDevice
 from app.models.post import Post
 from app.models.refresh_session import RefreshSession
-from app.models.user import AccountRole, User
+from app.models.user import AccountRole, MembershipStatus, User
 from app.models.user_profile import UserProfile
 from app.schemas.moderation import (
     AccountRoleUpdate,
@@ -93,7 +92,7 @@ def _reads(db: Session, rows: list[tuple[User, UserProfile | None]]) -> list[Adm
             membership_status=user.membership_status,
             is_active=user.is_active,
             is_verified=user.is_verified,
-            branch_id=profile.branch_id if profile else None,
+            chapter_id=profile.chapter_id if profile else None,
             department_id=profile.department_id if profile else None,
             preferred_chapter_id=profile.preferred_chapter_id if profile else None,
             open_reports=reports.get(user.id, 0),
@@ -117,7 +116,7 @@ def list_users(
     q: str | None = None,
     account_role: AccountRole | None = None,
     is_active: bool | None = None,
-    branch_id: uuid.UUID | None = None,
+    chapter_id: uuid.UUID | None = None,
 ) -> tuple[list[AdminUserRead], str | None]:
     """Users, newest first. ``q`` matches the email or display name."""
     require_staff(db, user_id)
@@ -134,8 +133,8 @@ def list_users(
         statement = statement.where(User.account_role == account_role)
     if is_active is not None:
         statement = statement.where(User.is_active.is_(is_active))
-    if branch_id is not None:
-        statement = statement.where(UserProfile.branch_id == branch_id)
+    if chapter_id is not None:
+        statement = statement.where(UserProfile.chapter_id == chapter_id)
     if cursor:
         statement = statement.where(
             pagination.after_cursor(User.created_at, User.id, cursor, newest_first=True)
@@ -256,7 +255,6 @@ def overview(db: Session, user_id: UserId) -> AdminOverview:
         active_users=active,
         inactive_users=users - active,
         new_users_last_7_days=_count(db, User, User.created_at >= week_ago),
-        communities=_count(db, Community),
         posts_last_7_days=_count(db, Post, Post.created_at >= week_ago),
         open_reports=_count(db, ContentReport, ContentReport.status == ReportStatus.OPEN.value),
         upcoming_events=_count(
@@ -265,5 +263,7 @@ def overview(db: Session, user_id: UserId) -> AdminOverview:
             Event.ends_at > now,
             Event.status != EventStatus.CANCELLED.value,
         ),
-        branches=_count(db, Branch, Branch.is_active.is_(True)),
+        chapters=_count(db, Chapter, Chapter.is_active.is_(True)),
+        members=_count(db, User, User.membership_status == MembershipStatus.MEMBER),
+        guests=_count(db, User, User.membership_status == MembershipStatus.GUEST),
     )

@@ -5,27 +5,27 @@ from sqlalchemy import func, select
 
 from app.models import AccountRole, Reaction
 
-COMMUNITIES = "/api/v1/communities"
+CHAPTERS = "/api/v1/chapters"
 
 
 @pytest.fixture
 def world(api):
-    """A public community with an owner, a moderator and two members."""
+    """A Chapter with a Coordinator ("owner"), a Moderator and two Members,
+    plus an outsider who belongs to another Chapter."""
     ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "outsider")}
-    api.act_as(ids["owner"])
-    community = api.client.post(COMMUNITIES, json={"name": "Abuja Fellowship"}).json()
-    cid = community["id"]
-    for name in ("mod", "alice", "bob"):
-        api.act_as(ids[name])
-        api.client.post(f"{COMMUNITIES}/{cid}/join")
-    api.act_as(ids["owner"])
-    api.client.patch(f"{COMMUNITIES}/{cid}/members/{ids['mod']}", json={"role": "moderator"})
-    return {"community_id": cid, **ids}
+    cid = api.add_chapter("Abuja")
+    other = api.add_chapter("Lagos")
+    api.add_staff(ids["owner"], cid, "coordinator")
+    api.add_staff(ids["mod"], cid, "moderator")
+    for name in ("alice", "bob"):
+        api.add_member(ids[name], cid, name.title())
+    api.add_member(ids["outsider"], other, "Outsider")
+    return {"chapter_id": str(cid), "other_chapter_id": str(other), **ids}
 
 
-def post_as(api, user_id, community_id, body="Hello church"):
+def post_as(api, user_id, chapter_id, body="Hello church"):
     api.act_as(user_id)
-    return api.client.post(f"{COMMUNITIES}/{community_id}/posts", json={"body": body})
+    return api.client.post(f"{CHAPTERS}/{chapter_id}/posts", json={"body": body})
 
 
 def comment_as(api, user_id, post_id, body="Amen"):
@@ -37,33 +37,33 @@ def comment_as(api, user_id, post_id, body="Amen"):
 
 
 def test_member_creates_post(api, world):
-    response = post_as(api, world["alice"], world["community_id"], "  Praise report  ")
+    response = post_as(api, world["alice"], world["chapter_id"], "  Praise report  ")
     assert response.status_code == 201
     body = response.json()
     assert body["body"] == "Praise report"
     assert body["author_id"] == str(world["alice"])
-    assert body["community_id"] == world["community_id"]
+    assert body["chapter_id"] == world["chapter_id"]
     assert body["comment_count"] == 0
     assert body["edited_at"] is None
 
 
 def test_non_member_cannot_post(api, world):
-    response = post_as(api, world["outsider"], world["community_id"])
+    response = post_as(api, world["outsider"], world["chapter_id"])
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "membership_required"
 
 
 @pytest.mark.parametrize("body", ["", "   ", "x" * 5001])
 def test_post_body_is_validated(api, world, body):
-    assert post_as(api, world["alice"], world["community_id"], body).status_code == 422
+    assert post_as(api, world["alice"], world["chapter_id"], body).status_code == 422
 
 
 def test_feed_is_newest_first_and_paginates(api, world):
     for number in range(5):
-        post_as(api, world["alice"], world["community_id"], f"Post {number}")
+        post_as(api, world["alice"], world["chapter_id"], f"Post {number}")
 
-    api.act_as(world["outsider"])  # Public community: readable by anyone.
-    url = f"{COMMUNITIES}/{world['community_id']}/posts"
+    api.act_as(world["bob"])
+    url = f"{CHAPTERS}/{world['chapter_id']}/posts"
     first = api.client.get(url, params={"limit": 3}).json()
     second = api.client.get(url, params={"limit": 3, "cursor": first["next_cursor"]}).json()
 
@@ -72,23 +72,20 @@ def test_feed_is_newest_first_and_paginates(api, world):
     assert second["next_cursor"] is None
 
 
-def test_feed_only_shows_that_community(api, world):
-    post_as(api, world["alice"], world["community_id"], "Here")
-    api.act_as(world["bob"])
-    other = api.client.post(COMMUNITIES, json={"name": "Other place"}).json()
-    post_as(api, world["bob"], other["id"], "Elsewhere")
+def test_feed_only_shows_that_chapter(api, world):
+    post_as(api, world["alice"], world["chapter_id"], "Here")
+    post_as(api, world["outsider"], world["other_chapter_id"], "Elsewhere")
 
-    items = api.client.get(f"{COMMUNITIES}/{world['community_id']}/posts").json()["items"]
+    api.act_as(world["alice"])
+    items = api.client.get(f"{CHAPTERS}/{world['chapter_id']}/posts").json()["items"]
     assert [p["body"] for p in items] == ["Here"]
 
 
-def test_private_community_posts_hidden(api, world):
-    api.act_as(world["owner"])
-    secret = api.client.post(COMMUNITIES, json={"name": "Leaders", "visibility": "private"}).json()
-    post = post_as(api, world["owner"], secret["id"]).json()
+def test_other_chapters_posts_are_hidden(api, world):
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
 
     api.act_as(world["outsider"])
-    assert api.client.get(f"{COMMUNITIES}/{secret['id']}/posts").status_code == 404
+    assert api.client.get(f"{CHAPTERS}/{world['chapter_id']}/posts").json()["items"] == []
     response = api.client.get(f"/api/v1/posts/{post['id']}")
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "post_not_found"
@@ -96,13 +93,13 @@ def test_private_community_posts_hidden(api, world):
 
 
 def test_get_post_includes_comment_count(api, world):
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     comment_as(api, world["bob"], post["id"])
     comment_as(api, world["alice"], post["id"])
 
     body = api.client.get(f"/api/v1/posts/{post['id']}").json()
     assert body["comment_count"] == 2
-    feed = api.client.get(f"{COMMUNITIES}/{world['community_id']}/posts").json()
+    feed = api.client.get(f"{CHAPTERS}/{world['chapter_id']}/posts").json()
     assert feed["items"][0]["comment_count"] == 2
 
 
@@ -112,7 +109,7 @@ def test_unknown_post_is_404(api, world):
 
 
 def test_only_author_edits_post(api, world):
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
 
     for name in ("bob", "owner"):
         api.act_as(world[name])
@@ -127,16 +124,16 @@ def test_only_author_edits_post(api, world):
     assert response.json()["edited_at"] is not None
 
 
-@pytest.mark.parametrize("deleter", ["alice", "mod", "owner"])
+@pytest.mark.parametrize("deleter", ["alice", "mod", "owner"])  # owner = Coordinator
 def test_author_and_moderators_delete_post(api, world, deleter):
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     api.act_as(world[deleter])
     assert api.client.delete(f"/api/v1/posts/{post['id']}").status_code == 204
     assert api.client.get(f"/api/v1/posts/{post['id']}").status_code == 404
 
 
 def test_other_member_cannot_delete_post(api, world):
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     api.act_as(world["bob"])
     response = api.client.delete(f"/api/v1/posts/{post['id']}")
     assert response.status_code == 403
@@ -145,13 +142,13 @@ def test_other_member_cannot_delete_post(api, world):
 
 def test_platform_moderator_can_delete_post(api, world):
     staff = api.add_user("staff", AccountRole.MODERATOR)
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     api.act_as(staff)
     assert api.client.delete(f"/api/v1/posts/{post['id']}").status_code == 204
 
 
 def test_deleting_post_removes_comments_and_reactions(api, world):
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     comment = comment_as(api, world["bob"], post["id"]).json()
     api.act_as(world["bob"])
     api.client.put(f"/api/v1/reactions/posts/{post['id']}", json={"reaction_type": "pray"})
@@ -167,21 +164,34 @@ def test_deleting_post_removes_comments_and_reactions(api, world):
     assert response.status_code == 404
 
 
-def test_deleting_community_removes_posts(api, world):
-    post = post_as(api, world["alice"], world["community_id"]).json()
-    comment_as(api, world["bob"], post["id"])
-    api.act_as(world["owner"])
-    assert api.client.delete(f"{COMMUNITIES}/{world['community_id']}").status_code == 204
+def test_archived_chapter_hides_posts(api, world):
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
+    admin = api.add_user("admin", AccountRole.ADMIN)
+    api.act_as(admin)
+    assert api.client.post(f"{CHAPTERS}/{world['chapter_id']}/archive").status_code == 200
 
     api.act_as(world["alice"])
     assert api.client.get(f"/api/v1/posts/{post['id']}").status_code == 404
+    response = api.client.get(f"{CHAPTERS}/{world['chapter_id']}/posts")
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "chapter_not_found"
+    # App staff still see it.
+    api.act_as(admin)
+    assert api.client.get(f"/api/v1/posts/{post['id']}").status_code == 200
+
+
+def test_unknown_chapter_feed_is_404(api, world):
+    api.act_as(world["alice"])
+    response = api.client.get(f"{CHAPTERS}/{uuid.uuid4()}/posts")
+    assert response.status_code == 404
+    assert post_as(api, world["alice"], uuid.uuid4()).status_code == 404
 
 
 # Comments
 
 
 def test_member_comments_and_list_is_oldest_first(api, world):
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     for number in range(3):
         response = comment_as(api, world["bob"], post["id"], f"Comment {number}")
         assert response.status_code == 201
@@ -200,8 +210,13 @@ def test_member_comments_and_list_is_oldest_first(api, world):
 
 
 def test_non_member_cannot_comment(api, world):
-    post = post_as(api, world["alice"], world["community_id"]).json()
-    response = comment_as(api, world["outsider"], post["id"])
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
+    # Someone from another Chapter can't even see it.
+    assert comment_as(api, world["outsider"], post["id"]).status_code == 404
+    # A Guest granted the post can read but not comment.
+    guest = api.add_user("guest")
+    api.grant(guest, uuid.UUID(world["chapter_id"]), post_id=uuid.UUID(post["id"]))
+    response = comment_as(api, guest, post["id"])
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "membership_required"
 
@@ -212,12 +227,12 @@ def test_comment_on_unknown_post_is_404(api, world):
 
 @pytest.mark.parametrize("body", ["", "x" * 2001])
 def test_comment_body_is_validated(api, world, body):
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     assert comment_as(api, world["bob"], post["id"], body).status_code == 422
 
 
 def test_only_author_edits_comment(api, world):
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     comment = comment_as(api, world["bob"], post["id"]).json()
 
     api.act_as(world["alice"])
@@ -232,7 +247,7 @@ def test_only_author_edits_comment(api, world):
 
 
 def test_comment_delete_permissions(api, world):
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     first = comment_as(api, world["bob"], post["id"]).json()
     second = comment_as(api, world["bob"], post["id"]).json()
     api.act_as(world["bob"])
@@ -252,12 +267,16 @@ def test_comment_delete_permissions(api, world):
         assert db.scalar(select(func.count()).select_from(Reaction)) == 0
 
 
-def test_comments_stay_after_author_leaves(api, world):
-    post = post_as(api, world["alice"], world["community_id"]).json()
+def test_comments_stay_after_author_leaves_the_chapter(api, world):
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     comment_as(api, world["bob"], post["id"])
-    api.act_as(world["bob"])
-    api.client.post(f"{COMMUNITIES}/{world['community_id']}/leave")
+    admin = api.add_user("admin", AccountRole.ADMIN)
+    api.act_as(admin)
+    assert api.client.delete(
+        f"{CHAPTERS}/{world['chapter_id']}/members/{world['bob']}"
+    ).status_code == 204
 
+    api.act_as(world["alice"])
     items = api.client.get(f"/api/v1/posts/{post['id']}/comments").json()["items"]
     assert len(items) == 1
 
@@ -269,13 +288,13 @@ def test_ensure_can_react(api, world):
     from app.services.errors import Forbidden, NotFound
     from app.services.posts import ensure_can_react
 
-    post = post_as(api, world["alice"], world["community_id"]).json()
+    post = post_as(api, world["alice"], world["chapter_id"]).json()
     comment = comment_as(api, world["bob"], post["id"]).json()
 
     with api.session_factory() as db:
         ensure_can_react(db, world["bob"], "post", uuid.UUID(post["id"]))
         ensure_can_react(db, world["alice"], "comment", uuid.UUID(comment["id"]))
-        with pytest.raises(Forbidden):
+        with pytest.raises(NotFound):
             ensure_can_react(db, world["outsider"], "post", uuid.UUID(post["id"]))
         with pytest.raises(NotFound):
             ensure_can_react(db, world["bob"], "post", uuid.uuid4())

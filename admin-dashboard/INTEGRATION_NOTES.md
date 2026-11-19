@@ -1,41 +1,45 @@
 # CYC Admin Dashboard integration notes
 
-## What is included
+## How the dashboard talks to the API
 
-- Existing Next.js/React/TypeScript admin application and its 13 navigation sections are preserved.
-- Existing authentication, shared shell, styling tokens, API proxy and backend-connected screens are preserved.
-- Courses and quizzes now include a dedicated **Quiz results** tab, pass/fail visibility, certificate eligibility, an **Issue certificate** dialog, and send-action states for UI review.
+The browser only calls the dashboard's own `/api/backend/...` proxy
+(`app/api/backend/[...path]/route.ts`). The proxy keeps the access and refresh
+tokens in httpOnly cookies, refreshes them when they expire, and forwards only
+the routes on its allow-list to the FastAPI backend (`API_BASE_URL`, default
+`http://127.0.0.1:8000/api/v1`). Anything not on the list answers 404 without
+reaching the API. The API still checks every permission itself.
 
-## Important current limitation
+Screens and the endpoints they use:
 
-The course/quiz/result/certificate interactions in this branch are explicitly **preview-only**. They update local React state and do not persist or deliver a real certificate. The supplied ZIP has no learning/certificate backend routes, and the user-facing app is not included in this archive.
+| Screen | Endpoints |
+| --- | --- |
+| Overview | `admin/overview`, `moderation/reports`, `moderation/audit-logs` |
+| Users | `admin/users`, `admin/users/{id}/(role|suspend|reinstate|membership)`, `chapters/{id}/members/{user}` |
+| Chapters | `chapters`, `chapters/{id}`, `/archive`, `/restore`, `/dashboard`, `/staff`, `/members`, `/bans`, `/announcements` |
+| Departments | `departments` |
+| Posts and comments | `chapters/{id}/posts`, `posts/{id}`, `posts/{id}/comments`, `comments/{id}` |
+| Events, Live, Resources | `events`, `meetings`, `resources` |
+| Notifications | `chapters/{id}/announcements`; history from `moderation/audit-logs?action=chapter.announcement_sent` |
+| Reports, Audit log | `moderation/reports`, `moderation/audit-logs` |
 
-## Backend work needed for production
+Signing in: platform admins get the full dashboard. Chapter coordinators and
+moderators (`me/chapter-staff`) get the chapter staff landing page.
 
-Agree on API contracts with the FastAPI backend before wiring the UI. A possible contract is:
+## Sample data
 
-- `GET /admin/courses` and `POST /admin/courses`
-- `PATCH /admin/courses/{course_id}`
-- `GET /admin/quizzes` and `POST /admin/quizzes`
-- `GET /admin/quiz-attempts` (filters for user, course, result, and date range)
-- `GET /admin/certificates`
-- `POST /admin/certificates/issue` (validate passing threshold server-side and create a certificate)
-- A delivery endpoint or job for email/in-app notification, with delivery status returned to the admin UI
-- User-app endpoints such as `GET /me/certificates` and a protected certificate-download URL/endpoint
+Screens fall back to built-in sample records only when
+`NEXT_PUBLIC_ADMIN_SAMPLE_DATA=true`. Leave it unset against a real API so
+errors and empty lists are visible.
 
-The Next.js allow-list proxy in `app/api/backend/[...path]/route.ts` must be updated to allow only the agreed endpoints and methods. The FastAPI backend must enforce authorization and eligibility; do not rely on client-side pass/fail checks.
+## Create and edit forms
 
-## Validation
-
-- TypeScript/TSX syntax-transpilation check passed for 31 source files.
-- A full Next.js production build could not be run in this environment because npm dependency installation could not reach the npm registry (`EAI_AGAIN`). Run `npm ci` and `npm run build` locally after extracting the archive.
-
-
-## Branding update (2026-10-25)
-
-- Added `public/cyc-logo.png` from the supplied CYC logo asset.
-- Replaced the sign-in screen and session-check branding mark with the supplied logo.
-
-## Backend/database integration status
-
-This archive contains the `admin-dashboard` frontend only. It does not include the FastAPI `backend/` source, database models, migrations, or database configuration. Several screens currently use sample/preview state (including posts/comments, notifications, and courses/quizzes), so their persistence cannot safely be implemented or verified from this archive alone. Upload the complete project archive including `backend/`, database migrations, and environment example files (with secrets removed) to finish the API contracts, persistence, and migration work.
+- Events: create, edit and duplicate (`POST /events`, `PATCH /events/{id}`).
+- Live and video: go live now or schedule (`POST /meetings`, then
+  `POST /meetings/{id}/start`); start, end and cancel from the list. Hosts
+  broadcast from the CYC app.
+- Spiritual resources: add, edit and delete; new categories inline. File
+  uploads need `STORAGE_BACKEND=s3` on the server; without it the resource is
+  saved and the dashboard says the file wasn't uploaded.
+- Courses: `/courses`, `/course-lessons`, `/course-quizzes`. Create a course,
+  add and reorder lessons, build quizzes, publish. Quiz results and
+  certificates (learners who completed every lesson) come from the API.

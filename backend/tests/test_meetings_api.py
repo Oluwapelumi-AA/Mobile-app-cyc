@@ -11,7 +11,7 @@ from app.models import AccountRole, Meeting, MeetingRecording
 from app.services.object_storage import InMemoryObjectStorage, get_object_storage
 from app.services.video_provider import FakeVideoProvider, get_video_provider, sign_webhook
 
-COMMUNITIES = "/api/v1/communities"
+CHAPTERS = "/api/v1/chapters"
 EVENTS = "/api/v1/events"
 MEETINGS = "/api/v1/meetings"
 WEBHOOK = "/api/v1/webhooks/video"
@@ -36,24 +36,33 @@ def video(api):
 
 @pytest.fixture
 def world(api, video):
-    """A public community with an owner, a moderator and two members."""
+    """A Chapter whose Coordinator ("mod") hosts, a Chapter Moderator
+    ("owner"), two Members, an outsider from another Chapter and an app
+    moderator ("staff")."""
     ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "outsider")}
     ids["staff"] = api.add_user("staff", AccountRole.MODERATOR)
-    api.act_as(ids["owner"])
-    cid = api.client.post(COMMUNITIES, json={"name": "Abuja Fellowship"}).json()["id"]
-    for name in ("mod", "alice", "bob"):
-        api.act_as(ids[name])
-        api.client.post(f"{COMMUNITIES}/{cid}/join")
-    api.act_as(ids["owner"])
-    api.client.patch(f"{COMMUNITIES}/{cid}/members/{ids['mod']}", json={"role": "moderator"})
-    return {"community_id": cid, **ids}
+    cid = api.add_chapter("Abuja")
+    other = api.add_chapter("Lagos")
+    api.add_staff(ids["mod"], cid, "coordinator")
+    api.add_staff(ids["owner"], cid, "moderator")
+    for name in ("alice", "bob"):
+        api.add_member(ids[name], cid, name.title())
+    api.add_member(ids["outsider"], other, "Outsider")
+    return {"chapter_id": str(cid), "other_chapter_id": str(other), **ids}
+
+
+def guest_with(api, world, meeting):
+    """A Guest a Coordinator granted this one meeting."""
+    guest = api.add_user(f"guest-{uuid.uuid4().hex[:6]}")
+    api.grant(guest, uuid.UUID(world["chapter_id"]), meeting_id=uuid.UUID(meeting["id"]))
+    return guest
 
 
 def create_meeting(api, user_id, world=None, **overrides):
     api.act_as(user_id)
     payload = {"title": "Bible Study"}
     if world is not None:
-        payload["community_id"] = world["community_id"]
+        payload["chapter_id"] = world["chapter_id"]
     payload.update(overrides)
     response = api.client.post(MEETINGS, json=payload)
     assert response.status_code == 201, response.text
@@ -97,7 +106,7 @@ def create_event(api, user_id, world, capacity=None):
     response = api.client.post(
         EVENTS,
         json={
-            "community_id": world["community_id"],
+            "chapter_id": world["chapter_id"],
             "title": "Youth Prayer Night",
             "starts_at": starts.isoformat(),
             "ends_at": (starts + timedelta(hours=2)).isoformat(),
@@ -112,12 +121,12 @@ def create_event(api, user_id, world, capacity=None):
 # Creating
 
 
-def test_moderator_creates_community_meeting(api, world):
+def test_coordinator_creates_chapter_meeting(api, world):
     api.act_as(world["mod"])
     response = api.client.post(
         MEETINGS,
         json={
-            "community_id": world["community_id"],
+            "chapter_id": world["chapter_id"],
             "title": "  Bible Study ",
             "description": "John 3",
             "recording_enabled": True,
@@ -135,12 +144,13 @@ def test_moderator_creates_community_meeting(api, world):
 
 
 @pytest.mark.parametrize(
-    ("who", "code"), [("alice", "insufficient_role"), ("outsider", "membership_required")]
+    ("who", "code"),
+    [("alice", "insufficient_role"), ("owner", "insufficient_role"), ("outsider", "insufficient_role")],
 )
-def test_members_and_outsiders_cannot_create_meetings(api, world, who, code):
+def test_members_moderators_and_outsiders_cannot_create_meetings(api, world, who, code):
     api.act_as(world[who])
     response = api.client.post(
-        MEETINGS, json={"community_id": world["community_id"], "title": "Bible Study"}
+        MEETINGS, json={"chapter_id": world["chapter_id"], "title": "Bible Study"}
     )
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == code
@@ -151,27 +161,31 @@ def test_only_app_moderators_create_app_wide_meetings(api, world):
     response = api.client.post(MEETINGS, json={"title": "Global Prayer", "kind": "livestream"})
     assert response.status_code == 403
     app_wide = create_meeting(api, world["staff"], title="Global Prayer", kind="livestream")
-    assert app_wide["community_id"] is None
+    assert app_wide["chapter_id"] is None
     assert app_wide["kind"] == "livestream"
 
 
-def test_meeting_for_event_takes_its_community_and_start(api, world):
+def test_meeting_for_event_takes_its_chapter_and_start(api, world):
     event = create_event(api, world["mod"], world)
     meeting = create_meeting(api, world["mod"], event_id=event["id"])
-    assert meeting["community_id"] == world["community_id"]
+    assert meeting["chapter_id"] == world["chapter_id"]
     assert meeting["event_id"] == event["id"]
     assert meeting["scheduled_start_at"] == event["starts_at"]
 
 
-def test_meeting_for_event_rejects_other_community(api, world):
+def test_meeting_for_event_rejects_other_chapter(api, world):
     event = create_event(api, world["mod"], world)
-    api.act_as(world["outsider"])
-    other = api.client.post(COMMUNITIES, json={"name": "Other Fellowship"}).json()["id"]
+    api.act_as(world["staff"])
     response = api.client.post(
-        MEETINGS, json={"title": "Bible Study", "event_id": event["id"], "community_id": other}
+        MEETINGS,
+        json={
+            "title": "Bible Study",
+            "event_id": event["id"],
+            "chapter_id": world["other_chapter_id"],
+        },
     )
     assert response.status_code == 400
-    assert response.json()["detail"]["code"] == "community_mismatch"
+    assert response.json()["detail"]["code"] == "chapter_mismatch"
 
 
 def test_meeting_for_event_needs_event_organizer(api, world):
@@ -198,18 +212,15 @@ def test_unknown_event_is_404(api, world):
 # Seeing
 
 
-def test_private_community_meetings_are_hidden(api, world):
-    api.act_as(world["owner"])
-    private = api.client.post(
-        COMMUNITIES, json={"name": "Leaders", "visibility": "private"}
-    ).json()["id"]
-    meeting = create_meeting(api, world["owner"], community_id=private)
+def test_other_chapters_meetings_are_hidden(api, world):
+    meeting = create_meeting(api, world["mod"], world)
     api.act_as(world["outsider"])
     assert api.client.get(f"{MEETINGS}/{meeting['id']}").status_code == 404
     listed = api.client.get(MEETINGS).json()["items"]
     assert meeting["id"] not in [item["id"] for item in listed]
-    api.act_as(world["owner"])
-    assert api.client.get(f"{MEETINGS}/{meeting['id']}").status_code == 200
+    for who in ("owner", "alice"):
+        api.act_as(world[who])
+        assert api.client.get(f"{MEETINGS}/{meeting['id']}").status_code == 200
 
 
 def test_list_filters_and_pages(api, world):
@@ -227,10 +238,10 @@ def test_list_filters_and_pages(api, world):
     assert [item["id"] for item in live] == [second["id"]]
     meetings_only = api.client.get(MEETINGS, params={"kind": "meeting"}).json()["items"]
     assert [item["id"] for item in meetings_only] == [first["id"]]
-    by_community = api.client.get(
-        MEETINGS, params={"community_id": world["community_id"]}
+    by_chapter = api.client.get(
+        MEETINGS, params={"chapter_id": world["chapter_id"]}
     ).json()["items"]
-    assert len(by_community) == 2
+    assert len(by_chapter) == 2
 
 
 def test_list_shows_can_join_per_event_spot(api, world):
@@ -302,7 +313,7 @@ def test_join_tokens_are_short_lived_and_scoped(api, world):
 def test_hosts_get_host_tokens(api, world):
     meeting = create_meeting(api, world["mod"], world)
     start(api, world["mod"], meeting["id"])
-    for who in ("mod", "owner", "staff"):
+    for who in ("mod", "staff"):
         body = token(api, world[who], meeting["id"]).json()
         assert body["role"] == "host"
         claims = jwt.decode(body["token"], settings.secret_key, algorithms=["HS256"])
@@ -312,17 +323,22 @@ def test_hosts_get_host_tokens(api, world):
 def test_meeting_needs_membership(api, world):
     meeting = create_meeting(api, world["mod"], world)
     start(api, world["mod"], meeting["id"])
-    response = token(api, world["outsider"], meeting["id"])
+    # Chapter Moderators join as participants, not hosts.
+    assert token(api, world["owner"], meeting["id"]).json()["role"] == "participant"
+    # Outside the Chapter it doesn't exist; a Guest granted it can't join.
+    assert token(api, world["outsider"], meeting["id"]).status_code == 404
+    guest = guest_with(api, world, meeting)
+    response = token(api, guest, meeting["id"])
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "membership_required"
-    api.act_as(world["outsider"])
+    api.act_as(guest)
     assert api.client.get(f"{MEETINGS}/{meeting['id']}").json()["can_join"] is False
 
 
 def test_livestream_viewers_can_watch_without_joining(api, world):
     meeting = create_meeting(api, world["mod"], world, kind="livestream")
     start(api, world["mod"], meeting["id"])
-    response = token(api, world["outsider"], meeting["id"])
+    response = token(api, guest_with(api, world, meeting), meeting["id"])
     assert response.status_code == 200
     body = response.json()
     assert body["role"] == "viewer"
@@ -450,15 +466,18 @@ def test_deleting_the_event_keeps_the_meeting(api, world):
     assert api.client.delete(f"{EVENTS}/{event['id']}").status_code == 204
     body = api.client.get(f"{MEETINGS}/{meeting['id']}").json()
     assert body["event_id"] is None
-    assert body["community_id"] == world["community_id"]
+    assert body["chapter_id"] == world["chapter_id"]
 
 
-def test_deleting_the_community_deletes_its_meetings(api, world):
+def test_archived_chapter_hides_its_meetings(api, world):
     meeting = create_meeting(api, world["mod"], world)
-    api.act_as(world["owner"])
-    assert api.client.delete(f"{COMMUNITIES}/{world['community_id']}").status_code == 204
+    admin = api.add_user("admin", AccountRole.ADMIN)
+    api.act_as(admin)
+    assert api.client.post(f"{CHAPTERS}/{world['chapter_id']}/archive").status_code == 200
+    api.act_as(world["alice"])
+    assert api.client.get(f"{MEETINGS}/{meeting['id']}").status_code == 404
     with api.session_factory() as db:
-        assert db.get(Meeting, uuid.UUID(meeting["id"])) is None
+        assert db.get(Meeting, uuid.UUID(meeting["id"])) is not None
 
 
 # Webhooks
@@ -570,11 +589,7 @@ def test_ready_replay_plays_through_a_short_lived_link(api, world, replay):
 
 
 def test_replays_follow_meeting_visibility(api, world):
-    api.act_as(world["owner"])
-    private = api.client.post(
-        COMMUNITIES, json={"name": "Leaders", "visibility": "private"}
-    ).json()["id"]
-    meeting = create_meeting(api, world["owner"], community_id=private)
+    meeting = create_meeting(api, world["mod"], world)
     api.act_as(world["outsider"])
     assert api.client.get(f"{MEETINGS}/{meeting['id']}/recordings").status_code == 404
 

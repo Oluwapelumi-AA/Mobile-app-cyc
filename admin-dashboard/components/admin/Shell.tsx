@@ -5,17 +5,19 @@ import type { PageKey } from "./data";
 import { CycLogo, Icon, type IconName } from "./icons";
 import { Avatar, cx } from "./ui";
 
-export const NAV: { key: PageKey; label: string; icon: IconName; suffix?: string; search: string }[] = [
-  { key: "overview", label: "Overview", icon: "grid", search: "Search users, departments, posts, courses…" },
-  { key: "reports", label: "Reports and moderation", icon: "flag", search: "Search users, departments, posts, reports…" },
-  { key: "users", label: "Users", icon: "user", search: "Search users, departments, posts, courses…" },
-  { key: "communities", label: "Departments", icon: "community", search: "Search users, departments, posts, courses…" },
-  { key: "posts", label: "Posts and comments", icon: "message", search: "Search users, departments, posts, comments…" },
-  { key: "events", label: "Events", icon: "calendar", search: "Search users, departments, posts, events…" },
+type NavItemDef = { key: PageKey; label: string; icon: IconName; suffix?: string; search: string };
+
+export const NAV: NavItemDef[] = [
+  { key: "overview", label: "Overview", icon: "grid", search: "Search users, chapters, posts, courses…" },
+  { key: "reports", label: "Reports and moderation", icon: "flag", search: "Search users, chapters, posts, reports…" },
+  { key: "users", label: "Users", icon: "user", search: "Search users, chapters, posts, courses…" },
+  { key: "chapters", label: "Chapters", icon: "branch", search: "Search chapters, cities, countries…" },
+  { key: "posts", label: "Posts and comments", icon: "message", search: "Search users, chapters, posts, comments…" },
+  { key: "events", label: "Events", icon: "calendar", search: "Search users, chapters, posts, events…" },
   { key: "live", label: "Live and video", icon: "video", search: "Search live sessions, videos, titles, speakers…" },
   { key: "resources", label: "Spiritual resources", icon: "book", search: "Search resources, authors, categories…" },
   { key: "courses", label: "Courses and quizzes", icon: "cap", search: "Search courses, lessons, quizzes, students…" },
-  { key: "branches", label: "Chapters", icon: "branch", suffix: "(admins only)", search: "Search chapters, cities, countries…" },
+  { key: "departments", label: "Departments", icon: "community", search: "Search departments…" },
 ];
 
 export const NAV_SECONDARY: typeof NAV = [
@@ -24,7 +26,24 @@ export const NAV_SECONDARY: typeof NAV = [
   { key: "settings", label: "Settings", icon: "settings", search: "Search settings, integrations, preferences…" },
 ];
 
-export const ALL_NAV = [...NAV, ...NAV_SECONDARY];
+/** Chapter staff workspace. Coordinators see everything; Moderators moderate. */
+export const CHAPTER_NAV: (NavItemDef & { coordinatorOnly?: boolean })[] = [
+  { key: "overview", label: "Overview", icon: "grid", search: "Search posts, events, members…" },
+  { key: "members", label: "Members", icon: "users", search: "Search members by name or email…" },
+  { key: "requests", label: "Access requests", icon: "userPlus", search: "Search requests…", coordinatorOnly: true },
+  { key: "posts", label: "Posts and comments", icon: "message", search: "Search posts and comments…" },
+  { key: "events", label: "Events", icon: "calendar", search: "Search events…", coordinatorOnly: true },
+  { key: "live", label: "Live and video", icon: "video", search: "Search live sessions and videos…", coordinatorOnly: true },
+  { key: "resources", label: "Spiritual resources", icon: "book", search: "Search resources…", coordinatorOnly: true },
+  { key: "courses", label: "Courses and quizzes", icon: "cap", search: "Search courses and quizzes…", coordinatorOnly: true },
+];
+
+export const CHAPTER_NAV_SECONDARY: (NavItemDef & { coordinatorOnly?: boolean })[] = [
+  { key: "announcements", label: "Announcements", icon: "megaphone", search: "Search announcements…", coordinatorOnly: true },
+  { key: "reports", label: "Reports and moderation", icon: "flag", search: "Search reports…" },
+];
+
+export const ALL_NAV = [...NAV, ...NAV_SECONDARY, ...CHAPTER_NAV, ...CHAPTER_NAV_SECONDARY];
 
 function NavButton({
   item,
@@ -75,16 +94,30 @@ function NavButton({
   );
 }
 
+export type NavItem = (typeof NAV)[number];
+
 export function Sidebar({
   active,
   onNavigate,
   open,
   onClose,
+  primary = NAV,
+  secondary = NAV_SECONDARY,
+  subtitle = "Community Admin",
+  badges,
+  header,
 }: {
   active: PageKey;
   onNavigate: (key: PageKey) => void;
   open: boolean;
   onClose: () => void;
+  /** Menu items; defaults to the platform admin menu. */
+  primary?: NavItem[];
+  secondary?: NavItem[];
+  subtitle?: string;
+  badges?: Partial<Record<PageKey, number>>;
+  /** Shown under the logo, e.g. a chapter switcher. */
+  header?: ReactNode;
 }) {
   return (
     <>
@@ -107,7 +140,7 @@ export function Sidebar({
             <CycLogo size={42} />
             <div className="min-w-0">
               <p className="text-[19.5px] font-extrabold leading-none tracking-tight text-white">CYC</p>
-              <p className="mt-1 text-[12.5px] text-white/70">Community Admin</p>
+              <p className="mt-1 truncate text-[12.5px] text-white/70">{subtitle}</p>
             </div>
             <button
               type="button"
@@ -119,29 +152,36 @@ export function Sidebar({
             </button>
           </div>
 
+          {header ? <div className="-mt-3 mb-6 pr-4">{header}</div> : null}
+
           <nav aria-label="Main" className="space-y-1">
-            {NAV.map((item) => (
+            {primary.map((item) => (
               <NavButton
                 key={item.key}
                 item={item}
                 active={active === item.key}
+                badge={badges?.[item.key]}
                 onClick={() => onNavigate(item.key)}
               />
             ))}
           </nav>
 
-          <div className="my-5 ml-5 mr-8 h-px bg-white/15" />
-
-          <nav aria-label="Management" className="space-y-1">
-            {NAV_SECONDARY.map((item) => (
-              <NavButton
-                key={item.key}
-                item={item}
-                active={active === item.key}
-                onClick={() => onNavigate(item.key)}
-              />
-            ))}
-          </nav>
+          {secondary.length ? (
+            <>
+              <div className="my-5 ml-5 mr-8 h-px bg-white/15" />
+              <nav aria-label="Management" className="space-y-1">
+                {secondary.map((item) => (
+                  <NavButton
+                    key={item.key}
+                    item={item}
+                    active={active === item.key}
+                    badge={badges?.[item.key]}
+                    onClick={() => onNavigate(item.key)}
+                  />
+                ))}
+              </nav>
+            </>
+          ) : null}
 
           <p className="mt-auto px-5 pt-8 text-[9.5px] leading-5 text-white/55">
             Christ Youth Club
