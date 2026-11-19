@@ -57,6 +57,7 @@ from app.models.notification import (
     NotificationPreference,
     NotificationType,
 )
+from app.models.password_reset import PasswordResetCode
 from app.models.post import Comment, Post
 from app.models.reaction import Reaction
 from app.models.resource import (
@@ -112,6 +113,7 @@ __all__ = [
     "NotificationDevice",
     "NotificationPreference",
     "NotificationType",
+    "PasswordResetCode",
     "Post",
     "Reaction",
     "RecordingStatus",

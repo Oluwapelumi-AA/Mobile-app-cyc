@@ -209,3 +209,73 @@ def test_admin_membership_assignment_without_department(api, world):
     assert response.status_code == 200, response.text
     api.act_as(user)
     assert me(api)["chapter_id"] == world["lagos"]
+
+
+# Public profiles
+
+
+def test_public_profile(api, world):
+    ada = onboard(api, "ada", world["lagos"])
+    api.client.put(f"{V1}/me/department", json={"department_id": world["music"]})
+    api.client.patch(f"{V1}/profiles/me", json={"bio": "Singer"})
+    api.add_staff(ada, world["lagos"], "moderator")
+
+    viewer = onboard(api, "bayo")
+    profile = api.client.get(f"{V1}/profiles/{ada}").json()
+    assert profile["display_name"] == "Ada"
+    assert profile["bio"] == "Singer"
+    assert (profile["chapter_name"], profile["department_name"]) == ("Lagos", "Music")
+    assert [(r["chapter_name"], r["role"]) for r in profile["staff_roles"]] == [("Lagos", "moderator")]
+    assert profile["is_deleted"] is False
+    # Your own profile still comes from /profiles/me.
+    assert api.client.get(f"{V1}/profiles/me").json()["user_id"] == str(viewer)
+
+
+def test_public_profile_not_found(api, world):
+    onboard(api, "bayo")
+    assert api.client.get(f"{V1}/profiles/{world['lagos']}").status_code == 404
+
+
+# Home screen
+
+
+def test_home_screen(api, world):
+    from datetime import UTC, datetime, timedelta
+
+    ada = onboard(api, "ada", world["lagos"])
+    api.client.post(f"{V1}/chapters/{world['lagos']}/posts", json={"body": "Hello Lagos"})
+
+    coord = api.add_user("coord")
+    api.add_member(coord, world["lagos"], "Coord")
+    api.add_staff(coord, world["lagos"], "coordinator")
+    api.act_as(coord)
+    start = datetime.now(UTC) + timedelta(days=2)
+    for title in ("Prayer night", "Cancelled night"):
+        event = api.client.post(f"{V1}/events", json={
+            "title": title, "chapter_id": world["lagos"], "location": "Hall", "timezone": "UTC",
+            "starts_at": start.strftime("%Y-%m-%dT%H:%M:%S"),
+            "ends_at": (start + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S"),
+        })
+        assert event.status_code == 201, event.text
+        if title.startswith("Cancelled"):
+            api.client.post(f"{V1}/events/{event.json()['id']}/cancel")
+    meeting = api.client.post(f"{V1}/meetings", json={"kind": "livestream", "title": "Sunday live", "chapter_id": world["lagos"]}).json()
+    api.client.post(f"{V1}/meetings/{meeting['id']}/start")
+
+    api.act_as(ada)
+    home = api.client.get(f"{V1}/me/home")
+    assert home.status_code == 200, home.text
+    body = home.json()
+    assert body["membership"]["chapter_name"] == "Lagos"
+    assert [p["body"] for p in body["recent_posts"]] == ["Hello Lagos"]
+    assert [e["title"] for e in body["upcoming_events"]] == ["Prayer night"]
+    assert [m["title"] for m in body["live_now"]] == ["Sunday live"]
+    assert body["continue_learning"] == [] and body["new_resources"] == []
+    assert body["unread_notifications"] >= 1
+
+
+def test_home_for_a_guest(api, world):
+    onboard(api, "gift")
+    body = api.client.get(f"{V1}/me/home").json()
+    assert body["membership"]["membership_status"] == "guest"
+    assert body["recent_posts"] == []

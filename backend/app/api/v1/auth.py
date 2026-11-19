@@ -12,8 +12,11 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.api.v1.auth_schemas import (
     ChangePasswordRequest,
+    DeleteAccountRequest,
     LoginRequest,
     LogoutRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
@@ -31,6 +34,7 @@ from app.core.security import (
 from app.db.session import get_db
 from app.models.refresh_session import RefreshSession
 from app.models.user import User
+from app.services import account, password_reset
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -297,3 +301,39 @@ def change_password(
     ):
         session.revoked_at = now
     db.commit()
+
+
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+def request_password_reset(
+    request: PasswordResetRequest,
+    db: Session = Depends(get_db),
+):
+    """Email a 6-digit code to reset a forgotten password.
+
+    Always answers the same way, whether or not the email has an account.
+    """
+    password_reset.request_code(db, str(request.email))
+    return {"message": "If that email has an account, we've sent a code to it."}
+
+
+@router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
+def confirm_password_reset(
+    request: PasswordResetConfirm,
+    db: Session = Depends(get_db),
+):
+    """Set a new password with the emailed code. Signs out everywhere."""
+    password_reset.reset_password(db, str(request.email), request.code, request.new_password)
+
+
+@router.post("/delete-account", status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_account(
+    request: DeleteAccountRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Permanently delete your account. Confirm with your password.
+
+    Your name, email, photo and details are wiped and you're signed out
+    everywhere. Posts and comments stay, shown as "Deleted user".
+    """
+    account.delete_account(db, current_user.id, request.password)
