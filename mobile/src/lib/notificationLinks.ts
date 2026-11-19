@@ -19,7 +19,7 @@ export function hrefFor(data: Data): string | null {
 export const categoryLook: Record<NotificationCategory, { label: string; icon: IconName; tint: Tint }> = {
   meetings: { label: "LIVE", icon: "radio", tint: "red" },
   events: { label: "EVENT", icon: "calendar", tint: "yellow" },
-  chapter: { label: "CHAPTER", icon: "mc:bullhorn-outline", tint: "pink" },
+  chapter: { label: "CHAPTER", icon: "megaphone", tint: "pink" },
   resources: { label: "LEARN", icon: "book", tint: "green" },
-  social: { label: "COMMUNITY", icon: "message-circle", tint: "yellow" },
+  social: { label: "COMMUNITY", icon: "message", tint: "yellow" },
 };

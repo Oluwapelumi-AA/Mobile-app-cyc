@@ -65,7 +65,7 @@ export default function PostScreen() {
       <Screen edges={["top", "bottom"]}>
         <Header
           title="Post"
-          right={q.data ? <IconButton icon={mine ? "trash-2" : "flag"} label={mine ? "Delete post" : "Report post"} onPress={mine ? remove : report} /> : null}
+          right={q.data ? <IconButton icon={mine ? "trash" : "flag"} label={mine ? "Delete post" : "Report post"} onPress={mine ? remove : report} /> : null}
         />
         {!q.data ? q.error ? <ErrorView message={q.error} onRetry={q.reload} /> : <Loading /> : (
           <>

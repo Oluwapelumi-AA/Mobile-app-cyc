@@ -19,6 +19,7 @@ export type Profile = {
   language_code: string | null;
   country_code: string | null;
   city: string | null;
+  phone: string | null;
   timezone: string | null;
   preferred_chapter_id: string | null;
   chapter_id: string | null;
@@ -71,6 +72,14 @@ export type Chapter = {
   timezone: string;
   language_code: string | null;
   contact_email: string | null;
+  contact_phone: string | null;
+  state: string | null;
+  venue: string | null;
+  address: string | null;
+  meeting_schedule: string | null;
+  meeting_time: string | null;
+  latitude: number | null;
+  longitude: number | null;
   is_active: boolean;
   member_count: number;
   is_mine: boolean;
@@ -196,6 +205,10 @@ export type Lesson = {
   body: string | null;
   video_url: string | null;
   duration_minutes: number | null;
+  module_title: string | null;
+  scripture_reference: string | null;
+  scripture_text: string | null;
+  notes_url: string | null;
   completed: boolean;
 };
 
@@ -223,7 +236,27 @@ export type QuizAttempt = {
   created_at: string;
 };
 
-export type Certificate = { course_id: string; course_title: string; best_score: number | null; completed_at: string };
+export type Certificate = {
+  course_id: string;
+  course_title: string;
+  user_name: string | null;
+  best_score: number | null;
+  completed_at: string;
+  certificate_number: string | null;
+};
+
+export type CertificateCheck = {
+  valid: boolean;
+  certificate_number: string;
+  recipient_name: string | null;
+  course_title: string | null;
+  completed_at: string | null;
+  issued_by: string;
+};
+
+export type AnswerResult = { correct: boolean; correct_index: number; explanation: string | null };
+
+export type Leader = { user_id: string; display_name: string; role: string };
 
 export type Post = {
   id: string;

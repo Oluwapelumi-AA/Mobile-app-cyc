@@ -11,6 +11,8 @@ export class ApiError extends Error {
     message: string,
     public status: number,
     public code: string,
+    /** Anything else the server sent in `detail` (e.g. a suspension reason). */
+    public extra: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -50,11 +52,11 @@ export async function clearTokens() {
 
 export const currentRefreshToken = () => refresh;
 
-function messageFrom(status: number, data: unknown): { message: string; code: string } {
+function messageFrom(status: number, data: unknown): { message: string; code: string; extra?: Record<string, unknown> } {
   const detail = (data as { detail?: unknown } | null)?.detail;
   if (detail && typeof detail === "object" && !Array.isArray(detail)) {
     const d = detail as { message?: string; code?: string };
-    return { message: d.message ?? "Something went wrong.", code: d.code ?? "error" };
+    return { message: d.message ?? "Something went wrong.", code: d.code ?? "error", extra: detail as Record<string, unknown> };
   }
   if (Array.isArray(detail)) {
     const first = detail[0] as { msg?: string; loc?: string[] } | undefined;
@@ -114,16 +116,17 @@ export async function api<T = unknown>(path: string, options: Options = {}): Pro
     return fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   };
 
+  const hadToken = Boolean(access);
   let res: Response;
   try {
     res = await send();
-    if (res.status === 401 && auth && (await doRefresh())) res = await send();
+    if (res.status === 401 && auth && hadToken && (await doRefresh())) res = await send();
   } catch {
     const m = messageFrom(0, null);
     throw new ApiError(m.message, 0, m.code);
   }
 
-  if (res.status === 401 && auth) {
+  if (res.status === 401 && auth && hadToken) {
     await clearTokens();
     onSignedOut?.();
   }
@@ -131,10 +134,13 @@ export async function api<T = unknown>(path: string, options: Options = {}): Pro
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const m = messageFrom(res.status, data);
-    throw new ApiError(m.message, res.status, m.code);
+    throw new ApiError(m.message, res.status, m.code, m.extra);
   }
   return data as T;
 }
+
+/** True when the call failed because nobody is signed in (guest browsing). */
+export const isAccountNeeded = (err: unknown) => err instanceof ApiError && err.status === 401 && !access;
 
 export const errorText = (err: unknown) =>
   err instanceof Error ? err.message : "Something went wrong. Please try again.";

@@ -1,49 +1,70 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Text, View } from "react-native";
 
-import { Button, ErrorView, Field, Header, Screen, T, TextButton } from "@/components/ui";
+import { StepHeader } from "@/components/StepIndicator";
+import { Alert, Button, Field, Screen, T } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { local } from "@/lib/storage";
+import { ABOUT } from "@/lib/content";
+import { type, useTheme } from "@/lib/theme";
 
+/** Onboarding step 1 of 5: Create account. */
 export default function SignUp() {
-  const { guest } = useLocalSearchParams<{ guest?: string }>();
+  const t = useTheme();
   const { signUp } = useAuth();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [touched, setTouched] = useState(false);
+
+  const nameError = touched && !name.trim() ? "Tell us your name." : undefined;
+  const emailError = touched && !/^\S+@\S+\.\S+$/.test(email.trim()) ? "Enter a valid email address." : undefined;
+  const passwordError = touched && password.length < 12 ? "Use at least 12 characters." : undefined;
 
   const submit = async () => {
-    if (!email.includes("@")) return setError("Enter a valid email address.");
-    if (password.length < 12) return setError("Your password needs at least 12 characters.");
-    if (password !== confirm) return setError("The passwords don't match.");
+    setTouched(true);
+    if (!name.trim() || !/^\S+@\S+\.\S+$/.test(email.trim()) || password.length < 12) return;
     setBusy(true);
     setError("");
     try {
-      // Guests explore CYC without choosing a chapter; they can join one later.
-      await local.setJSON("cyc.guest", guest === "1");
-      await signUp(email, password);
+      await signUp(name, email, password);
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
     }
   };
 
+  const link = (label: string, url: string | null) => (
+    <Text style={[type.bodySmall, { color: t.primary, textDecorationLine: "underline" }]} onPress={url ? () => WebBrowser.openBrowserAsync(url) : undefined}>
+      {label}
+    </Text>
+  );
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <Screen edges={["top", "bottom"]}>
-        <Header />
-        <T variant="h1" style={{ marginTop: 18 }}>
-          {guest === "1" ? "Look around CYC" : "Create your account"}
+      <Screen
+        edges={["top", "bottom"]}
+        footer={
+          <View style={{ paddingHorizontal: 20, paddingBottom: 12, gap: 10 }}>
+            <Button label="Create account" onPress={submit} loading={busy} />
+            <Text style={[type.bodySmall, { color: t.textMuted, textAlign: "center" }]}>
+              By continuing you agree to CYC&apos;s {link("Terms of use", ABOUT.termsUrl)} and {link("Privacy policy", ABOUT.privacyPolicyUrl)}.
+            </Text>
+          </View>
+        }
+      >
+        <StepHeader step={1} onBack={() => (router.canGoBack() ? router.back() : router.replace("/"))} />
+        <T variant="headlineMedium" style={{ marginTop: 16 }} accessibilityRole="header">
+          Create your account
         </T>
-        <T variant="body" muted style={{ marginTop: 4, marginBottom: 22 }}>
-          {guest === "1"
-            ? "A free account lets you browse sermons, courses and events. You can join a chapter any time."
-            : "Join your chapter, take courses and never miss an event."}
+        <T variant="bodyLarge" muted style={{ marginTop: 4, marginBottom: 20 }}>
+          It&apos;s free and takes a minute.
         </T>
+        <Field label="Full name" icon="user" value={name} onChangeText={setName} placeholder="Ada Okafor" autoComplete="name" autoCapitalize="words" error={nameError} />
         <Field
           label="Email address"
           icon="mail"
@@ -53,15 +74,22 @@ export default function SignUp() {
           autoComplete="email"
           keyboardType="email-address"
           placeholder="ada@mail.com"
+          error={emailError}
         />
-        <Field label="Password" icon="lock" secure value={password} onChangeText={setPassword} autoComplete="new-password" placeholder="At least 12 characters" />
-        <Field label="Confirm password" icon="lock" secure value={confirm} onChangeText={setConfirm} autoComplete="new-password" onSubmitEditing={submit} />
-        {error ? <ErrorView message={error} /> : null}
-        <View style={{ gap: 18, marginTop: 18 }}>
-          <Button label="Create account" onPress={submit} loading={busy} />
-          <View style={{ alignItems: "center" }}>
-            <TextButton label="Already have an account? Sign in" onPress={() => router.replace("/sign-in")} />
-          </View>
+        <Field
+          label="Password"
+          icon="lock"
+          secure
+          value={password}
+          onChangeText={setPassword}
+          autoComplete="new-password"
+          error={passwordError}
+          hint="At least 12 characters. A short phrase works well."
+          onSubmitEditing={submit}
+        />
+        {error ? <Alert tone="error" text={error} /> : null}
+        <View style={{ alignItems: "center", marginTop: 8 }}>
+          <Button label="I already have an account" variant="text" full={false} onPress={() => router.replace("/sign-in")} />
         </View>
       </Screen>
     </KeyboardAvoidingView>

@@ -6,12 +6,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user_id
+from app.api.deps import get_current_user_id, get_viewer_id
 from app.core.identity import UserId
 from app.db.session import get_db
 from app.models.course import CourseStatus
 from app.schemas.common import Page
 from app.schemas.course import (
+    AnswerCheck,
+    AnswerResult,
+    CertificateVerification,
     AttemptCreate,
     AttemptRead,
     CertificateRead,
@@ -32,8 +35,10 @@ from app.services.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 router = APIRouter(prefix="/courses", tags=["Courses"])
 lessons_router = APIRouter(prefix="/course-lessons", tags=["Courses"])
 quizzes_router = APIRouter(prefix="/course-quizzes", tags=["Courses"])
+certificates_router = APIRouter(prefix="/certificates", tags=["Courses"])
 
 CurrentUserId = Annotated[UserId, Depends(get_current_user_id)]
+ViewerId = Annotated[UserId, Depends(get_viewer_id)]
 DbSession = Annotated[Session, Depends(get_db)]
 Limit = Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)]
 Cursor = Annotated[str | None, Query(max_length=200)]
@@ -50,7 +55,7 @@ def create_course(data: CourseCreate, user_id: CurrentUserId, db: DbSession):
 
 @router.get("", response_model=Page[CourseSummary])
 def list_courses(
-    user_id: CurrentUserId,
+    user_id: ViewerId,
     db: DbSession,
     limit: Limit = DEFAULT_PAGE_SIZE,
     cursor: Cursor = None,
@@ -107,7 +112,7 @@ def list_certificates(
 
 
 @router.get("/{course_id}", response_model=CourseRead)
-def get_course(course_id: UUID, user_id: CurrentUserId, db: DbSession):
+def get_course(course_id: UUID, user_id: ViewerId, db: DbSession):
     return courses.get_course(db, user_id, course_id)
 
 
@@ -206,3 +211,21 @@ def submit_attempt(quiz_id: UUID, data: AttemptCreate, user_id: CurrentUserId, d
 @quizzes_router.get("/{quiz_id}/attempts/me", response_model=list[AttemptRead])
 def my_attempts(quiz_id: UUID, user_id: CurrentUserId, db: DbSession):
     return courses.my_attempts(db, user_id, quiz_id)
+
+
+@quizzes_router.post("/{quiz_id}/check", response_model=AnswerResult)
+def check_answer(quiz_id: UUID, data: AnswerCheck, user_id: CurrentUserId, db: DbSession):
+    """Is this one answer right? For instant feedback while taking a quiz."""
+    return courses.check_answer(db, user_id, quiz_id, data)
+
+
+@certificates_router.get("/mine", response_model=list[CertificateRead])
+def my_certificates(user_id: CurrentUserId, db: DbSession):
+    """Certificates for the courses you've finished."""
+    return courses.my_certificates(db, user_id)
+
+
+@certificates_router.get("/verify/{number}", response_model=CertificateVerification)
+def verify_certificate(number: str, db: DbSession):
+    """Public: anyone can check a certificate number. No sign-in needed."""
+    return courses.verify_certificate(db, number[:32])

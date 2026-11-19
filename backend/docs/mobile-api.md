@@ -9,6 +9,13 @@ The phone app is in `../mobile` (see its README). Phones don't need CORS;
 the Expo web preview (`http://localhost:8081`) does, so keep it in
 `CORS_ORIGINS` if you use it.
 
+**Guests (no sign-in).** These read calls also work with no token, so the
+app can let people browse before creating an account: `GET /chapters`,
+`/chapters/{id}`, `/chapters/{id}/leaders`, `/events`, `/events/{id}`,
+`/resources`, `/resources/{id}`, `/resource-categories`, `/courses`,
+`/courses/{id}`, `/departments`, and `GET /certificates/verify/{number}`.
+A wrong or expired token still returns 401. Everything else needs sign-in.
+
 Errors come back as `{"detail": {"code": "...", "message": "..."}}`. Show
 `message` to the user and branch on `code`.
 
@@ -17,7 +24,7 @@ Errors come back as `{"detail": {"code": "...", "message": "..."}}`. Show
 | Screen | Call |
 |---|---|
 | Sign up | `POST /auth/register` `{email, password}` (password: 12+ characters) |
-| Sign in | `POST /auth/login` → `access_token`, `refresh_token` |
+| Sign in | `POST /auth/login` → `access_token`, `refresh_token`. A suspended account gets 403 with `detail.code = "account_suspended"` and `detail.reason`. |
 | Stay signed in | `POST /auth/refresh` `{refresh_token}` when a call returns 401 |
 | Sign out | `POST /auth/logout` `{refresh_token}` |
 | Forgot password | `POST /auth/password-reset/request` `{email}`, then `POST /auth/password-reset/confirm` `{email, code, new_password}`. The code is 6 digits, emailed, valid 15 minutes, 5 tries. |
@@ -74,6 +81,10 @@ Lists are paged: pass back `next_cursor` as `cursor` until it is `null`.
 | Live | `GET /meetings?status=live`, join `POST /meetings/{id}/token`, replays `GET /meetings/{id}/recordings` |
 | Resources | `GET /resources`, `GET /resource-categories`, bookmarks `PUT/DELETE /resources/{id}/bookmark`, progress `PUT /resources/{id}/progress` |
 | Courses | `GET /courses`, `GET /courses/{id}`, enrol `PUT /courses/{id}/enrollment`, finish a lesson `PUT /course-lessons/{id}/completion`, take a quiz `POST /course-quizzes/{id}/attempts` `{answers}` |
+| Quiz answers | Check one answer before submitting: `POST /course-quizzes/{id}/check` `{question_index, answer}` → `{correct, correct_index, explanation}` |
+| Certificates | Mine: `GET /certificates/mine` (each has a `certificate_number`). Public check: `GET /certificates/verify/{number}` → `{valid, recipient_name, course_title, completed_at, issued_by}` |
+| Chapter details | `GET /chapters/{id}` now includes `state`, `venue`, `address`, `meeting_schedule`, `meeting_time`, `contact_phone`, `latitude`, `longitude`. Leaders: `GET /chapters/{id}/leaders` |
+| Lessons | Lessons carry `module_title`, `scripture_reference`, `scripture_text`, `notes_url`; quiz questions carry `explanation` (shown to course managers; learners get it from `/check`) |
 | Search | `GET /search?q=…` |
 
 ## Notifications

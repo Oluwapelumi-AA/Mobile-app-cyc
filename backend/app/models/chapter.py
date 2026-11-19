@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, Float, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -37,6 +37,16 @@ class Chapter(Base):
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     language_code: Mapped[str | None] = mapped_column(String(35), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Where and when the Chapter meets, shown on its page in the app.
+    state: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    venue: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    meeting_schedule: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    meeting_time: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # For "chapters near you"; optional.
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

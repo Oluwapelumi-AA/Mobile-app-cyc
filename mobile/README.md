@@ -33,9 +33,10 @@ npx expo lint      # lint
 | Path | What |
 |---|---|
 | `src/app/(auth)` | Welcome, sign in, create account, forgot password |
-| `src/app/onboarding` | Name and language, chapter, department |
+| `src/app/onboarding` | Location, chapter, department, interests |
+| `src/app/verify.tsx` | Public certificate check (no sign-in) |
 | `src/app/(app)/(tabs)` | Home, Learn (sermons, courses), Community, Events, Profile |
-| `src/app/(app)` | Detail screens: chapter, event, meeting, sermon player, course, lesson, quiz, search, notifications, settings |
+| `src/app/(app)` | Detail screens: chapter, find chapter, departments, interest groups, event, meeting, sermon player, course, lesson, quiz, course complete, certificate, my activity, account, settings, downloads, About CYC |
 | `src/components` | Shared UI (`ui.tsx`), cards, mini player |
 | `src/lib` | API client and sign-in (`api.ts`, `auth.tsx`), theme, audio player, downloads, push |
 
@@ -49,5 +50,18 @@ npx expo lint      # lint
   Until one is set, Join meeting checks you in and explains that video isn't on yet.
 - **Sermons** play from the uploaded file or the external link. Downloads are
   stored on the phone (Profile → Downloads).
-- **Continue as guest** creates an account without a chapter; guests can join
-  one later from Home or Community.
+- **Design:** follows the Figma "CYC Mobile App" file (Material 3 colours,
+  Bricolage Grotesque + Plus Jakarta Sans, Phosphor icons). Theme tokens are in
+  `src/lib/theme.ts`, shared parts in `src/components/ui.tsx`.
+- **Continue as guest** lets people browse chapters, events, sermons and
+  courses without an account. Anything that needs an account (registering,
+  joining, saving, posting) asks them to create one.
+- **Interest groups** (Music, Drama, Technology…) are a preview stored on the
+  phone only (`src/lib/groups.ts`). They need a backend before launch.
+- **About CYC and the anthem** use placeholder text in `src/lib/content.ts`.
+  Replace the [bracketed] text with CYC's real content.
+- **Privacy → who can see my profile** is shown as "coming soon"; it needs
+  backend support.
+- **Language** is English only for now.
+- **Certificates** have a number and QR code; anyone can check one at
+  `/verify` or `GET /api/v1/certificates/verify/{number}`.

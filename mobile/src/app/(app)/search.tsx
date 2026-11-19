@@ -24,11 +24,12 @@ import {
 import { api, apiAll, errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { dayDateTime, duration, plural, shortDate } from "@/lib/format";
+import { INTEREST_GROUPS } from "@/lib/groups";
 import { local } from "@/lib/storage";
 import { Tint, useTheme } from "@/lib/theme";
 import type { Course, Department, Page, Resource, SearchOverview } from "@/lib/types";
 
-type Filter = "all" | "sermons" | "courses" | "chapters" | "departments" | "events" | "news" | "resources" | "people";
+type Filter = "all" | "sermons" | "courses" | "chapters" | "departments" | "groups" | "events" | "news" | "resources" | "people";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
@@ -36,6 +37,7 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "courses", label: "Courses" },
   { key: "chapters", label: "Chapters" },
   { key: "departments", label: "Departments" },
+  { key: "groups", label: "Groups" },
   { key: "events", label: "Events" },
   { key: "news", label: "News" },
   { key: "resources", label: "Resources" },
@@ -45,11 +47,12 @@ const FILTERS: { key: Filter; label: string }[] = [
 const BROWSE: { key: Filter; label: string; icon: IconName; tint: Tint }[] = [
   { key: "sermons", label: "Sermons", icon: "headphones", tint: "pink" },
   { key: "courses", label: "Courses", icon: "book", tint: "green" },
-  { key: "chapters", label: "Chapters", icon: "mc:church", tint: "yellow" },
+  { key: "chapters", label: "Chapters", icon: "church", tint: "yellow" },
   { key: "departments", label: "Departments", icon: "users", tint: "pink" },
+  { key: "groups", label: "Interest groups", icon: "heart", tint: "yellow" },
   { key: "people", label: "People", icon: "user", tint: "green" },
   { key: "events", label: "Events", icon: "calendar", tint: "yellow" },
-  { key: "news", label: "News", icon: "mc:bullhorn-outline", tint: "pink" },
+  { key: "news", label: "News", icon: "megaphone", tint: "pink" },
   { key: "resources", label: "Resources", icon: "file-text", tint: "green" },
 ];
 
@@ -158,12 +161,20 @@ export default function Search() {
               sub: `Department · ${plural(d.member_count, "member")}`,
               icon: "users",
               tint: "yellow",
-              href: "/groups",
+              href: `/department/${d.id}`,
               badge: d.id === membership?.department_id ? "Member" : undefined,
             })),
-          chapters: overview.chapters.map((h) => ({ id: h.id, title: h.title, sub: h.snippet ?? "Chapter", icon: "mc:church", tint: "yellow", href: `/chapter/${h.id}`, badge: h.id === membership?.chapter_id ? "Member" : undefined })),
+          groups: INTEREST_GROUPS.filter((g) => `${g.name} ${g.description}`.toLowerCase().includes(low)).map((g) => ({
+            id: g.id,
+            title: g.name,
+            sub: `Interest group · ${g.description}`,
+            icon: g.icon,
+            tint: g.tint,
+            href: `/group/${g.id}`,
+          })),
+          chapters: overview.chapters.map((h) => ({ id: h.id, title: h.title, sub: h.snippet ?? "Chapter", icon: "church", tint: "yellow", href: `/chapter/${h.id}`, badge: h.id === membership?.chapter_id ? "Member" : undefined })),
           events: overview.events.map((h) => ({ id: h.id, title: h.title, sub: h.starts_at ? dayDateTime(h.starts_at) : h.snippet ?? "Event", icon: "calendar", tint: "green", href: `/event/${h.id}` })),
-          news: overview.posts.map((h) => ({ id: h.id, title: h.title, sub: h.snippet ?? shortDate(h.created_at), icon: "mc:bullhorn-outline", tint: "pink", href: `/post/${h.id}` })),
+          news: overview.posts.map((h) => ({ id: h.id, title: h.title, sub: h.snippet ?? shortDate(h.created_at), icon: "megaphone", tint: "pink", href: `/post/${h.id}` })),
           people: overview.people.map((h) => ({ id: h.id, title: h.title, sub: h.snippet ?? "Member", icon: "user", tint: "pink", href: `/person/${h.id}` })),
         });
         setError("");
@@ -181,7 +192,7 @@ export default function Search() {
 
   const sections = useMemo(() => {
     if (!results) return [];
-    const order: Exclude<Filter, "all">[] = ["departments", "chapters", "events", "sermons", "courses", "news", "resources", "people"];
+    const order: Exclude<Filter, "all">[] = ["departments", "groups", "chapters", "events", "sermons", "courses", "news", "resources", "people"];
     return order
       .filter((k) => filter === "all" || filter === k)
       .map((k) => ({ key: k, label: FILTERS.find((f) => f.key === k)!.label, hits: results[k] }))
@@ -251,9 +262,9 @@ export default function Search() {
                 onPress={() =>
                   b.key === "sermons" ? router.push("/learn/sermons")
                   : b.key === "courses" ? router.push("/learn/courses")
-                  : b.key === "departments" ? router.push("/groups")
+                  : b.key === "departments" ? router.push("/departments")
                   : b.key === "events" ? router.push("/events")
-                  : b.key === "chapters" ? router.push(membership?.chapter_id ? `/chapter/${membership.chapter_id}` : "/choose-chapter")
+                  : b.key === "chapters" ? router.push(membership?.chapter_id ? `/chapter/${membership.chapter_id}` : "/find-chapter")
                   : b.key === "news" ? router.push("/community")
                   : b.key === "resources" ? router.push("/learn")
                   : setFilter(b.key)
@@ -316,7 +327,7 @@ export default function Search() {
               <Chip key={s} label={s} onPress={() => setText(s)} />
             ))}
           </Row>
-          <Card onPress={() => router.push("/choose-chapter")} style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14 }}>
+          <Card onPress={() => router.push("/find-chapter")} style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14 }}>
             <IconTile icon="map-pin" tint="green" size={40} rounded={20} />
             <View style={{ flex: 1 }}>
               <T variant="title">Looking for a chapter?</T>

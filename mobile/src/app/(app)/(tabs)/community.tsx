@@ -1,109 +1,148 @@
 import { router } from "expo-router";
-import { useState } from "react";
-import { TextInput, View } from "react-native";
+import { View } from "react-native";
 
-import { notify } from "@/components/cards";
-import { PostCard } from "@/components/PostCard";
-import { Button, Card, EmptyState, ErrorView, Header, IconTile, Loading, Row, Screen, T } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { useAccountGate } from "@/components/AccountGate";
+import { Tile } from "@/components/cards";
+import { AnnouncementCard } from "@/components/PostCard";
+import { Badge, Blob, Button, ErrorView, Header, HeroTag, Icon, IconButton, IconTile, ListGroup, Row, Screen, SectionHeader, Skeleton, T } from "@/components/ui";
+import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useNames } from "@/lib/people";
-import { fonts, useTheme } from "@/lib/theme";
-import type { Page, Post } from "@/lib/types";
+import { useInterestGroups } from "@/lib/groups";
+import { brand, radius, useTheme } from "@/lib/theme";
+import type { Chapter, Page, Post } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
 
-/** Your chapter's feed. */
+/** Community (Figma: Community – Light). */
 export default function Community() {
   const t = useTheme();
-  const { membership } = useAuth();
+  const { membership, isGuest } = useAuth();
+  const gate = useAccountGate();
+  const groups = useInterestGroups();
   const chapterId = membership?.chapter_id;
-  const q = useApi(async () => (chapterId ? api<Page<Post>>(`/chapters/${chapterId}/posts`, { query: { limit: 30 } }) : null), [chapterId]);
-  const names = useNames((q.data?.items ?? []).map((p) => p.author_id));
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [more, setMore] = useState(false);
+  const q = useApi(async () => {
+    if (!chapterId) return null;
+    const [chapter, posts] = await Promise.all([
+      api<Chapter>(`/chapters/${chapterId}`),
+      api<Page<Post>>(`/chapters/${chapterId}/posts`, { query: { limit: 5 } }).catch(() => ({ items: [] as Post[], next_cursor: null })),
+    ]);
+    return { chapter, posts: posts.items };
+  }, [chapterId]);
 
-  const post = async () => {
-    if (!draft.trim() || !chapterId) return;
-    setBusy(true);
-    try {
-      const created = await api<Post>(`/chapters/${chapterId}/posts`, { method: "POST", body: { body: draft.trim() } });
-      q.setData((d) => ({ items: [created, ...(d?.items ?? [])], next_cursor: d?.next_cursor ?? null }));
-      setDraft("");
-    } catch (err) {
-      notify("Couldn't post", errorText(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const loadMore = async () => {
-    if (!q.data?.next_cursor || !chapterId) return;
-    setMore(true);
-    try {
-      const page = await api<Page<Post>>(`/chapters/${chapterId}/posts`, { query: { limit: 30, cursor: q.data.next_cursor } });
-      q.setData((d) => ({ items: [...(d?.items ?? []), ...page.items], next_cursor: page.next_cursor }));
-    } finally {
-      setMore(false);
-    }
-  };
+  const c = q.data?.chapter;
+  const meets = c ? [c.meeting_schedule, c.meeting_time].filter(Boolean).join(" · ") : "";
 
   return (
     <Screen onRefresh={q.refresh} refreshing={q.refreshing}>
-      <Header back={false} title="Community" subtitle={membership?.chapter_name ? `What's happening in ${membership.chapter_name}.` : "Your chapter and departments."} />
+      <Header back={false} title="Community" subtitle="Your chapter, departments and groups." right={<IconButton icon="search" label="Search" tonal onPress={() => router.push("/search")} />} />
 
-      <Row gap={10} style={{ marginBottom: 16 }}>
-        <Card style={{ flex: 1, gap: 8 }} onPress={() => (chapterId ? router.push(`/chapter/${chapterId}`) : router.push("/choose-chapter"))}>
-          <IconTile icon="mc:church" tint="green" size={36} />
-          <T variant="title" numberOfLines={1}>
-            {membership?.chapter_name ?? "Find a chapter"}
-          </T>
-          <T variant="caption" muted>
-            {chapterId ? "Chapter page" : "Join the one you attend"}
-          </T>
-        </Card>
-        <Card style={{ flex: 1, gap: 8 }} onPress={() => router.push("/groups")}>
-          <IconTile icon="users" tint="yellow" size={36} />
-          <T variant="title" numberOfLines={1}>
-            {membership?.department_name ?? "Departments"}
-          </T>
-          <T variant="caption" muted>
-            {membership?.department_name ? "Your department" : "Join one"}
-          </T>
-        </Card>
-      </Row>
+      {q.loading && chapterId ? <Skeleton h={260} r={28} /> : null}
+      {q.error && !q.data ? <ErrorView message={q.error} onRetry={q.reload} title="We couldn't load your chapter" /> : null}
 
-      {!chapterId ? (
-        <EmptyState icon="users" tint="green" title="Join a chapter to see its feed" text="Updates, prayer requests and news from your chapter show up here." action="Find a chapter" onAction={() => router.push("/choose-chapter")} />
-      ) : (
+      {c ? (
+        <View style={{ backgroundColor: brand.forest, borderRadius: radius.xxl, padding: 20, overflow: "hidden", gap: 10 }}>
+          <Blob size={190} color={t.scheme === "dark" ? "#5D4200" : "#FFDEA4"} right={-60} top={-90} />
+          <Blob size={26} color="#FFDAD4" right={130} top={96} />
+          <HeroTag label="MY CHAPTER" />
+          <T variant="displaySmall" color="#FFFFFF" style={{ maxWidth: "70%" }}>
+            {c.name}
+          </T>
+          {c.venue || c.city ? (
+            <Row gap={8}>
+              <Icon name="map-pin" size={16} color="#FFFFFF" />
+              <T variant="bodyMedium" color="#FFFFFF">
+                {[c.venue, c.city].filter(Boolean).join(", ")}
+              </T>
+            </Row>
+          ) : null}
+          {meets ? (
+            <Row gap={8}>
+              <Icon name="clock" size={16} color="#FFFFFF" />
+              <T variant="bodyMedium" color="#FFFFFF">
+                {meets}
+              </T>
+            </Row>
+          ) : null}
+          <Row style={{ justifyContent: "space-between", marginTop: 8 }}>
+            <T variant="labelLarge" color="#FFFFFF">
+              {c.member_count} {c.member_count === 1 ? "member" : "members"}
+            </T>
+            <Button label="View chapter" variant="light" full={false} onPress={() => router.push(`/chapter/${c.id}`)} />
+          </Row>
+        </View>
+      ) : !chapterId ? (
+        <View style={{ backgroundColor: brand.forest, borderRadius: radius.xxl, padding: 20, overflow: "hidden", gap: 10 }}>
+          <Blob size={170} color={t.scheme === "dark" ? "#5D4200" : "#FFDEA4"} right={-60} top={-70} />
+          <HeroTag label={isGuest ? "CYC CHAPTERS" : "FIRST STEP"} />
+          <T variant="headlineSmall" color="#FFFFFF" style={{ paddingRight: 60 }}>
+            Find your chapter
+          </T>
+          <T variant="bodyMedium" color="#FFFFFF">
+            Chapters are where CYC meets in your city. Find one near you.
+          </T>
+          <Button label="Find a chapter" icon="map-pin" variant="light" full={false} onPress={() => router.push("/find-chapter")} />
+        </View>
+      ) : null}
+
+      <SectionHeader title="Explore" />
+      <View style={{ gap: 12 }}>
+        <Row gap={12} style={{ alignItems: "stretch" }}>
+          <Tile tint="pink" icon="map" title="Find a chapter" text="Search by country, state or city." onPress={() => router.push("/find-chapter")} />
+          <Tile tint="yellow" icon="users" title="Departments" text="Serve with a team in your chapter." onPress={() => router.push("/departments")} />
+        </Row>
+        <Row gap={12} style={{ alignItems: "stretch" }}>
+          <Tile tint="green" icon="users" title="Interest groups" text="Meet people who share your interests." onPress={() => router.push("/interest-groups")} />
+          <Tile
+            tint="pink"
+            icon="megaphone"
+            title="Announcements"
+            text="News from CYC and your chapter."
+            onPress={() => (gate({ title: "Create an account to see announcements", text: "Join a chapter to get news from its leaders." }) ? (chapterId ? router.push("/announcements") : router.push("/find-chapter")) : undefined)}
+          />
+        </Row>
+      </View>
+
+      {!isGuest && (membership?.department_name || groups.mine.length) ? (
         <>
-          <Card style={{ gap: 10, marginBottom: 14 }}>
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder={`Share something with ${membership?.chapter_name ?? "your chapter"}…`}
-              placeholderTextColor={t.textMuted}
-              multiline
-              maxLength={5000}
-              style={{ fontFamily: fonts.regular, fontSize: 15, color: t.text, minHeight: 44, textAlignVertical: "top" }}
-            />
-            {draft.trim() ? (
-              <Row style={{ justifyContent: "flex-end" }}>
-                <Button label="Post" small full={false} onPress={post} loading={busy} />
+          <SectionHeader title="Your groups & departments" action="See all" onAction={() => router.push("/interest-groups")} />
+          <ListGroup>
+            {groups.mine.map((g) => (
+              <Row key={g.id} gap={12} style={{ padding: 16 }}>
+                <IconTile icon={g.icon} tint={g.tint} size={44} />
+                <View style={{ flex: 1 }}>
+                  <T variant="titleMedium">{g.name}</T>
+                  <T variant="bodySmall" muted>
+                    Interest group
+                  </T>
+                </View>
+                {groups.statuses[g.id] === "member" ? <Badge label="Member" icon="check" /> : <Badge label="Awaiting approval" icon="pending" tint="yellow" />}
+              </Row>
+            ))}
+            {membership?.department_name ? (
+              <Row gap={12} style={{ padding: 16 }}>
+                <IconTile icon="users" tint="pink" size={44} />
+                <View style={{ flex: 1 }}>
+                  <T variant="titleMedium">{membership.department_name}</T>
+                  <T variant="bodySmall" muted>
+                    Department
+                  </T>
+                </View>
+                <Badge label="Member" icon="check" />
               </Row>
             ) : null}
-          </Card>
-          {q.loading ? <Loading /> : null}
-          {q.error && !q.data ? <ErrorView message={q.error} onRetry={q.reload} /> : null}
-          <View style={{ gap: 12 }}>
-            {(q.data?.items ?? []).map((p) => (
-              <PostCard key={p.id} post={p} author={names[p.author_id]} onPress={() => router.push(`/post/${p.id}`)} />
+          </ListGroup>
+        </>
+      ) : null}
+
+      {q.data?.posts.length ? (
+        <>
+          <SectionHeader title="Announcements" action="See all" onAction={() => router.push("/announcements")} />
+          <View style={{ gap: 10 }}>
+            {q.data.posts.slice(0, 3).map((p) => (
+              <AnnouncementCard key={p.id} post={p} source={c?.name ?? "Your chapter"} onPress={() => router.push(`/post/${p.id}`)} />
             ))}
           </View>
-          {q.data && !q.data.items.length ? <EmptyState icon="message-circle" tint="yellow" title="No posts yet" text="Be the first to share something with your chapter." /> : null}
-          {q.data?.next_cursor ? <Button label="Load more" variant="outline" onPress={loadMore} loading={more} style={{ marginTop: 14 }} /> : null}
         </>
-      )}
+      ) : null}
     </Screen>
   );
 }

@@ -1,45 +1,70 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform } from "react-native";
+import { KeyboardAvoidingView, Platform, View } from "react-native";
 
 import { notify } from "@/components/cards";
-import { Button, ErrorView, Field, Header, Screen, T } from "@/components/ui";
+import { Button, Field, Header, Icon, Row, Screen, T } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 
+/** Change password (Figma: Settings – Password). */
 export default function Password() {
+  const t = useTheme();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{ field: "current" | "next" | "confirm"; text: string } | null>(null);
+
+  const rules = [
+    { ok: next.length >= 12, text: "At least 12 characters" },
+    { ok: /[A-Za-z]/.test(next) && /\d/.test(next), text: "Letters and numbers" },
+    { ok: next.length > 0 && next !== current, text: "Different from your current password" },
+  ];
+  const ready = current.length > 0 && rules.every((r) => r.ok) && confirm.length > 0;
 
   const save = async () => {
-    if (next.length < 12) return setError("Your new password needs at least 12 characters.");
-    if (next !== confirm) return setError("The new passwords don't match.");
+    if (next !== confirm) return setError({ field: "confirm", text: "The new passwords don’t match." });
     setBusy(true);
-    setError("");
+    setError(null);
     try {
       await api("/auth/change-password", { method: "POST", body: { current_password: current, new_password: next } });
-      notify("Password changed", "You've been signed out on your other devices.");
+      notify("Password changed", "You’ve been signed out on your other devices.");
       router.back();
     } catch (err) {
-      setError(errorText(err));
+      const text = errorText(err);
+      setError({ field: /current|wrong/i.test(text) ? "current" : "next", text });
       setBusy(false);
     }
   };
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <Screen edges={["top", "bottom"]}>
-        <Header title="Password" />
-        <T variant="small" muted style={{ marginBottom: 18 }}>
-          If an admin gave you a temporary password, change it here.
+      <Screen
+        edges={["top", "bottom"]}
+        footer={
+          <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}>
+            <Button label="Update password" onPress={save} loading={busy} disabled={!ready} />
+          </View>
+        }
+      >
+        <Header title="Password" subtitle="Changing it signs you out on your other devices." />
+        <Field label="Current password" icon="lock" secure value={current} onChangeText={setCurrent} autoComplete="current-password" error={error?.field === "current" ? error.text : undefined} />
+        <Field label="New password" icon="lock" secure value={next} onChangeText={setNext} autoComplete="new-password" error={error?.field === "next" ? error.text : undefined} />
+        <View style={{ gap: 6, marginTop: -4, marginBottom: 18, paddingHorizontal: 8 }}>
+          {rules.map((r) => (
+            <Row key={r.text} gap={8}>
+              <Icon name={r.ok ? "check-circle" : "circle"} size={16} color={r.ok ? t.c.tertiary : t.textMuted} weight={r.ok ? "fill" : "regular"} />
+              <T variant="bodySmall" color={r.ok ? t.text : t.textMuted}>
+                {r.text}
+              </T>
+            </Row>
+          ))}
+        </View>
+        <Field label="Confirm new password" icon="lock" secure value={confirm} onChangeText={setConfirm} autoComplete="new-password" onSubmitEditing={ready ? save : undefined} error={error?.field === "confirm" ? error.text : undefined} />
+        <T variant="bodySmall" muted>
+          Forgot your current password? Sign out, then tap “Forgot password?” on the sign-in screen.
         </T>
-        <Field label="Current password" icon="lock" secure value={current} onChangeText={setCurrent} autoComplete="current-password" />
-        <Field label="New password" icon="lock" secure value={next} onChangeText={setNext} autoComplete="new-password" placeholder="At least 12 characters" />
-        <Field label="Confirm new password" icon="lock" secure value={confirm} onChangeText={setConfirm} autoComplete="new-password" onSubmitEditing={save} />
-        {error ? <ErrorView message={error} /> : null}
-        <Button label="Change password" onPress={save} loading={busy} style={{ marginTop: 10 }} />
       </Screen>
     </KeyboardAvoidingView>
   );

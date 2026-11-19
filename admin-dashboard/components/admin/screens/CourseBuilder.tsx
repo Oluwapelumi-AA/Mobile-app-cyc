@@ -217,7 +217,7 @@ function DetailsTab({
 /* Lessons                                                             */
 /* ------------------------------------------------------------------ */
 
-const emptyLesson = { title: "", body: "", video_url: "", duration_minutes: "" };
+const emptyLesson = { title: "", body: "", video_url: "", duration_minutes: "", module_title: "", scripture_reference: "", scripture_text: "", notes_url: "" };
 
 function LessonsTab({
   course,
@@ -241,6 +241,10 @@ function LessonsTab({
             body: lesson.body ?? "",
             video_url: lesson.video_url ?? "",
             duration_minutes: lesson.duration_minutes ? String(lesson.duration_minutes) : "",
+            module_title: lesson.module_title ?? "",
+            scripture_reference: lesson.scripture_reference ?? "",
+            scripture_text: lesson.scripture_text ?? "",
+            notes_url: lesson.notes_url ?? "",
           }
         : emptyLesson,
     );
@@ -254,6 +258,10 @@ function LessonsTab({
         body: orNull(form.body),
         video_url: orNull(form.video_url),
         duration_minutes: form.duration_minutes ? Number(form.duration_minutes) : null,
+        module_title: orNull(form.module_title),
+        scripture_reference: orNull(form.scripture_reference),
+        scripture_text: orNull(form.scripture_text),
+        notes_url: orNull(form.notes_url),
       });
       const next =
         editing === "new"
@@ -345,8 +353,12 @@ function LessonFields({
     <div className="grid grid-cols-1 gap-3 border-t border-line p-3.5 sm:grid-cols-[1fr_140px]">
       <TextInput label="Lesson title" required value={form.title} onChange={set("title")} placeholder="Who is Jesus?" />
       <TextInput label="Minutes" type="number" min={1} value={form.duration_minutes} onChange={set("duration_minutes")} placeholder="15" />
+      <TextInput label="Module" className="sm:col-span-2" value={form.module_title} onChange={set("module_title")} placeholder="Module 1 · Knowing Jesus (lessons with the same module are grouped)" />
       <TextInput label="Video link" type="url" className="sm:col-span-2" value={form.video_url} onChange={set("video_url")} placeholder="https://youtube.com/…" />
       <TextArea label="Lesson content" rows={5} className="sm:col-span-2" value={form.body} onChange={set("body")} placeholder="Notes, scripture and reflection questions." />
+      <TextInput label="Scripture reference" value={form.scripture_reference} onChange={set("scripture_reference")} placeholder="John 3:16" />
+      <TextInput label="Lesson notes (PDF link)" type="url" value={form.notes_url} onChange={set("notes_url")} placeholder="https://…/notes.pdf" />
+      <TextArea label="Scripture text" rows={2} className="sm:col-span-2" value={form.scripture_text} onChange={set("scripture_text")} placeholder="For God so loved the world…" />
       <div className="flex justify-end gap-2 sm:col-span-2">
         {onCancel ? <SecondaryButton onClick={onCancel}>Cancel</SecondaryButton> : null}
         <PrimaryButton icon="check" disabled={busy} onClick={onSave}>
@@ -376,9 +388,9 @@ function IconButton({ label, icon, onClick, disabled }: { label: string; icon: "
 /* Quizzes                                                             */
 /* ------------------------------------------------------------------ */
 
-type QuestionDraft = { prompt: string; options: string[]; correct_index: number };
+type QuestionDraft = { prompt: string; options: string[]; correct_index: number; explanation: string };
 
-const emptyQuestion = (): QuestionDraft => ({ prompt: "", options: ["", ""], correct_index: 0 });
+const emptyQuestion = (): QuestionDraft => ({ prompt: "", options: ["", ""], correct_index: 0, explanation: "" });
 
 function QuizzesTab({
   course,
@@ -461,7 +473,7 @@ function QuizEditor({
   const [passMark, setPassMark] = useState(String(quiz?.pass_mark ?? 70));
   const [questions, setQuestions] = useState<QuestionDraft[]>(
     quiz?.questions.length
-      ? quiz.questions.map((q) => ({ prompt: q.prompt, options: [...q.options], correct_index: q.correct_index ?? 0 }))
+      ? quiz.questions.map((q) => ({ prompt: q.prompt, options: [...q.options], correct_index: q.correct_index ?? 0, explanation: q.explanation ?? "" }))
       : [emptyQuestion()],
   );
   const { busy, error, run } = useSubmit();
@@ -491,7 +503,7 @@ function QuizEditor({
         const options = q.options.map((o) => o.trim());
         if (q.prompt.trim().length < 3) throw new Error(`Question ${i + 1} needs a question of at least 3 characters.`);
         if (options.length < 2 || options.some((o) => !o)) throw new Error(`Question ${i + 1} needs at least two filled-in answers.`);
-        return { prompt: q.prompt.trim(), options, correct_index: q.correct_index };
+        return { prompt: q.prompt.trim(), options, correct_index: q.correct_index, explanation: q.explanation.trim() || null };
       });
       const body = JSON.stringify({ title: title.trim(), lesson_id: lessonId || null, pass_mark: mark, questions: cleaned });
       if (quiz) await api(`course-quizzes/${quiz.id}`, { method: "PATCH", body });
@@ -553,6 +565,13 @@ function QuizEditor({
                 + Add answer
               </button>
             ) : null}
+            <TextInput
+              label="Why this is the right answer (shown after answering)"
+              className="mt-3"
+              value={q.explanation}
+              onChange={(v) => patch(qi, { explanation: v })}
+              placeholder="Matthew, Mark, Luke and John tell the story of Jesus' life."
+            />
           </li>
         ))}
       </ol>

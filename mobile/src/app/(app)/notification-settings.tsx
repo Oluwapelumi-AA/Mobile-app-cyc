@@ -11,9 +11,9 @@ import { useApi } from "@/lib/useApi";
 const TOPICS: { category: NotificationCategory; label: string; sub: string; icon: IconName }[] = [
   { category: "events", label: "Events and reminders", sub: "Before events you're going to", icon: "calendar" },
   { category: "meetings", label: "Live meetings", sub: "When a meeting you can join starts", icon: "radio" },
-  { category: "chapter", label: "Announcements", sub: "News from CYC and your chapter", icon: "mc:bullhorn-outline" },
+  { category: "chapter", label: "Announcements", sub: "News from CYC and your chapter", icon: "megaphone" },
   { category: "resources", label: "New sermons and resources", sub: "When something new is published", icon: "headphones" },
-  { category: "social", label: "Comments and replies", sub: "When someone replies to your post", icon: "message-circle" },
+  { category: "social", label: "Comments and replies", sub: "When someone replies to your post", icon: "message" },
 ];
 
 function Section({ title }: { title: string }) {

@@ -18,7 +18,7 @@ export default function Person() {
       {!p ? q.error ? <ErrorView message={q.error} onRetry={q.reload} /> : <Loading /> : (
         <>
           <Card style={{ alignItems: "center", gap: 10, paddingVertical: 24 }}>
-            <Avatar name={p.display_name} size={72} />
+            <Avatar name={p.display_name} size={72} uri={p.avatar_url} />
             <T variant="h2" center>
               {p.is_deleted ? "Deleted user" : p.display_name}
             </T>

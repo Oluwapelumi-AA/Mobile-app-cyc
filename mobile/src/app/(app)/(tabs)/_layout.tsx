@@ -8,7 +8,7 @@ import { useTheme } from "@/lib/theme";
 
 const TABS: { name: string; label: string; icon: IconName }[] = [
   { name: "index", label: "Home", icon: "home" },
-  { name: "learn", label: "Learn", icon: "mc:school-outline" },
+  { name: "learn", label: "Learn", icon: "school" },
   { name: "community", label: "Community", icon: "users" },
   { name: "events", label: "Events", icon: "calendar" },
   { name: "profile", label: "Profile", icon: "user" },
@@ -28,9 +28,9 @@ function TabBar({ state, navigation }: BarProps) {
       <View
         style={{
           flexDirection: "row",
-          backgroundColor: t.scheme === "dark" ? t.surface : "#F1ECE5",
-          paddingBottom: Math.max(insets.bottom, 8),
-          paddingTop: 8,
+          backgroundColor: t.tabBar,
+          paddingBottom: Math.max(insets.bottom, 10),
+          paddingTop: 12,
         }}
       >
         {state.routes.map((route, i) => {
@@ -49,10 +49,10 @@ function TabBar({ state, navigation }: BarProps) {
               }}
               style={{ flex: 1, alignItems: "center", gap: 3 }}
             >
-              <View style={{ paddingHorizontal: 16, paddingVertical: 4, borderRadius: 999, backgroundColor: focused ? t.tabActive : "transparent" }}>
-                <Icon name={tab.icon} size={20} color={focused ? t.text : t.textMuted} />
+              <View style={{ width: 64, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: focused ? t.tabActive : "transparent" }}>
+                <Icon name={tab.icon} size={22} color={focused ? t.c.onSecondaryContainer : t.textMuted} weight={focused ? "fill" : "regular"} />
               </View>
-              <T variant="caption" weight={focused ? "bold" : "medium"} muted={!focused}>
+              <T variant="labelMedium" weight={focused ? "bold" : "medium"} color={focused ? t.text : t.textMuted} style={{ letterSpacing: 0 }}>
                 {tab.label}
               </T>
             </Pressable>

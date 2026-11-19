@@ -1,9 +1,11 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { ComponentProps, ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   DimensionValue,
+  Image,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -20,50 +22,38 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { brand, fonts, radius, Theme, Tint, useTheme } from "@/lib/theme";
+import { Icon, IconName } from "@/components/Icon";
+import { brand, fonts, radius, Tint, type, useTheme } from "@/lib/theme";
 
-/* ------------------------------------------------------------------ */
-/* Icons                                                               */
-/* ------------------------------------------------------------------ */
-
-type FeatherName = ComponentProps<typeof Feather>["name"];
-type McName = ComponentProps<typeof MaterialCommunityIcons>["name"];
-/** Feather names, or "mc:<name>" for MaterialCommunityIcons. */
-export type IconName = FeatherName | `mc:${McName}`;
-
-export function Icon({ name, size = 20, color }: { name: IconName; size?: number; color?: string }) {
-  const t = useTheme();
-  const c = color ?? t.text;
-  if (typeof name === "string" && name.startsWith("mc:")) {
-    return <MaterialCommunityIcons name={name.slice(3) as McName} size={size} color={c} />;
-  }
-  return <Feather name={name as FeatherName} size={size} color={c} />;
-}
+export { Icon };
+export type { IconName };
 
 /* ------------------------------------------------------------------ */
 /* Text                                                                */
 /* ------------------------------------------------------------------ */
 
-const variants = {
-  display: { fontFamily: fonts.heavy, fontSize: 44, lineHeight: 46, letterSpacing: -1.2 },
-  h1: { fontFamily: fonts.heavy, fontSize: 30, lineHeight: 34, letterSpacing: -0.6 },
-  h2: { fontFamily: fonts.heavy, fontSize: 24, lineHeight: 28, letterSpacing: -0.4 },
-  h3: { fontFamily: fonts.bold, fontSize: 18, lineHeight: 23, letterSpacing: -0.2 },
-  title: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20 },
-  body: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22 },
-  small: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18 },
-  caption: { fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 15 },
-  overline: { fontFamily: fonts.bold, fontSize: 10.5, lineHeight: 14, letterSpacing: 0.6 },
-} as const;
+export type TVariant = keyof typeof type | "display" | "h1" | "h2" | "h3" | "title" | "body" | "small" | "caption" | "overline";
 
-export type TVariant = keyof typeof variants;
+/** Older short names map onto the Material 3 scale. */
+const alias: Record<string, string> = {
+  display: "displayMedium",
+  h1: "headlineLarge",
+  h2: "headlineSmall",
+  h3: "section",
+  title: "titleMedium",
+  body: "bodyLarge",
+  small: "bodyMedium",
+  caption: "bodySmall",
+  overline: "labelMedium",
+};
 
 export function T({
-  variant = "body",
+  variant = "bodyMedium",
   color,
   muted,
   weight,
   center,
+  underline,
   style,
   ...rest
 }: TextProps & {
@@ -72,16 +62,20 @@ export function T({
   muted?: boolean;
   weight?: keyof typeof fonts;
   center?: boolean;
+  underline?: boolean;
 }) {
   const t = useTheme();
+  const v = type[alias[variant] ?? variant] ?? type.bodyMedium;
   return (
     <Text
       {...rest}
+      maxFontSizeMultiplier={1.6}
       style={[
-        variants[variant],
+        v,
         { color: color ?? (muted ? t.textMuted : t.text) },
         weight ? { fontFamily: fonts[weight] } : null,
         center ? { textAlign: "center" } : null,
+        underline ? { textDecorationLine: "underline" } : null,
         style,
       ]}
     />
@@ -101,6 +95,7 @@ export function Screen({
   padded = true,
   bg,
   contentStyle,
+  footer,
 }: {
   children: ReactNode;
   scroll?: boolean;
@@ -110,27 +105,45 @@ export function Screen({
   padded?: boolean;
   bg?: string;
   contentStyle?: StyleProp<ViewStyle>;
+  /** Pinned to the bottom, outside the scroll area (e.g. the main action). */
+  footer?: ReactNode;
 }) {
   const t = useTheme();
-  const pad = padded ? { paddingHorizontal: 18 } : null;
+  const pad = padded ? { paddingHorizontal: 20 } : null;
   return (
     <SafeAreaView edges={edges} style={{ flex: 1, backgroundColor: bg ?? t.bg }}>
       {scroll ? (
         <ScrollView
           contentContainerStyle={[pad, { paddingBottom: 32 }, contentStyle]}
           keyboardShouldPersistTaps="handled"
-          refreshControl={
-            onRefresh ? (
-              <RefreshControl refreshing={Boolean(refreshing)} onRefresh={onRefresh} tintColor={t.primary} />
-            ) : undefined
-          }
+          refreshControl={onRefresh ? <RefreshControl refreshing={Boolean(refreshing)} onRefresh={onRefresh} tintColor={t.primary} /> : undefined}
         >
           {children}
         </ScrollView>
       ) : (
         <View style={[{ flex: 1 }, pad, contentStyle]}>{children}</View>
       )}
+      {footer}
     </SafeAreaView>
+  );
+}
+
+/** Bottom action area that sits above the home indicator. */
+export function Footer({ children, bar }: { children: ReactNode; bar?: boolean }) {
+  const t = useTheme();
+  return (
+    <View
+      style={{
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 12,
+        gap: 10,
+        backgroundColor: bar ? t.c.surfaceContainer : t.bg,
+        flexDirection: bar ? "row" : "column",
+      }}
+    >
+      {children}
+    </View>
   );
 }
 
@@ -145,9 +158,11 @@ export function IconButton({
   onPress,
   bg,
   color,
-  size = 40,
+  size = 44,
   label,
   bordered,
+  tonal,
+  weight,
 }: {
   icon: IconName;
   onPress?: () => void;
@@ -156,6 +171,9 @@ export function IconButton({
   size?: number;
   label: string;
   bordered?: boolean;
+  /** Filled grey circle, as in the screen headers. */
+  tonal?: boolean;
+  weight?: "regular" | "bold" | "fill";
 }) {
   const t = useTheme();
   return (
@@ -171,46 +189,47 @@ export function IconButton({
           borderRadius: size / 2,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: bg ?? "transparent",
+          backgroundColor: bg ?? (tonal ? t.c.surfaceContainerHigh : "transparent"),
           opacity: pressed ? 0.6 : 1,
         },
         bordered ? { borderWidth: 1, borderColor: t.border } : null,
       ]}
     >
-      <Icon name={icon} size={size * 0.5} color={color} />
+      <Icon name={icon} size={Math.round(size * 0.5)} color={color} weight={weight} />
     </Pressable>
   );
 }
 
-/** Back arrow + big title, as in the designs. */
+export const goBack = (fallback = "/") => (router.canGoBack() ? router.back() : router.replace(fallback as never));
+
+/** Big screen title with optional back arrow and actions (Headline / Large). */
 export function Header({
   title,
   subtitle,
   back = true,
   right,
   onBack,
+  small,
 }: {
   title?: string;
   subtitle?: string;
   back?: boolean;
   right?: ReactNode;
   onBack?: () => void;
+  /** Top app bar style: back arrow + Title / Large on one line. */
+  small?: boolean;
 }) {
   return (
-    <View style={{ paddingTop: 8, paddingBottom: 12 }}>
-      <Row gap={6} style={{ justifyContent: "space-between" }}>
-        <Row gap={6} style={{ flex: 1 }}>
+    <View style={{ paddingTop: 12, paddingBottom: 16 }}>
+      <Row gap={4} style={{ justifyContent: "space-between", minHeight: 48 }}>
+        <Row gap={4} style={{ flex: 1 }}>
           {back ? (
-            <View style={{ marginLeft: -8 }}>
-              <IconButton
-                icon="arrow-left"
-                label="Back"
-                onPress={onBack ?? (() => (router.canGoBack() ? router.back() : router.replace("/")))}
-              />
+            <View style={{ marginLeft: -10 }}>
+              <IconButton icon="arrow-left" label="Back" onPress={onBack ?? (() => goBack())} />
             </View>
           ) : null}
           {title ? (
-            <T variant="h1" style={{ flexShrink: 1 }} numberOfLines={1}>
+            <T variant={small ? "titleLarge" : back ? "headlineMedium" : "headlineLarge"} style={{ flexShrink: 1 }} numberOfLines={2}>
               {title}
             </T>
           ) : null}
@@ -218,7 +237,7 @@ export function Header({
         {right}
       </Row>
       {subtitle ? (
-        <T variant="small" muted style={{ marginTop: 2 }}>
+        <T variant="bodyMedium" muted style={{ marginTop: 4 }}>
           {subtitle}
         </T>
       ) : null}
@@ -226,14 +245,14 @@ export function Header({
   );
 }
 
-export function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+export function SectionHeader({ title, action, onAction, style }: { title: string; action?: string; onAction?: () => void; style?: StyleProp<ViewStyle> }) {
   const t = useTheme();
   return (
-    <Row style={{ justifyContent: "space-between", marginTop: 26, marginBottom: 12 }}>
-      <T variant="h3">{title}</T>
+    <Row style={[{ justifyContent: "space-between", marginTop: 28, marginBottom: 14 }, style]}>
+      <T variant="section">{title}</T>
       {action ? (
-        <Pressable onPress={onAction} hitSlop={8}>
-          <T variant="small" weight="bold" color={t.primary}>
+        <Pressable onPress={onAction} hitSlop={10}>
+          <T variant="labelLarge" color={t.primary} underline>
             {action}
           </T>
         </Pressable>
@@ -246,7 +265,7 @@ export function SectionHeader({ title, action, onAction }: { title: string; acti
 /* Buttons                                                             */
 /* ------------------------------------------------------------------ */
 
-type ButtonVariant = "primary" | "gold" | "outline" | "outlineLight" | "light" | "soft" | "dark";
+type ButtonVariant = "primary" | "gold" | "outline" | "outlineLight" | "light" | "soft" | "dark" | "tonal" | "danger" | "text";
 
 export function Button({
   label,
@@ -271,34 +290,37 @@ export function Button({
 }) {
   const t = useTheme();
   const look: Record<ButtonVariant, { bg: string; fg: string; border?: string }> = {
-    primary: { bg: t.primary, fg: t.onPrimary },
+    primary: { bg: t.button, fg: t.onButton },
     gold: { bg: brand.gold, fg: "#2A1D00" },
-    outline: { bg: "transparent", fg: t.text, border: t.border },
-    outlineLight: { bg: "transparent", fg: "#FFFFFF", border: "rgba(255,255,255,0.75)" },
-    light: { bg: "#FFFFFF", fg: brand.red },
-    soft: { bg: t.tints.yellow.bg, fg: t.tints.yellow.fg },
-    dark: { bg: "#10200F", fg: "#FFFFFF" },
+    outline: { bg: "transparent", fg: t.primary, border: t.c.outline },
+    outlineLight: { bg: "transparent", fg: "#FFFFFF", border: "rgba(255,255,255,0.8)" },
+    light: { bg: "#FFFFFF", fg: brand.maroon },
+    soft: { bg: t.c.secondaryContainer, fg: t.c.onSecondaryContainer },
+    tonal: { bg: t.c.surfaceContainerHigh, fg: t.text },
+    dark: { bg: t.scheme === "dark" ? t.c.tertiaryContainer : "#10200F", fg: t.scheme === "dark" ? t.c.onTertiaryContainer : "#FFFFFF" },
+    danger: { bg: t.c.error, fg: t.scheme === "dark" ? "#690005" : "#FFFFFF" },
+    text: { bg: "transparent", fg: t.primary },
   };
   const l = look[variant];
   const off = disabled || loading;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled: off }}
+      accessibilityState={{ disabled: Boolean(off), busy: Boolean(loading) }}
       onPress={off ? undefined : onPress}
       style={({ pressed }) => [
         {
-          height: small ? 36 : 50,
-          paddingHorizontal: small ? 16 : 22,
+          minHeight: small ? 40 : 48,
+          paddingHorizontal: small ? 16 : 24,
           borderRadius: radius.pill,
-          backgroundColor: l.bg,
+          backgroundColor: disabled && (variant === "primary" || variant === "gold") ? t.c.surfaceContainerHighest : l.bg,
           borderWidth: l.border ? 1 : 0,
           borderColor: l.border,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          opacity: off ? 0.55 : pressed ? 0.85 : 1,
+          opacity: loading ? 0.7 : pressed ? 0.85 : 1,
           alignSelf: full ? "stretch" : "flex-start",
         },
         style,
@@ -308,8 +330,8 @@ export function Button({
         <ActivityIndicator color={l.fg} />
       ) : (
         <>
-          {icon ? <Icon name={icon} size={small ? 14 : 17} color={l.fg} /> : null}
-          <T variant={small ? "small" : "title"} weight={small ? "semibold" : "semibold"} color={l.fg}>
+          {icon ? <Icon name={icon} size={18} color={disabled ? t.textMuted : l.fg} /> : null}
+          <T variant="labelLarge" color={disabled && (variant === "primary" || variant === "gold") ? t.textMuted : l.fg}>
             {label}
           </T>
         </>
@@ -318,11 +340,12 @@ export function Button({
   );
 }
 
-export function TextButton({ label, onPress, color }: { label: string; onPress?: () => void; color?: string }) {
+/** Underlined link (Link / Medium). */
+export function TextButton({ label, onPress, color, underline = false }: { label: string; onPress?: () => void; color?: string; underline?: boolean }) {
   const t = useTheme();
   return (
-    <Pressable onPress={onPress} hitSlop={10} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-      <T variant="small" weight="semibold" color={color ?? t.primary}>
+    <Pressable onPress={onPress} hitSlop={10} accessibilityRole="link" style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 32, justifyContent: "center" })}>
+      <T variant="labelLarge" color={color ?? t.primary} underline={underline}>
         {label}
       </T>
     </Pressable>
@@ -348,11 +371,11 @@ export function Card({
 }) {
   const t = useTheme();
   const base: ViewStyle = {
-    backgroundColor: bg ?? t.surface,
-    borderRadius: radius.lg,
+    backgroundColor: bg ?? t.c.surfaceContainerLow,
+    borderRadius: radius.xl,
     borderWidth: bordered ? 1 : 0,
-    borderColor: t.border,
-    padding: 14,
+    borderColor: t.c.outlineVariant,
+    padding: 16,
     overflow: "hidden",
   };
   if (!onPress) return <View style={[base, style]}>{children}</View>;
@@ -371,6 +394,7 @@ export function Blob({
   right,
   left,
   bottom,
+  dashed,
 }: {
   size: number;
   color: string;
@@ -378,68 +402,93 @@ export function Blob({
   right?: DimensionValue;
   left?: DimensionValue;
   bottom?: DimensionValue;
+  dashed?: boolean;
 }) {
   return (
     <View
       pointerEvents="none"
-      style={{ position: "absolute", width: size, height: size, borderRadius: size / 2, backgroundColor: color, top, right, left, bottom }}
+      style={[
+        { position: "absolute", width: size, height: size, borderRadius: size / 2, top, right, left, bottom },
+        dashed ? { borderWidth: 2, borderStyle: "dashed", borderColor: color } : { backgroundColor: color },
+      ]}
     />
   );
 }
 
-export function IconTile({ icon, tint = "yellow", size = 44, rounded = 12 }: { icon: IconName; tint?: Tint; size?: number; rounded?: number }) {
+/** Round icon on a tinted circle (leading element of rows and tiles). */
+export function IconTile({ icon, tint = "yellow", size = 40, rounded, solid }: { icon: IconName; tint?: Tint; size?: number; rounded?: number; solid?: boolean }) {
   const t = useTheme();
   const c = t.tints[tint];
+  const bg = solid ? c.fg : c.bg;
+  const fg = solid ? c.bg : c.fg;
   return (
-    <View style={{ width: size, height: size, borderRadius: rounded, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" }}>
-      <Icon name={icon} size={size * 0.46} color={c.fg} />
+    <View style={{ width: size, height: size, borderRadius: rounded ?? size / 2, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
+      <Icon name={icon} size={Math.round(size * 0.5)} color={fg} />
     </View>
   );
 }
 
-export function DateBadge({ iso, tint = "yellow", size = 48 }: { iso: string; tint?: Tint; size?: number }) {
+export function DateBadge({ iso, tint = "yellow", size = 56, dark }: { iso: string; tint?: Tint; size?: number; dark?: boolean }) {
   const t = useTheme();
   const d = new Date(iso);
-  const c = t.tints[tint];
+  const c = dark ? { bg: "#2A1D00", fg: "#FFDEA4" } : t.tints[tint];
   const month = d.toLocaleString("en", { month: "short" }).toUpperCase();
   return (
-    <View style={{ width: size, height: size + 4, borderRadius: 12, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" }}>
-      <T variant="overline" color={c.fg} style={{ fontSize: 10 }}>
+    <View style={{ width: size, height: size, borderRadius: 12, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" }}>
+      <T variant="labelMedium" color={c.fg}>
         {month}
       </T>
-      <T variant="h3" color={c.fg} style={{ fontSize: 20, lineHeight: 22 }}>
+      <T variant="headlineSmall" color={c.fg} style={{ lineHeight: 26 }}>
         {d.getDate()}
       </T>
     </View>
   );
 }
 
+/** Status chip: "Member", "Going", "Request sent"… */
 export function Badge({ label, tint = "green", icon }: { label: string; tint?: Tint; icon?: IconName }) {
   const t = useTheme();
   const c = t.tints[tint];
   return (
-    <Row gap={4} style={{ backgroundColor: c.bg, borderRadius: radius.pill, paddingHorizontal: 9, paddingVertical: 4, alignSelf: "flex-start" }}>
-      {icon ? <Icon name={icon} size={12} color={c.fg} /> : null}
-      <T variant="caption" weight="semibold" color={c.fg}>
+    <Row gap={4} style={{ backgroundColor: c.bg, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 5, alignSelf: "flex-start" }}>
+      {icon ? <Icon name={icon} size={14} color={c.fg} /> : null}
+      <T variant="labelMedium" color={c.fg} style={{ letterSpacing: 0 }}>
         {label}
       </T>
     </Row>
   );
 }
 
-export function Avatar({ name, size = 40, tint = "pink" }: { name: string; size?: number; tint?: Tint }) {
+/** Small pill on coloured heroes ("NEXT UP · SAT 14 NOV"). */
+export function HeroTag({ label, light, dot }: { label: string; light?: boolean; dot?: string }) {
+  return (
+    <Row
+      gap={6}
+      style={{
+        backgroundColor: light ? "#FFFFFF" : "rgba(0,0,0,0.22)",
+        alignSelf: "flex-start",
+        borderRadius: radius.pill,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+      }}
+    >
+      {dot ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: dot }} /> : null}
+      <T variant="labelMedium" color={light ? brand.maroon : "#FFFFFF"}>
+        {label}
+      </T>
+    </Row>
+  );
+}
+
+export function Avatar({ name, size = 40, tint = "pink", uri }: { name: string; size?: number; tint?: Tint; uri?: string | null }) {
   const t = useTheme();
   const c = t.tints[tint];
-  const init = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase())
-    .join("");
+  const init = name.trim()[0]?.toUpperCase() ?? "?";
+  if (uri) return <Image source={{ uri }} accessibilityLabel={name} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: c.bg }} />;
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" }}>
-      <T variant="h3" color={c.fg} style={{ fontSize: size * 0.4, lineHeight: size * 0.5 }}>
-        {init || "?"}
+      <T variant="titleMedium" color={c.fg} style={{ fontSize: size * 0.4, lineHeight: size * 0.5, fontFamily: fonts.bold }}>
+        {init}
       </T>
     </View>
   );
@@ -448,8 +497,36 @@ export function Avatar({ name, size = 40, tint = "pink" }: { name: string; size?
 export function ProgressBar({ value, color, track, height = 6 }: { value: number; color?: string; track?: string; height?: number }) {
   const t = useTheme();
   return (
-    <View style={{ height, borderRadius: height, backgroundColor: track ?? t.surfaceAlt, overflow: "hidden" }}>
+    <View
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(value) }}
+      style={{ height, borderRadius: height, backgroundColor: track ?? t.c.surfaceContainerHighest, overflow: "hidden" }}
+    >
       <View style={{ width: `${Math.max(0, Math.min(100, value))}%`, height, borderRadius: height, backgroundColor: color ?? t.primary }} />
+    </View>
+  );
+}
+
+/** Indeterminate thin progress line ("Signing in…"). */
+export function LoadingBar() {
+  const t = useTheme();
+  const x = useState(() => new Animated.Value(0))[0];
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(x, { toValue: 1, duration: 1100, useNativeDriver: false }));
+    loop.start();
+    return () => loop.stop();
+  }, [x]);
+  return (
+    <View style={{ height: 4, backgroundColor: t.c.primaryContainer, overflow: "hidden" }}>
+      <Animated.View
+        style={{
+          position: "absolute",
+          height: 4,
+          width: "40%",
+          backgroundColor: t.button,
+          left: x.interpolate({ inputRange: [0, 1], outputRange: ["-40%", "100%"] }),
+        }}
+      />
     </View>
   );
 }
@@ -465,6 +542,7 @@ export function Chip({
   tone = "red",
   icon,
   onRemove,
+  disabled,
 }: {
   label: string;
   selected?: boolean;
@@ -472,14 +550,15 @@ export function Chip({
   tone?: "red" | "yellow";
   icon?: IconName;
   onRemove?: () => void;
+  disabled?: boolean;
 }) {
   const t = useTheme();
-  const sel = tone === "red" ? { bg: t.primary, fg: "#FFFFFF" } : { bg: t.tints.yellow.bg, fg: t.tints.yellow.fg };
+  const sel = tone === "red" ? { bg: t.button, fg: t.onButton } : { bg: t.c.secondaryContainer, fg: t.c.onSecondaryContainer };
   return (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
       accessibilityRole="button"
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
       style={({ pressed }) => ({
         flexDirection: "row",
         alignItems: "center",
@@ -488,13 +567,14 @@ export function Chip({
         paddingHorizontal: 14,
         borderRadius: radius.pill,
         borderWidth: selected ? 0 : 1,
-        borderColor: t.border,
-        backgroundColor: selected ? sel.bg : t.bg,
-        opacity: pressed ? 0.8 : 1,
+        borderColor: t.c.outlineVariant,
+        backgroundColor: selected ? sel.bg : "transparent",
+        opacity: disabled ? 0.5 : pressed ? 0.8 : 1,
       })}
     >
-      {icon ? <Icon name={icon} size={14} color={selected ? sel.fg : t.text} /> : null}
-      <T variant="small" weight={selected ? "semibold" : "medium"} color={selected ? sel.fg : t.text}>
+      {selected && tone === "yellow" && !icon ? <Icon name="check" size={16} color={sel.fg} /> : null}
+      {icon ? <Icon name={icon} size={16} color={selected ? sel.fg : t.text} /> : null}
+      <T variant="labelLarge" color={selected ? sel.fg : t.text}>
         {label}
       </T>
       {onRemove ? (
@@ -508,7 +588,7 @@ export function Chip({
 
 export function ChipRow({ children }: { children: ReactNode }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 18 }} style={{ flexGrow: 0 }}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 20 }} style={{ flexGrow: 0, marginRight: -20 }}>
       {children}
     </ScrollView>
   );
@@ -521,11 +601,11 @@ export function Segmented<K extends string>({
 }: {
   value: K;
   onChange: (k: K) => void;
-  options: { key: K; label: string }[];
+  options: { key: K; label: string; icon?: IconName }[];
 }) {
   const t = useTheme();
   return (
-    <View style={{ flexDirection: "row", backgroundColor: t.surfaceAlt, borderRadius: radius.pill, padding: 4 }}>
+    <View style={{ flexDirection: "row", backgroundColor: t.c.surfaceContainerHigh, borderRadius: radius.pill, padding: 4 }}>
       {options.map((o) => {
         const on = o.key === value;
         return (
@@ -536,14 +616,18 @@ export function Segmented<K extends string>({
             accessibilityState={{ selected: on }}
             style={{
               flex: 1,
-              height: 38,
+              minHeight: 40,
               borderRadius: radius.pill,
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor: on ? (t.scheme === "dark" ? t.surface : "#FFFFFF") : "transparent",
+              flexDirection: "row",
+              gap: 6,
+              paddingHorizontal: 12,
+              backgroundColor: on ? t.c.surfaceContainerLowest : "transparent",
             }}
           >
-            <T variant="small" weight={on ? "semibold" : "medium"} muted={!on}>
+            {o.icon ? <Icon name={o.icon} size={16} color={on ? t.text : t.textMuted} /> : null}
+            <T variant="labelLarge" muted={!on}>
               {o.label}
             </T>
           </Pressable>
@@ -557,13 +641,13 @@ export function Segmented<K extends string>({
 /* Lists                                                               */
 /* ------------------------------------------------------------------ */
 
-export function ListGroup({ children }: { children: ReactNode }) {
+export function ListGroup({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const t = useTheme();
   const items = (Array.isArray(children) ? children : [children]).flat().filter(Boolean);
   return (
-    <View style={{ backgroundColor: t.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: t.border, overflow: "hidden" }}>
+    <View style={[{ backgroundColor: t.c.surfaceContainerLow, borderRadius: radius.xl, borderWidth: 1, borderColor: t.c.outlineVariant, overflow: "hidden" }, style]}>
       {items.map((child, i) => (
-        <View key={i} style={i > 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border } : null}>
+        <View key={i} style={i > 0 ? { borderTopWidth: StyleSheet.hairlineWidth * 2, borderTopColor: t.c.outlineVariant } : null}>
           {child}
         </View>
       ))}
@@ -573,6 +657,8 @@ export function ListGroup({ children }: { children: ReactNode }) {
 
 export function ListRow({
   icon,
+  iconCircle,
+  leading,
   label,
   sublabel,
   value,
@@ -580,8 +666,12 @@ export function ListRow({
   right,
   danger,
   chevron = true,
+  labelColor,
 }: {
   icon?: IconName;
+  /** Put the icon on a grey circle (detail pages). */
+  iconCircle?: boolean;
+  leading?: ReactNode;
   label: string;
   sublabel?: string;
   value?: string;
@@ -589,35 +679,47 @@ export function ListRow({
   right?: ReactNode;
   danger?: boolean;
   chevron?: boolean;
+  labelColor?: string;
 }) {
   const t = useTheme();
-  const color = danger ? t.danger : t.text;
+  const color = labelColor ?? (danger ? t.c.error : t.text);
   return (
     <Pressable
       onPress={onPress}
       disabled={!onPress}
+      accessibilityRole={onPress ? "button" : undefined}
       style={({ pressed }) => ({
         flexDirection: "row",
         alignItems: "center",
         gap: 14,
         paddingHorizontal: 16,
-        paddingVertical: sublabel ? 12 : 15,
-        backgroundColor: pressed ? t.surfaceAlt : "transparent",
+        paddingVertical: sublabel ? 12 : 16,
+        minHeight: 56,
+        backgroundColor: pressed ? t.c.surfaceContainerHigh : "transparent",
       })}
     >
-      {icon ? <Icon name={icon} size={19} color={danger ? t.danger : t.textMuted} /> : null}
+      {leading}
+      {icon ? (
+        iconCircle ? (
+          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: t.c.surfaceContainerHigh, alignItems: "center", justifyContent: "center" }}>
+            <Icon name={icon} size={20} color={t.textMuted} />
+          </View>
+        ) : (
+          <Icon name={icon} size={22} color={danger ? t.c.error : t.text} />
+        )
+      ) : null}
       <View style={{ flex: 1 }}>
-        <T variant="body" color={color}>
+        <T variant="bodyLarge" color={color} style={sublabel ? { fontFamily: fonts.semibold } : null}>
           {label}
         </T>
         {sublabel ? (
-          <T variant="caption" muted>
+          <T variant="bodySmall" muted>
             {sublabel}
           </T>
         ) : null}
       </View>
       {value ? (
-        <T variant="small" muted>
+        <T variant="bodyMedium" muted>
           {value}
         </T>
       ) : null}
@@ -627,77 +729,196 @@ export function ListRow({
   );
 }
 
-export function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+export function Toggle({ value, onChange, disabled, label }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string }) {
   const t = useTheme();
   return (
     <Switch
+      accessibilityLabel={label}
       value={value}
       onValueChange={onChange}
       disabled={disabled}
-      trackColor={{ false: t.surfaceAlt, true: t.primary }}
-      thumbColor="#FFFFFF"
-      {...({ activeThumbColor: "#FFFFFF" } as object)}
-      ios_backgroundColor={t.surfaceAlt}
+      trackColor={{ false: t.c.surfaceContainerHighest, true: t.button }}
+      thumbColor={value ? (t.scheme === "dark" ? t.c.onPrimary : "#FFFFFF") : t.c.outline}
+      {...({ activeThumbColor: t.scheme === "dark" ? t.c.onPrimary : "#FFFFFF" } as object)}
+      ios_backgroundColor={t.c.surfaceContainerHighest}
     />
   );
 }
 
-/** Hide the browser focus ring in the web preview (fields show their own). */
-const noOutline = (Platform.OS === "web" ? { outlineStyle: "none" } : {}) as object;
+/** Radio-style selectable row (Figma "Choice row"). */
+export function ChoiceRow({
+  title,
+  subtitle,
+  selected,
+  onPress,
+  leading,
+  multi,
+  right,
+}: {
+  title: string;
+  subtitle?: string;
+  selected: boolean;
+  onPress: () => void;
+  leading?: ReactNode;
+  multi?: boolean;
+  right?: ReactNode;
+}) {
+  const t = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole={multi ? "checkbox" : "radio"}
+      accessibilityState={{ checked: selected }}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        padding: 14,
+        borderRadius: radius.lg,
+        borderWidth: selected ? 2 : 1,
+        borderColor: selected ? t.button : t.c.outlineVariant,
+        backgroundColor: selected ? t.c.primaryContainer : t.c.surfaceContainerLow,
+        opacity: pressed ? 0.85 : 1,
+      })}
+    >
+      {leading}
+      <View style={{ flex: 1 }}>
+        <T variant="titleMedium" color={selected ? t.c.onPrimaryContainer : t.text}>
+          {title}
+        </T>
+        {subtitle ? (
+          <T variant="bodySmall" color={selected ? t.c.onPrimaryContainer : t.textMuted}>
+            {subtitle}
+          </T>
+        ) : null}
+      </View>
+      {right}
+      {multi ? (
+        <View
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 6,
+            borderWidth: 2,
+            borderColor: selected ? t.button : t.c.outline,
+            backgroundColor: selected ? t.button : "transparent",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {selected ? <Icon name="check" size={14} color={t.onButton} weight="bold" /> : null}
+        </View>
+      ) : (
+        <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selected ? t.button : t.c.outline, alignItems: "center", justifyContent: "center" }}>
+          {selected ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: t.button }} /> : null}
+        </View>
+      )}
+    </Pressable>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Inputs                                                              */
 /* ------------------------------------------------------------------ */
+
+/** Hide the browser focus ring in the web preview (fields show their own). */
+const noOutline = (Platform.OS === "web" ? { outlineStyle: "none" } : {}) as object;
 
 export function Field({
   label,
   icon,
   secure,
   error,
+  hint,
+  prefix,
+  right,
   ...input
-}: TextInputProps & { label: string; icon?: IconName; secure?: boolean; error?: string }) {
+}: TextInputProps & { label: string; icon?: IconName; secure?: boolean; error?: string; hint?: string; prefix?: string; right?: ReactNode }) {
   const t = useTheme();
   const [hidden, setHidden] = useState(true);
   const [focused, setFocused] = useState(false);
+  const locked = input.editable === false;
   return (
-    <View style={{ marginBottom: 14 }}>
+    <View style={{ marginBottom: 16 }}>
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
           gap: 12,
-          minHeight: 58,
+          minHeight: 56,
           borderRadius: radius.pill,
-          borderWidth: focused ? 1.5 : 1,
-          borderColor: error ? t.danger : focused ? t.primary : t.border,
-          paddingHorizontal: 18,
-          backgroundColor: t.bg,
+          borderWidth: focused || error ? 2 : 1,
+          borderColor: error ? t.c.error : focused ? t.button : t.c.outline,
+          paddingHorizontal: 20,
+          backgroundColor: locked ? t.c.surfaceContainer : t.bg,
         }}
       >
-        {icon ? <Icon name={icon} size={18} color={t.textMuted} /> : null}
+        {icon ? <Icon name={icon} size={20} color={error ? t.c.error : t.textMuted} /> : null}
         <View style={{ flex: 1, paddingVertical: 8 }}>
-          <T variant="caption" muted>
+          <T variant="bodySmall" color={error ? t.c.error : t.textMuted}>
             {label}
           </T>
-          <TextInput
-            placeholderTextColor={t.textMuted}
-            secureTextEntry={secure && hidden}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            {...input}
-            style={[{ fontFamily: fonts.medium, fontSize: 16, color: t.text, padding: 0, marginTop: 2 }, noOutline, input.multiline ? { minHeight: 70, textAlignVertical: "top" } : null]}
-          />
+          <Row gap={6}>
+            {prefix ? <T variant="bodyLarge">{prefix}</T> : null}
+            <TextInput
+              placeholderTextColor={t.c.outline}
+              secureTextEntry={secure && hidden}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              accessibilityLabel={label}
+              {...input}
+              style={[
+                { flex: 1, fontFamily: fonts.regular, fontSize: 16, color: t.text, padding: 0 },
+                noOutline,
+                input.multiline ? { minHeight: 72, textAlignVertical: "top" } : null,
+              ]}
+            />
+          </Row>
         </View>
-        {secure ? (
-          <IconButton icon={hidden ? "eye" : "eye-off"} label={hidden ? "Show password" : "Hide password"} size={34} onPress={() => setHidden((h) => !h)} />
-        ) : null}
+        {error ? <Icon name="alert" size={20} color={t.c.error} /> : null}
+        {secure ? <IconButton icon={hidden ? "eye" : "eye-off"} label={hidden ? "Show password" : "Hide password"} size={36} onPress={() => setHidden((h) => !h)} /> : null}
+        {right}
       </View>
-      {error ? (
-        <T variant="caption" color={t.danger} style={{ marginTop: 4, marginLeft: 18 }}>
-          {error}
+      {error || hint ? (
+        <T variant="bodySmall" color={error ? t.c.error : t.textMuted} style={{ marginTop: 4, marginLeft: 20 }}>
+          {error ?? hint}
         </T>
       ) : null}
     </View>
+  );
+}
+
+/** Tappable field that opens a picker (Country, State, City…). */
+export function SelectField({ label, value, placeholder, onPress, icon }: { label: string; value?: string | null; placeholder?: string; onPress: () => void; icon?: IconName }) {
+  const t = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value ?? placeholder ?? ""}`}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        minHeight: 56,
+        borderRadius: radius.pill,
+        borderWidth: 1,
+        borderColor: t.c.outline,
+        paddingHorizontal: 20,
+        marginBottom: 16,
+      }}
+    >
+      {icon ? <Icon name={icon} size={20} color={t.textMuted} /> : null}
+      <View style={{ flex: 1, paddingVertical: 8 }}>
+        <T variant="bodySmall" muted>
+          {label}
+        </T>
+        <T variant="bodyLarge" color={value ? t.text : t.c.outline}>
+          {value ?? placeholder ?? "Choose"}
+        </T>
+      </View>
+      <Icon name="chevron-down" size={18} color={t.textMuted} />
+    </Pressable>
   );
 }
 
@@ -708,6 +929,7 @@ export function SearchBox({
   onSubmit,
   autoFocus,
   onPress,
+  outlined = true,
 }: {
   value?: string;
   onChangeText?: (s: string) => void;
@@ -715,6 +937,7 @@ export function SearchBox({
   onSubmit?: () => void;
   autoFocus?: boolean;
   onPress?: () => void;
+  outlined?: boolean;
 }) {
   const t = useTheme();
   const box: ViewStyle = {
@@ -722,18 +945,18 @@ export function SearchBox({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    height: 46,
+    height: 52,
     borderRadius: radius.pill,
-    borderWidth: 1.5,
-    borderColor: t.primary,
-    backgroundColor: t.surfaceAlt,
-    paddingHorizontal: 14,
+    borderWidth: outlined ? 1.5 : 0,
+    borderColor: t.button,
+    backgroundColor: t.c.surfaceContainerHigh,
+    paddingHorizontal: 16,
   };
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={box}>
-        <Icon name="search" size={18} color={t.textMuted} />
-        <T variant="small" muted>
+      <Pressable onPress={onPress} style={[box, { borderWidth: 0 }]} accessibilityRole="search">
+        <Icon name="search" size={20} color={t.textMuted} />
+        <T variant="bodyLarge" muted>
           {placeholder}
         </T>
       </Pressable>
@@ -741,7 +964,7 @@ export function SearchBox({
   }
   return (
     <View style={box}>
-      <Icon name="search" size={18} color={t.text} />
+      <Icon name="search" size={20} color={t.text} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -751,15 +974,16 @@ export function SearchBox({
         returnKeyType="search"
         onSubmitEditing={onSubmit}
         autoCorrect={false}
-        style={[{ flex: 1, fontFamily: fonts.medium, fontSize: 15, color: t.text, padding: 0 }, noOutline]}
+        accessibilityLabel={placeholder}
+        style={[{ flex: 1, fontFamily: fonts.regular, fontSize: 16, color: t.text, padding: 0 }, noOutline]}
       />
-      {value ? <IconButton icon="x" label="Clear search" size={30} onPress={() => onChangeText?.("")} /> : null}
+      {value ? <IconButton icon="x" label="Clear search" size={32} onPress={() => onChangeText?.("")} /> : null}
     </View>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* States                                                              */
+/* Feedback                                                            */
 /* ------------------------------------------------------------------ */
 
 export function Loading({ label }: { label?: string }) {
@@ -768,7 +992,7 @@ export function Loading({ label }: { label?: string }) {
     <View style={{ paddingVertical: 48, alignItems: "center", gap: 10 }}>
       <ActivityIndicator color={t.primary} />
       {label ? (
-        <T variant="small" muted>
+        <T variant="bodyMedium" muted>
           {label}
         </T>
       ) : null}
@@ -776,16 +1000,43 @@ export function Loading({ label }: { label?: string }) {
   );
 }
 
-export function ErrorView({ message, onRetry }: { message: string; onRetry?: () => void }) {
+/** Grey placeholder block for skeleton loading. */
+export function Skeleton({ h = 16, w = "100%", r = 8, style }: { h?: number; w?: DimensionValue; r?: number; style?: StyleProp<ViewStyle> }) {
+  const t = useTheme();
+  const o = useState(() => new Animated.Value(0.5))[0];
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(o, { toValue: 1, duration: 700, useNativeDriver: Platform.OS !== "web" }),
+        Animated.timing(o, { toValue: 0.5, duration: 700, useNativeDriver: Platform.OS !== "web" }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [o]);
+  return <Animated.View style={[{ height: h, width: w, borderRadius: r, backgroundColor: t.c.surfaceContainerHigh, opacity: o }, style]} />;
+}
+
+export function ErrorView({ message, onRetry, title = "Something went wrong", code }: { message: string; onRetry?: () => void; title?: string; code?: string }) {
   const t = useTheme();
   return (
-    <Card style={{ marginVertical: 12, alignItems: "center", gap: 10, paddingVertical: 20 }} bg={t.tints.pink.bg} bordered={false}>
-      <Icon name="alert-circle" size={22} color={t.tints.pink.fg} />
-      <T variant="small" center color={t.tints.pink.fg}>
+    <View style={{ alignItems: "center", paddingVertical: 32, paddingHorizontal: 12, gap: 10 }}>
+      <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: t.c.errorContainer, alignItems: "center", justifyContent: "center" }}>
+        <Icon name="wifi-off" size={36} color={t.c.onErrorContainer} />
+      </View>
+      <T variant="headlineSmall" center>
+        {title}
+      </T>
+      <T variant="bodyMedium" muted center style={{ maxWidth: 300 }}>
         {message}
       </T>
-      {onRetry ? <Button label="Try again" small full={false} variant="outline" onPress={onRetry} /> : null}
-    </Card>
+      {onRetry ? <Button label="Try again" icon="refresh" full={false} onPress={onRetry} style={{ alignSelf: "center", marginTop: 6 }} /> : null}
+      {code ? (
+        <T variant="bodySmall" muted>
+          {code}
+        </T>
+      ) : null}
+    </View>
   );
 }
 
@@ -796,6 +1047,8 @@ export function EmptyState({
   text,
   action,
   onAction,
+  secondary,
+  onSecondary,
 }: {
   icon: IconName;
   tint?: Tint;
@@ -803,29 +1056,140 @@ export function EmptyState({
   text?: string;
   action?: string;
   onAction?: () => void;
+  secondary?: string;
+  onSecondary?: () => void;
 }) {
   const t = useTheme();
   const c = t.tints[tint];
   return (
     <View style={{ alignItems: "center", paddingVertical: 40, paddingHorizontal: 12, gap: 10 }}>
-      <View style={{ width: 92, height: 92, borderRadius: 46, backgroundColor: c.bg, alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-        <Icon name={icon} size={38} color={t.text} />
-        <Blob size={14} color={brand.gold} top={4} right={6} />
+      <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: c.bg, alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+        <Icon name={icon} size={40} color={c.fg} />
+        <Blob size={16} color={brand.gold} top={4} right={6} />
       </View>
-      <T variant="h2" center>
+      <T variant="headlineSmall" center>
         {title}
       </T>
       {text ? (
-        <T variant="small" muted center style={{ maxWidth: 300 }}>
+        <T variant="bodyMedium" muted center style={{ maxWidth: 300 }}>
           {text}
         </T>
       ) : null}
-      {action ? <Button label={action} small full={false} variant="outline" onPress={onAction} style={{ marginTop: 8, alignSelf: "center" }} /> : null}
+      {action ? <Button label={action} full={false} variant="outline" onPress={onAction} style={{ marginTop: 8, alignSelf: "center" }} /> : null}
+      {secondary ? <TextButton label={secondary} onPress={onSecondary} underline /> : null}
     </View>
   );
 }
 
-export function Divider({ theme }: { theme?: Theme }) {
+/** Coloured inline message (info, success, warning, error). */
+export function Alert({ tone = "info", title, text, icon }: { tone?: "info" | "success" | "warning" | "error"; title?: string; text: string; icon?: IconName }) {
   const t = useTheme();
-  return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: (theme ?? t).border, marginVertical: 12 }} />;
+  const map = {
+    info: { bg: t.c.surfaceContainerHigh, fg: t.text, icon: "info" as IconName },
+    success: { bg: t.c.tertiaryContainer, fg: t.c.onTertiaryContainer, icon: "check-circle" as IconName },
+    warning: { bg: t.c.secondaryContainer, fg: t.c.onSecondaryContainer, icon: "warning" as IconName },
+    error: { bg: t.c.errorContainer, fg: t.c.onErrorContainer, icon: "alert" as IconName },
+  }[tone];
+  return (
+    <Row gap={12} style={{ backgroundColor: map.bg, borderRadius: radius.lg, padding: 14, alignItems: "flex-start" }}>
+      <Icon name={icon ?? map.icon} size={20} color={map.fg} />
+      <View style={{ flex: 1, gap: 2 }}>
+        {title ? (
+          <T variant="titleSmall" color={map.fg}>
+            {title}
+          </T>
+        ) : null}
+        <T variant="bodyMedium" color={map.fg}>
+          {text}
+        </T>
+      </View>
+    </Row>
+  );
+}
+
+/** Material 3 basic dialog. */
+export function Dialog({
+  visible,
+  icon,
+  title,
+  text,
+  confirm,
+  onConfirm,
+  cancel = "Cancel",
+  onCancel,
+  danger,
+  busy,
+  children,
+}: {
+  visible: boolean;
+  icon?: IconName;
+  title: string;
+  text?: string;
+  confirm: string;
+  onConfirm: () => void;
+  cancel?: string;
+  onCancel: () => void;
+  danger?: boolean;
+  busy?: boolean;
+  children?: ReactNode;
+}) {
+  const t = useTheme();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <Pressable style={{ flex: 1, backgroundColor: t.c.scrim, justifyContent: "center", padding: 28 }} onPress={onCancel} accessibilityLabel="Close">
+        <Pressable onPress={() => undefined} style={{ backgroundColor: t.c.surfaceContainerHigh, borderRadius: radius.xxl, padding: 24, gap: 14 }}>
+          {icon ? (
+            <View style={{ alignItems: "center" }}>
+              <Icon name={icon} size={28} color={danger ? t.c.error : t.primary} />
+            </View>
+          ) : null}
+          <T variant="headlineSmall" center={Boolean(icon)}>
+            {title}
+          </T>
+          {text ? (
+            <T variant="bodyMedium" muted>
+              {text}
+            </T>
+          ) : null}
+          {children}
+          <Row gap={8} style={{ justifyContent: "flex-end", marginTop: 6 }}>
+            <Button label={cancel} variant="text" full={false} onPress={onCancel} />
+            <Button label={confirm} variant={danger ? "danger" : "primary"} full={false} onPress={onConfirm} loading={busy} />
+          </Row>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/** Short message at the bottom of the screen. */
+export function Snackbar({ text, onHide, action, onAction }: { text: string | null; onHide: () => void; action?: string; onAction?: () => void }) {
+  const t = useTheme();
+  useEffect(() => {
+    if (!text) return;
+    const timer = setTimeout(onHide, 4000);
+    return () => clearTimeout(timer);
+  }, [text, onHide]);
+  if (!text) return null;
+  return (
+    <View pointerEvents="box-none" style={{ position: "absolute", left: 16, right: 16, bottom: 16 }}>
+      <Row gap={12} style={{ backgroundColor: t.c.inverseSurface, borderRadius: radius.sm, paddingHorizontal: 16, paddingVertical: 14 }}>
+        <T variant="bodyMedium" color={t.c.inverseOnSurface} style={{ flex: 1 }}>
+          {text}
+        </T>
+        {action ? (
+          <Pressable onPress={onAction}>
+            <T variant="labelLarge" color={t.scheme === "dark" ? brand.maroon : "#FFB4A8"}>
+              {action}
+            </T>
+          </Pressable>
+        ) : null}
+      </Row>
+    </View>
+  );
+}
+
+export function Divider() {
+  const t = useTheme();
+  return <View style={{ height: 1, backgroundColor: t.c.outlineVariant, marginVertical: 12 }} />;
 }

@@ -44,7 +44,7 @@ export default function ResourceScreen() {
           r ? (
             <Row gap={4}>
               <IconButton icon="bookmark" label={r.bookmarked ? "Remove from saved" : "Save"} color={r.bookmarked ? t.primary : t.text} bordered onPress={bookmark} />
-              <IconButton icon="share-2" label="Share" bordered onPress={() => Share.share({ message: `${r.title} on the CYC app${r.external_url ? `: ${r.external_url}` : ""}` })} />
+              <IconButton icon="share" label="Share" bordered onPress={() => Share.share({ message: `${r.title} on the CYC app${r.external_url ? `: ${r.external_url}` : ""}` })} />
             </Row>
           ) : null
         }

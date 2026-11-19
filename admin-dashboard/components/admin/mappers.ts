@@ -315,6 +315,10 @@ export type ApiLesson = {
   body: string | null;
   video_url: string | null;
   duration_minutes: number | null;
+  module_title?: string | null;
+  scripture_reference?: string | null;
+  scripture_text?: string | null;
+  notes_url?: string | null;
 };
 
 export type ApiQuiz = {
@@ -324,7 +328,7 @@ export type ApiQuiz = {
   title: string;
   pass_mark: number;
   question_count: number;
-  questions: { prompt: string; options: string[]; correct_index: number | null }[];
+  questions: { prompt: string; options: string[]; correct_index: number | null; explanation?: string | null }[];
   attempt_count: number;
 };
 
@@ -395,6 +399,14 @@ export type ApiChapter = {
   language_code: string | null;
   member_count: number;
   contact_email: string | null;
+  contact_phone?: string | null;
+  state?: string | null;
+  venue?: string | null;
+  address?: string | null;
+  meeting_schedule?: string | null;
+  meeting_time?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   is_active: boolean;
   my_role?: string | null;
   created_at: string;
@@ -414,6 +426,16 @@ export function mapChapter(c: ApiChapter): ChapterRow {
     contact: c.contact_email ?? "—",
     active: c.is_active,
     createdAt: c.created_at,
+    details: {
+      contact_phone: c.contact_phone ?? null,
+      state: c.state ?? null,
+      venue: c.venue ?? null,
+      address: c.address ?? null,
+      meeting_schedule: c.meeting_schedule ?? null,
+      meeting_time: c.meeting_time ?? null,
+      latitude: c.latitude ?? null,
+      longitude: c.longitude ?? null,
+    },
   };
 }
 

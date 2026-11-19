@@ -62,6 +62,11 @@ City = Annotated[
     AfterValidator(_reject_control_characters),
 ]
 
+Phone = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=40, pattern=r"^[0-9+()\-. ]+$"),
+]
+
 
 class ProfileCreate(BaseModel):
     """Initializes the current user's profile (onboarding: basic information)."""
@@ -73,6 +78,7 @@ class ProfileCreate(BaseModel):
     language_code: LanguageCode | None = None
     country_code: CountryCode | None = None
     city: City | None = None
+    phone: Phone | None = None
     timezone: TimeZoneId | None = None
 
 
@@ -94,6 +100,7 @@ class ProfileUpdate(BaseModel):
     language_code: LanguageCode | None = None
     country_code: CountryCode | None = None
     city: Annotated[City | None, AfterValidator(_empty_to_none)] = None
+    phone: Annotated[Phone | None, AfterValidator(_empty_to_none)] = None
     timezone: TimeZoneId | None = None
 
     @model_validator(mode="after")
@@ -114,6 +121,7 @@ class ProfileRead(BaseModel):
     language_code: str | None
     country_code: str | None
     city: str | None = None
+    phone: str | None = None
     timezone: str | None
     preferred_chapter_id: uuid.UUID | None = None
     chapter_id: uuid.UUID | None = None

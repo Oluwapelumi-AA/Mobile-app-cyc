@@ -14,19 +14,19 @@ export function MiniPlayer() {
   return (
     <Pressable
       onPress={() => router.push(`/sermon/${p.track!.id}`)}
-      style={{ marginHorizontal: 10, marginBottom: 6, borderRadius: 14, backgroundColor: t.surfaceAlt, overflow: "hidden" }}
+      style={{ marginHorizontal: 10, marginBottom: 6, borderRadius: 14, backgroundColor: t.c.surfaceContainerHigh, overflow: "hidden" }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 8 }}>
-        <IconTile icon="headphones" tint="red" size={36} rounded={9} />
+        <IconTile icon="headphones" tint="red" size={40} rounded={10} />
         <View style={{ flex: 1 }}>
-          <T variant="small" weight="semibold" numberOfLines={1}>
+          <T variant="titleSmall" numberOfLines={1}>
             {p.track.title}
           </T>
-          <T variant="caption" muted numberOfLines={1}>
+          <T variant="bodySmall" muted numberOfLines={1}>
             {p.track.author_name ?? "CYC Sermons"}
           </T>
         </View>
-        <IconButton icon={p.playing ? "pause" : "play"} label={p.playing ? "Pause" : "Play"} onPress={p.toggle} size={38} />
+        <IconButton icon={p.playing ? "pause" : "play"} weight="fill" label={p.playing ? "Pause" : "Play"} onPress={p.toggle} size={40} />
         <IconButton icon="x" label="Stop" onPress={p.stop} size={32} color={t.textMuted} />
       </View>
       <View style={{ height: 3, backgroundColor: t.border }}>

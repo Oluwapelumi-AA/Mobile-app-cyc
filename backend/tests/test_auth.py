@@ -161,7 +161,8 @@ def test_login_rejects_inactive_account(client, test_db):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "This account is inactive"
+    assert response.json()["detail"]["code"] == "account_suspended"
+    assert response.json()["detail"]["message"] == "This account is inactive"
 
 def test_me_returns_authenticated_user(client, test_db):
     user = User(

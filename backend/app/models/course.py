@@ -119,6 +119,11 @@ class CourseLesson(Base):
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     video_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Lessons with the same module title are grouped together in the app.
+    module_title: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    scripture_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    scripture_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
 
@@ -177,6 +182,11 @@ class CourseEnrollment(Base):
     # Set when every lesson is complete; the course certificate.
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    # Printed on the certificate; anyone can check it with
+    # GET /certificates/verify/{number}.
+    certificate_number: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, unique=True
     )
     created_at: Mapped[datetime] = _created()
 

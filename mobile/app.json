@@ -49,7 +49,8 @@
           "color": "#990000"
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-sharing"
     ],
     "scheme": "cyc",
     "splash": {

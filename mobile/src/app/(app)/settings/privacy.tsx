@@ -1,72 +1,73 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { Linking, View } from "react-native";
+import * as Location from "expo-location";
+import { useFocusEffect } from "expo-router";
 
-import { Button, Card, ErrorView, Field, Header, ListGroup, ListRow, Screen, T } from "@/components/ui";
-import { api, clearTokens, errorText } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
-import { useTheme } from "@/lib/theme";
+import { Alert, Badge, ChoiceRow, Header, ListGroup, ListRow, Screen, SectionHeader, T, Toggle } from "@/components/ui";
+import { ABOUT, CYC_CONTACT } from "@/lib/content";
+import { forgetPlace, locateMe, locationPermission } from "@/lib/location";
 
-/** What others can see, and deleting the account (required by the app stores). */
+const VISIBILITY = [
+  { key: "everyone", title: "Everyone in CYC", sub: "Any member can see your profile" },
+  { key: "chapter", title: "My chapter only", sub: "Only members of your chapter" },
+  { key: "nobody", title: "Only me", sub: "Hide your profile from other members" },
+];
+
+/** Privacy (Figma: Settings – Privacy). */
 export default function Privacy() {
-  const t = useTheme();
-  const { signOut } = useAuth();
-  const [deleting, setDeleting] = useState(false);
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [loc, setLoc] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      void locationPermission().then(setLoc);
+    }, []),
+  );
 
-  const remove = async () => {
-    if (!password) return setError("Enter your password to confirm.");
-    setBusy(true);
-    setError("");
-    try {
-      await api("/auth/delete-account", { method: "POST", body: { password } });
-      await clearTokens();
-      await signOut();
-    } catch (err) {
-      setError(errorText(err));
-      setBusy(false);
+  const toggleLocation = async (on: boolean) => {
+    if (on) {
+      const place = await locateMe().catch(() => null);
+      if (!place) {
+        // Permission was refused before: only the phone's settings can turn it back on.
+        void Linking.openSettings().catch(() => undefined);
+      }
+      setLoc(Boolean(place));
+    } else {
+      await forgetPlace();
+      setLoc(false);
+      const perm = await Location.getForegroundPermissionsAsync().catch(() => null);
+      if (perm?.granted) void Linking.openSettings().catch(() => undefined);
     }
   };
 
   return (
     <Screen edges={["top", "bottom"]}>
       <Header title="Privacy" />
-      <T variant="h3" style={{ marginBottom: 10 }}>
-        What other members see
-      </T>
-      <ListGroup>
-        <ListRow icon="user" label="Your name, photo and bio" chevron={false} />
-        <ListRow icon="home" label="Your chapter and department" chevron={false} />
-        <ListRow icon="message-circle" label="Posts and comments in your chapter" chevron={false} />
-      </ListGroup>
-      <T variant="caption" muted style={{ marginTop: 8 }}>
-        Your email address is only visible to your chapter’s coordinator and CYC admins.
+
+      <SectionHeader title="Who can see my profile" style={{ marginTop: 4 }} />
+      <View style={{ gap: 8, opacity: 0.6 }}>
+        {VISIBILITY.map((v) => (
+          <ChoiceRow key={v.key} title={v.title} subtitle={v.sub} selected={v.key === "everyone"} onPress={() => undefined} />
+        ))}
+      </View>
+      <View style={{ marginTop: 10, flexDirection: "row" }}>
+        <Badge label="Coming soon" />
+      </View>
+      <T variant="bodySmall" muted style={{ marginTop: 8 }}>
+        For now, members can see your name, photo, bio, chapter and department. Your email and phone are only visible to your chapter coordinator and CYC admins.
       </T>
 
-      <T variant="h3" style={{ marginTop: 26, marginBottom: 10 }}>
-        Delete account
-      </T>
-      {!deleting ? (
-        <Card style={{ gap: 12 }}>
-          <T variant="small" muted>
-            This permanently deletes your profile, progress and saved items, and signs you out everywhere. Your posts stay, shown as “Deleted user”.
-          </T>
-          <Button label="Delete my account" variant="outline" onPress={() => setDeleting(true)} style={{ borderColor: t.danger }} />
-        </Card>
-      ) : (
-        <Card bg={t.tints.pink.bg} bordered={false} style={{ gap: 6 }}>
-          <T variant="title" color={t.tints.pink.fg}>
-            This can’t be undone
-          </T>
-          <T variant="small" color={t.tints.pink.fg} style={{ marginBottom: 8 }}>
-            Enter your password to delete your account.
-          </T>
-          <Field label="Password" icon="lock" secure value={password} onChangeText={setPassword} />
-          {error ? <ErrorView message={error} /> : null}
-          <Button label="Delete my account" onPress={remove} loading={busy} />
-          <Button label="Cancel" variant="outline" onPress={() => (setDeleting(false), setPassword(""), setError(""))} style={{ marginTop: 8 }} />
-        </Card>
-      )}
+      <SectionHeader title="Location" />
+      <ListGroup>
+        <ListRow icon="map-pin" iconCircle label="Location access" sublabel="Shows chapters and events near you" chevron={false} right={<Toggle value={loc} onChange={toggleLocation} label="Location access" />} />
+      </ListGroup>
+
+      <SectionHeader title="Your data" />
+      <ListGroup>
+        <ListRow icon="file-text" iconCircle label="Privacy policy" onPress={() => (ABOUT.privacyPolicyUrl ? Linking.openURL(ABOUT.privacyPolicyUrl) : Linking.openURL(`mailto:${CYC_CONTACT.email}?subject=Privacy%20policy`))} />
+        <ListRow icon="mail" iconCircle label="Ask about my data" sublabel={CYC_CONTACT.email} onPress={() => Linking.openURL(`mailto:${CYC_CONTACT.email}?subject=My%20data`)} />
+      </ListGroup>
+      <View style={{ marginTop: 16 }}>
+        <Alert text="To delete your account, go to Profile → Account → Delete account." />
+      </View>
     </Screen>
   );
 }

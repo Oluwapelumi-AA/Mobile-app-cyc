@@ -33,6 +33,7 @@ class UserProfile(Base):
     language_code: Mapped[str | None] = mapped_column(String(35), nullable=True)
     country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # User's preferred Chapter; this does not grant membership.

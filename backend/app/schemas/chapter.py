@@ -4,7 +4,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 from app.schemas.common import UtcDatetime
 from app.schemas.locale import CountryCode, LanguageCode, TimeZoneId
@@ -35,8 +35,27 @@ ChapterCity = Annotated[
     StringConstraints(strip_whitespace=True, max_length=100),
 ]
 
+ShortText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=150)]
+Address = Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)]
+Phone = Annotated[str, StringConstraints(strip_whitespace=True, max_length=40, pattern=r"^[0-9+()\-. ]*$")]
+Latitude = Annotated[float, Field(ge=-90, le=90)]
+Longitude = Annotated[float, Field(ge=-180, le=180)]
 
-class ChapterCreate(BaseModel):
+
+class ChapterDetails(BaseModel):
+    """Where and when a Chapter meets, and how to reach it."""
+
+    contact_phone: Phone | None = None
+    state: ChapterCity | None = None
+    venue: ShortText | None = None
+    address: Address | None = None
+    meeting_schedule: ShortText | None = None
+    meeting_time: ShortText | None = None
+    latitude: Latitude | None = None
+    longitude: Longitude | None = None
+
+
+class ChapterCreate(ChapterDetails):
     model_config = ConfigDict(extra="forbid")
 
     name: ChapterName
@@ -49,7 +68,7 @@ class ChapterCreate(BaseModel):
     contact_email: EmailStr | None = None
 
 
-class ChapterUpdate(BaseModel):
+class ChapterUpdate(ChapterDetails):
     model_config = ConfigDict(extra="forbid")
 
     name: ChapterName | None = None
@@ -74,6 +93,14 @@ class ChapterRead(BaseModel):
     timezone: str
     language_code: str | None
     contact_email: str | None
+    contact_phone: str | None = None
+    state: str | None = None
+    venue: str | None = None
+    address: str | None = None
+    meeting_schedule: str | None = None
+    meeting_time: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     is_active: bool
     member_count: int
     # True if this is the user's own Chapter (they are an official Member).
@@ -83,3 +110,9 @@ class ChapterRead(BaseModel):
     my_role: str | None = None
     created_at: UtcDatetime
     updated_at: UtcDatetime
+
+
+class ChapterLeader(BaseModel):
+    user_id: UUID
+    display_name: str
+    role: str

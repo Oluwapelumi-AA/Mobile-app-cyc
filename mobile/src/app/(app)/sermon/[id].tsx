@@ -181,7 +181,7 @@ export default function SermonPlayer() {
           />
         </View>
         <IconButton
-          icon="more-vertical"
+          icon="more"
           label="More"
           bordered
           onPress={() =>
@@ -243,7 +243,7 @@ export default function SermonPlayer() {
       <Row gap={10} style={{ marginTop: 18 }}>
         <ActionButton icon="bookmark" label={r.bookmarked ? "Saved" : "Save"} active={r.bookmarked} onPress={bookmark} />
         <ActionButton icon={q.data?.saved ? "check-circle" : "download"} label={downloading ? "Saving…" : q.data?.saved ? "Downloaded" : "Download"} active={q.data?.saved} onPress={download} />
-        <ActionButton icon="share-2" label="Share" onPress={() => Share.share({ message: `${r.title}${r.author_name ? ` — ${r.author_name}` : ""} on the CYC app` })} />
+        <ActionButton icon="share" label="Share" onPress={() => Share.share({ message: `${r.title}${r.author_name ? ` — ${r.author_name}` : ""} on the CYC app` })} />
       </Row>
 
       {r.summary || paragraphs.length ? (

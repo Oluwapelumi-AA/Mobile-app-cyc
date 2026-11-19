@@ -32,6 +32,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db.session import get_db
+from app.models.moderation import AuditLog
 from app.models.refresh_session import RefreshSession
 from app.models.user import User
 from app.services import account, password_reset
@@ -181,9 +182,20 @@ def login(
         )
 
     if not user.is_active:
+        # The app shows "Your account is suspended" with the reason staff gave.
+        reason = db.scalar(
+            select(AuditLog.data)
+            .where(AuditLog.action == "user.suspended", AuditLog.target_id == user.id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(1)
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account is inactive",
+            detail={
+                "code": "account_suspended",
+                "message": "This account is inactive",
+                "reason": (reason or {}).get("reason"),
+            },
         )
 
     user.last_login_at = datetime.now(timezone.utc)

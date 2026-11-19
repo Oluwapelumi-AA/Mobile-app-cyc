@@ -1,21 +1,29 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform } from "react-native";
+import { KeyboardAvoidingView, Platform, View } from "react-native";
 
-import { Button, Card, ErrorView, Field, Header, Screen, T } from "@/components/ui";
+import { Alert, Button, Field, Header, IconTile, Screen, T, TextButton } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
-import { useTheme } from "@/lib/theme";
+import { useAuth } from "@/lib/auth";
 
-/** Two steps: email a 6-digit code, then set a new password with it. */
+type Step = "email" | "sent" | "password" | "done";
+
+/**
+ * Recovery path (Figma R2–R5): reset password → check your email → create a
+ * new password → password updated. CYC emails a 6-digit code rather than a
+ * link, so "Check your email" asks for the code.
+ */
 export default function ForgotPassword() {
-  const t = useTheme();
+  const { signIn } = useAuth();
   const params = useLocalSearchParams<{ email?: string }>();
-  const [step, setStep] = useState<"email" | "code" | "done">("email");
+  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState(params.email ?? "");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [touched, setTouched] = useState(false);
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -31,15 +39,16 @@ export default function ForgotPassword() {
 
   const sendCode = () =>
     run(async () => {
-      if (!email.includes("@")) throw new Error("Enter the email address you signed up with.");
+      if (!/^\S+@\S+\.\S+$/.test(email.trim())) throw new Error("Enter the email address you signed up with.");
       await api("/auth/password-reset/request", { method: "POST", body: { email: email.trim() }, auth: false });
-      setStep("code");
+      setStep("sent");
     });
 
-  const reset = () =>
+  const save = () =>
     run(async () => {
-      if (!/^\d{6}$/.test(code.trim())) throw new Error("Enter the 6-digit code from the email.");
-      if (password.length < 12) throw new Error("Your new password needs at least 12 characters.");
+      setTouched(true);
+      if (password.length < 12) throw new Error("Use at least 12 characters.");
+      if (password !== confirm) throw new Error("The two passwords don't match.");
       await api("/auth/password-reset/confirm", {
         method: "POST",
         body: { email: email.trim(), code: code.trim(), new_password: password },
@@ -48,48 +57,107 @@ export default function ForgotPassword() {
       setStep("done");
     });
 
+  const back = () => (step === "email" || step === "done" ? router.back() : setStep(step === "password" ? "sent" : "email"));
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <Screen edges={["top", "bottom"]}>
-        <Header />
-        <T variant="h1" style={{ marginTop: 18 }}>
-          {step === "done" ? "Password changed" : "Reset your password"}
-        </T>
-        <T variant="body" muted style={{ marginTop: 4, marginBottom: 22 }}>
-          {step === "email"
-            ? "We'll email you a 6-digit code."
-            : step === "code"
-              ? `If ${email.trim()} has a CYC account, a code is on its way. It works for 15 minutes.`
-              : "You can now sign in with your new password."}
-        </T>
+      <Screen
+        edges={["top", "bottom"]}
+        footer={
+          <View style={{ paddingHorizontal: 20, paddingBottom: 12, gap: 8 }}>
+            {step === "email" ? <Button label="Send reset code" onPress={sendCode} loading={busy} disabled={!email.trim()} /> : null}
+            {step === "sent" ? (
+              <>
+                <Button label="Continue" disabled={!/^\d{6}$/.test(code.trim())} onPress={() => setStep("password")} />
+                <View style={{ alignItems: "center" }}>
+                  <TextButton label="Didn't get it? Send again" onPress={sendCode} />
+                </View>
+              </>
+            ) : null}
+            {step === "password" ? <Button label="Update password" onPress={save} loading={busy} disabled={!password || !confirm} /> : null}
+            {step === "done" ? (
+              <Button
+                label="Continue to Home"
+                loading={busy}
+                onPress={() =>
+                  run(async () => {
+                    await signIn(email, password);
+                  })
+                }
+              />
+            ) : null}
+          </View>
+        }
+      >
+        <Header onBack={back} back={step !== "done"} />
 
         {step === "email" ? (
-          <Field label="Email address" icon="mail" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" onSubmitEditing={sendCode} />
-        ) : null}
-        {step === "code" ? (
           <>
-            <Field label="6-digit code" icon="hash" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} autoComplete="one-time-code" />
-            <Field label="New password" icon="lock" secure value={password} onChangeText={setPassword} placeholder="At least 12 characters" onSubmitEditing={reset} />
+            <T variant="headlineMedium" accessibilityRole="header">
+              Reset your password
+            </T>
+            <T variant="bodyLarge" muted style={{ marginTop: 4, marginBottom: 24 }}>
+              Enter your email and we&apos;ll send you a code to choose a new password.
+            </T>
+            <Field label="Email address" icon="mail" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" onSubmitEditing={sendCode} />
           </>
         ) : null}
-        {error ? <ErrorView message={error} /> : null}
 
-        {step === "email" ? <Button label="Send code" onPress={sendCode} loading={busy} style={{ marginTop: 12 }} /> : null}
-        {step === "code" ? (
+        {step === "sent" ? (
           <>
-            <Button label="Change password" onPress={reset} loading={busy} style={{ marginTop: 12 }} />
-            <Button label="Send a new code" variant="outline" onPress={sendCode} style={{ marginTop: 12 }} />
+            <View style={{ alignItems: "center", marginTop: 12, marginBottom: 20 }}>
+              <IconTile icon="mail" tint="green" size={96} />
+            </View>
+            <T variant="headlineMedium" center accessibilityRole="header">
+              Check your email
+            </T>
+            <T variant="bodyLarge" muted center style={{ marginTop: 6, marginBottom: 24 }}>
+              If {email.trim()} has a CYC account, we&apos;ve sent a 6-digit code. It works for 15 minutes.
+            </T>
+            <Field label="6-digit code" icon="hash" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} autoComplete="one-time-code" textContentType="oneTimeCode" />
+            <T variant="bodySmall" muted center>
+              Can&apos;t see it? Check your spam folder.
+            </T>
           </>
         ) : null}
-        {step === "done" ? (
+
+        {step === "password" ? (
           <>
-            <Card bg={t.tints.green.bg} bordered={false}>
-              <T variant="small" color={t.tints.green.fg}>
-                For your security, you’ve been signed out on your other devices.
-              </T>
-            </Card>
-            <Button label="Sign in" onPress={() => router.replace("/sign-in")} style={{ marginTop: 18 }} />
+            <T variant="headlineMedium" accessibilityRole="header">
+              Create a new password
+            </T>
+            <T variant="bodyLarge" muted style={{ marginTop: 4, marginBottom: 24 }}>
+              Type it twice so typos are caught.
+            </T>
+            <Field label="New password" icon="lock" secure value={password} onChangeText={setPassword} hint="At least 12 characters" error={touched && password.length < 12 ? "Use at least 12 characters." : undefined} />
+            <Field
+              label="Confirm new password"
+              icon="lock"
+              secure
+              value={confirm}
+              onChangeText={setConfirm}
+              onSubmitEditing={save}
+              error={touched && confirm && confirm !== password ? "The two passwords don't match." : undefined}
+            />
           </>
+        ) : null}
+
+        {step === "done" ? (
+          <View style={{ alignItems: "center", gap: 12, marginTop: 40 }}>
+            <IconTile icon="check-circle" tint="green" size={96} />
+            <T variant="headlineMedium" center accessibilityRole="header">
+              Password updated
+            </T>
+            <T variant="bodyLarge" muted center>
+              You&apos;re all set. For your security we&apos;ve signed you out on your other devices.
+            </T>
+          </View>
+        ) : null}
+
+        {error ? (
+          <View style={{ marginTop: 12 }}>
+            <Alert tone="error" text={error} />
+          </View>
         ) : null}
       </Screen>
     </KeyboardAvoidingView>

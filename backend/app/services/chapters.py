@@ -12,7 +12,7 @@ from app.models.chapter import Chapter
 from app.models.chapter_management import ChapterStaff
 from app.models.user import AccountRole, MembershipStatus, User
 from app.models.user_profile import UserProfile
-from app.schemas.chapter import ChapterCreate, ChapterRead, ChapterUpdate
+from app.schemas.chapter import ChapterCreate, ChapterLeader, ChapterRead, ChapterUpdate
 from app.services import audit, chapter_access
 from app.services.errors import Conflict, Forbidden, InvalidInput, NotFound
 from app.services.resources import slugify
@@ -157,6 +157,14 @@ def _serialize(
             timezone=chapter.timezone,
             language_code=chapter.language_code,
             contact_email=chapter.contact_email,
+            contact_phone=chapter.contact_phone,
+            state=chapter.state,
+            venue=chapter.venue,
+            address=chapter.address,
+            meeting_schedule=chapter.meeting_schedule,
+            meeting_time=chapter.meeting_time,
+            latitude=chapter.latitude,
+            longitude=chapter.longitude,
             is_active=chapter.is_active,
             member_count=member_counts.get(chapter.id, 0),
             is_mine=chapter.id == my_chapter_id,
@@ -365,3 +373,24 @@ def set_chapter_archived(
         )
 
     return _commit(db, user_id, chapter)
+
+
+def chapter_leaders(db: Session, chapter_id: uuid.UUID) -> list[ChapterLeader]:
+    """The Chapter's Coordinator(s), by display name. Public."""
+    chapter = _get_chapter(db, chapter_id)
+    if not chapter.is_active:
+        raise CHAPTER_NOT_FOUND
+    rows = db.execute(
+        select(ChapterStaff.user_id, ChapterStaff.role, UserProfile.display_name)
+        .join(UserProfile, UserProfile.user_id == ChapterStaff.user_id, isouter=True)
+        .where(ChapterStaff.chapter_id == chapter_id)
+        .order_by(ChapterStaff.created_at)
+    ).all()
+    return [
+        ChapterLeader(
+            user_id=user_id,
+            display_name=name or "CYC leader",
+            role="Chapter coordinator" if role == "coordinator" else role.title(),
+        )
+        for user_id, role, name in rows
+    ]

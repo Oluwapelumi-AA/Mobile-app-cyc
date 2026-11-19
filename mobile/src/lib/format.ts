@@ -34,6 +34,9 @@ export const shortDate = (iso: string) => {
   return `${d.getDate()} ${monthShort(d)} ${d.getFullYear()}`;
 };
 
+/** "14 November 2026" */
+export const longDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+
 export function timeAgo(iso: string) {
   const secs = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   if (secs < 60) return "now";
