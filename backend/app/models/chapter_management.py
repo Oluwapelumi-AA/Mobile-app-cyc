@@ -27,21 +27,19 @@ def utc_now() -> datetime:
 class ChapterStaffRole(str, Enum):
     """Roles a platform Admin can give someone inside one Chapter.
 
-    - coordinator: runs the Chapter (members, events, meetings, resources,
-      announcements, access requests) and moderates it. One per Chapter.
-    - moderator: moderates the Chapter's posts and comments, reviews its
-      reports and bans people from it. Any number per Chapter.
+    - coordinator: runs the Chapter (events, meetings, announcements, access
+      requests) and moderates it (reports, posts and comments, bans). One per
+      Chapter. Resources and courses are managed by platform admins.
     """
 
     COORDINATOR = "coordinator"
-    MODERATOR = "moderator"
 
 
 class ChapterStaff(Base):
     __tablename__ = "chapter_staff"
     __table_args__ = (
         CheckConstraint(
-            "role IN ('coordinator', 'moderator')",
+            "role = 'coordinator'",
             name="ck_chapter_staff_role",
         ),
         # Someone holds at most one staff role in a Chapter.

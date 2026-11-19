@@ -238,9 +238,9 @@ export default function Chapters() {
               <div>
                 <h3 className="font-semibold text-ink">Who does what</h3>
                 <p className="mt-1 text-sm leading-6 text-ink/75">
-                  Platform admins create chapters, assign members and appoint staff. Each chapter has one{" "}
-                  <span className="font-medium text-ink">Coordinator</span> who runs it, and any number of{" "}
-                  <span className="font-medium text-ink">Moderators</span> who moderate posts, reports and bans.
+                  Platform admins create chapters, assign members and appoint coordinators. Each chapter has one{" "}
+                  <span className="font-medium text-ink">Coordinator</span> who runs it: events, live sessions,
+                  announcements, access requests and moderation. Resources and courses are managed by admins.
                 </p>
               </div>
             </div>
@@ -462,7 +462,7 @@ function ChapterManager({
           onChange={setTab}
           tabs={[
             { key: "overview", label: "Overview" },
-            { key: "staff", label: "Staff" },
+            { key: "staff", label: "Coordinator" },
             { key: "members", label: "Members" },
             { key: "announce", label: "Announce" },
           ]}
@@ -515,7 +515,6 @@ function ChapterStats({ chapterId }: { chapterId: string }) {
   const stats: [string, number][] = [
     ["Members", data.member_count],
     ["Coordinators", data.coordinator_count],
-    ["Moderators", data.moderator_count],
     ["Posts", data.post_count],
     ["Upcoming events", data.upcoming_event_count],
     ["Published resources", data.published_resource_count],
@@ -535,69 +534,36 @@ function ChapterStats({ chapterId }: { chapterId: string }) {
   );
 }
 
-type UserHit = { id: string; email: string; display_name: string | null };
 
 function StaffPanel({ chapterId, onToast }: { chapterId: string; onToast: Toast }) {
+  const { navigate } = useAdmin();
   const staff = useFetch<ApiStaff[]>(`chapters/${chapterId}/staff`);
-  const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<UserHit[]>([]);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) return;
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      api<{ items: UserHit[] }>(`admin/users?limit=8&q=${encodeURIComponent(q)}`)
-        .then((page) => !cancelled && setHits(page.items ?? []))
-        .catch(() => !cancelled && setHits([]));
-    }, 250);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [query]);
-
-  async function assign(userId: string, role: "coordinator" | "moderator") {
-    setBusy(true);
-    try {
-      await api(`chapters/${chapterId}/staff/${userId}`, { method: "PUT", body: JSON.stringify({ role }) });
-      onToast.success(role === "coordinator" ? "Coordinator assigned." : "Moderator added.");
-      setQuery("");
-      setHits([]);
-      staff.reload();
-    } catch (err) {
-      onToast.error(errorText(err, "Could not assign the role."));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function remove(userId: string) {
     setBusy(true);
     try {
       await api(`chapters/${chapterId}/staff/${userId}`, { method: "DELETE" });
-      onToast.success("Staff role removed.");
+      onToast.success("Coordinator removed. They stay a member of the chapter.");
       staff.reload();
     } catch (err) {
-      onToast.error(errorText(err, "Could not remove the role."));
+      onToast.error(errorText(err, "Could not remove the coordinator."));
     } finally {
       setBusy(false);
     }
   }
 
   const rows = staff.data ?? [];
-  const results = query.trim().length >= 2 ? hits : [];
 
   return (
-    <div className="mt-5 space-y-5">
-      <div>
-        <h3 className="mb-2 font-semibold text-ink">Current staff</h3>
-        {staff.loading ? <p className="text-sm text-muted">Loading…</p> : null}
-        {staff.error ? <p className="text-sm text-brand">{staff.error}</p> : null}
-        {!staff.loading && rows.length === 0 ? (
-          <p className="rounded-xl bg-canvas px-4 py-3 text-sm text-muted">No coordinator or moderators yet.</p>
-        ) : null}
+    <div className="mt-5 space-y-4">
+      <h3 className="font-semibold text-ink">Coordinator</h3>
+      {staff.loading ? <p className="text-sm text-muted">Loading…</p> : null}
+      {staff.error ? <p className="text-sm text-brand">{staff.error}</p> : null}
+      {!staff.loading && rows.length === 0 ? (
+        <p className="rounded-xl bg-canvas px-4 py-3 text-sm text-muted">This chapter has no coordinator yet.</p>
+      ) : null}
+      {rows.length ? (
         <ul className="divide-y divide-line rounded-xl border border-line">
           {rows.map((s) => {
             const name = s.display_name || s.email || s.user_id;
@@ -608,12 +574,7 @@ function StaffPanel({ chapterId, onToast }: { chapterId: string; onToast: Toast 
                   <p className="truncate text-sm font-medium text-ink">{name}</p>
                   <p className="truncate text-xs text-muted">{s.email}</p>
                 </div>
-                <StatusBadge status={s.role === "coordinator" ? "Coordinator" : "Moderator"} />
-                {s.role === "moderator" ? (
-                  <SecondaryButton disabled={busy} onClick={() => void assign(s.user_id, "coordinator")}>
-                    Make coordinator
-                  </SecondaryButton>
-                ) : null}
+                <StatusBadge status="Coordinator" />
                 <SecondaryButton tone="danger" disabled={busy} onClick={() => void remove(s.user_id)}>
                   Remove
                 </SecondaryButton>
@@ -621,36 +582,12 @@ function StaffPanel({ chapterId, onToast }: { chapterId: string; onToast: Toast 
             );
           })}
         </ul>
-      </div>
-
-      <div>
-        <h3 className="mb-2 font-semibold text-ink">Add staff</h3>
-        <SearchField value={query} onChange={setQuery} placeholder="Search users by name or email..." />
-        {results.length ? (
-          <ul className="mt-2 divide-y divide-line rounded-xl border border-line">
-            {results.map((u) => {
-              const name = u.display_name || u.email.split("@")[0];
-              return (
-                <li key={u.id} className="flex items-center gap-3 px-3 py-2.5">
-                  <Avatar name={name} size={30} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink">{name}</p>
-                    <p className="truncate text-xs text-muted">{u.email}</p>
-                  </div>
-                  <SecondaryButton disabled={busy} onClick={() => void assign(u.id, "moderator")}>
-                    Moderator
-                  </SecondaryButton>
-                  <SecondaryButton tone="brand" disabled={busy} onClick={() => void assign(u.id, "coordinator")}>
-                    Coordinator
-                  </SecondaryButton>
-                </li>
-              );
-            })}
-          </ul>
-        ) : query.trim().length >= 2 ? (
-          <p className="mt-2 text-sm text-muted">No matching users.</p>
-        ) : null}
-        <p className="mt-2 text-xs text-muted">A chapter has one coordinator. Remove the current one before appointing another.</p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <PrimaryButton icon={rows.length ? "refresh" : "plus"} onClick={() => navigate("team")}>
+          {rows.length ? "Replace coordinator" : "Assign a coordinator"}
+        </PrimaryButton>
+        <p className="text-xs text-muted">Opens Admins and coordinators, where you pick the person and this chapter.</p>
       </div>
     </div>
   );
@@ -704,7 +641,7 @@ function MembersPanel({ chapterId, onToast }: { chapterId: string; onToast: Toas
                   {m.department_name ? ` · ${m.department_name}` : ""}
                 </p>
               </div>
-              {m.staff_role ? <StatusBadge status={m.staff_role === "coordinator" ? "Coordinator" : "Moderator"} /> : null}
+              {m.staff_role ? <StatusBadge status="Coordinator" /> : null}
               {m.is_banned ? <StatusBadge status="Banned" /> : null}
               <RowMenu
                 actions={[

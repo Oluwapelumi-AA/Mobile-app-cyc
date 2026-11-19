@@ -8,8 +8,7 @@ Reports
   conflict; after review it reopens the same report.
 - The report keeps a snapshot of what was reported, so moderators see it as
   it was even after an edit or delete.
-- Reports about things inside a Chapter go to that Chapter's Moderators and
-  Coordinator. Reports about users, Chapters themselves and app-wide events
+- Reports about things inside a Chapter go to that Chapter's Coordinator. Reports about users, Chapters themselves and app-wide events
   and resources go to app moderators and admins, who also see everything.
 - Reviewing closes every open report about the same thing, as ``actioned``
   or ``dismissed``. Moderators can remove a reported post or comment as part
@@ -20,7 +19,7 @@ Reports
 
 Bans
 
-- A Chapter's Moderators and Coordinator (and app moderators) ban people
+- A Chapter's Coordinator (and app moderators) ban people
   from that Chapter: until unbanned they can still read it but can't post,
   comment, react or register there. Nobody bans someone with the same or a
   stronger role in the Chapter, and platform staff can't be banned.

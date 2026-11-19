@@ -34,17 +34,18 @@ def world(api):
     app.dependency_overrides[get_video_provider] = lambda: FakeVideoProvider(settings)
     app.dependency_overrides[get_object_storage] = lambda: InMemoryObjectStorage()
 
-    ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "outsider")}
+    ids = {name: api.add_user(name) for name in ("owner", "alice", "bob", "outsider")}
+    # "mod" is an app moderator who is also a Member here.
+    ids["mod"] = api.add_user("mod", AccountRole.MODERATOR)
     ids["staff"] = api.add_user("staff", AccountRole.MODERATOR)
     ids["admin"] = api.add_user("admin", AccountRole.ADMIN)
     cid = api.add_chapter("Abuja Fellowship")
     other = api.add_chapter("Lagos Youth")
-    # The Coordinator ("owner") and Moderator ("mod") are Members too.
+    # The Coordinator ("owner") and "mod" are Members too.
     for name in ("owner", "mod", "alice", "bob"):
         api.add_member(ids[name], cid, name.title())
     api.add_member(ids["outsider"], other, "Outsider")
     api.add_staff(ids["owner"], cid, "coordinator")
-    api.add_staff(ids["mod"], cid, "moderator")
     try:
         yield {"chapter_id": str(cid), **ids}
     finally:
@@ -454,15 +455,17 @@ def test_notifications_need_sign_in(api):
 def test_staff_role_and_removal_notify_the_member(api, world):
     api.act_as(world["admin"])
     cid = world["chapter_id"]
+    # Free the Coordinator seat, then give it to Alice.
+    assert api.client.delete(f"{CHAPTERS}/{cid}/staff/{world['owner']}").status_code == 204
     url = f"{CHAPTERS}/{cid}/staff/{world['alice']}"
-    assert api.client.put(url, json={"role": "moderator"}).status_code == 200
+    assert api.client.put(url, json={"role": "coordinator"}).status_code == 200
     # Same role again changes nothing, so no second notification.
-    assert api.client.put(url, json={"role": "moderator"}).status_code == 200
+    assert api.client.put(url, json={"role": "coordinator"}).status_code == 200
     assert api.client.delete(f"{CHAPTERS}/{cid}/members/{world['bob']}").status_code == 204
 
     alice = inbox(api, world["alice"])
-    assert [item["title"] for item in alice] == ["You are now a Moderator of Abuja Fellowship"]
-    assert alice[0]["data"] == {"chapter_id": cid, "role": "moderator"}
+    assert [item["title"] for item in alice] == ["You are now the Coordinator of Abuja Fellowship"]
+    assert alice[0]["data"] == {"chapter_id": cid, "role": "coordinator"}
     assert alice[0]["category"] == "chapter"
     bob = inbox(api, world["bob"])
     assert [item["type"] for item in bob] == ["chapter_removed"]
@@ -472,8 +475,8 @@ def test_staff_role_and_removal_notify_the_member(api, world):
 def test_losing_a_staff_role_notifies(api, world):
     api.act_as(world["admin"])
     cid = world["chapter_id"]
-    assert api.client.delete(f"{CHAPTERS}/{cid}/staff/{world['mod']}").status_code == 204
-    titles = [item["title"] for item in inbox(api, world["mod"])]
+    assert api.client.delete(f"{CHAPTERS}/{cid}/staff/{world['owner']}").status_code == 204
+    titles = [item["title"] for item in inbox(api, world["owner"])]
     assert titles == ["You're no longer on the staff of Abuja Fellowship"]
 
 
@@ -632,7 +635,7 @@ def test_app_wide_meeting_notifies_nobody(api, world):
 
 
 def test_publishing_a_resource_notifies_members_once(api, world):
-    api.act_as(world["owner"])
+    api.act_as(world["admin"])  # only admins add resources
     resource = api.client.post(
         RESOURCES,
         json={
@@ -651,14 +654,14 @@ def test_publishing_a_resource_notifies_members_once(api, world):
     assert [item["title"] for item in items] == ["New in Abuja Fellowship: Morning Devotional"]
     assert items[0]["body"] == "Start the day with Psalm 23"
     assert items[0]["data"]["resource_id"] == resource["id"]
-    assert inbox(api, world["owner"]) == []
+    assert inbox(api, world["admin"]) == []
     # Push and email are off for resources by default.
     register_device(api, world["bob"])
     assert deliveries(api) == []
 
 
 def test_app_wide_resource_notifies_nobody(api, world):
-    api.act_as(world["staff"])
+    api.act_as(world["admin"])
     resource = api.client.post(
         RESOURCES, json={"kind": "article", "title": "Welcome to CYC", "body": "Hello"}
     ).json()

@@ -1,8 +1,7 @@
 """Courses: a catalogue of lessons and quizzes with enrolment and grading.
 
-- A course belongs to a Chapter or to the app-wide catalogue. A Chapter's
-  Coordinator manages its courses; app moderators and admins manage every
-  course and are the only ones who add to the app-wide catalogue.
+- A course belongs to a Chapter or to the app-wide catalogue. Only platform
+  admins add and manage courses, for a Chapter or app-wide.
 - Courses start as drafts, seen only by the people who manage them.
   Publishing needs at least one lesson. A published Chapter course is seen
   by the Chapter's Members and staff; the app-wide catalogue by everyone.
@@ -15,7 +14,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, true
+from sqlalchemy import false, func, select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -51,7 +50,7 @@ from app.schemas.course import (
     QuizUpdate,
 )
 from app.services import chapter_access, pagination
-from app.services.chapter_access import is_platform_moderator
+from app.services.chapter_access import is_platform_admin
 from app.services.errors import Conflict, Forbidden, InvalidInput, NotFound
 
 COURSE_NOT_FOUND = NotFound("course_not_found", "Course not found.")
@@ -72,9 +71,8 @@ def _now() -> datetime:
 
 
 def _can_manage(db: Session, user_id: UserId, chapter_id: uuid.UUID | None) -> bool:
-    if chapter_id is None:
-        return is_platform_moderator(db, user_id)
-    return chapter_access.can_organize(db, user_id, chapter_id)
+    """Only platform admins manage courses, for a Chapter or app-wide."""
+    return is_platform_admin(db, user_id)
 
 
 def _visible_course(db: Session, user_id: UserId, course_id: uuid.UUID) -> tuple[Course, bool]:
@@ -100,13 +98,7 @@ def _visible_course(db: Session, user_id: UserId, course_id: uuid.UUID) -> tuple
 def _managed_course(db: Session, user_id: UserId, course_id: uuid.UUID) -> Course:
     course, can_manage = _visible_course(db, user_id, course_id)
     if not can_manage:
-        raise Forbidden(
-            "insufficient_role",
-            "Only the Chapter's Coordinator and app moderators or admins manage "
-            "its courses."
-            if course.chapter_id
-            else "Only app moderators and admins manage the app-wide catalogue.",
-        )
+        raise Forbidden("insufficient_role", "Only admins manage courses.")
     return course
 
 
@@ -132,19 +124,14 @@ def _visibility(db: Session, user_id: UserId):
             Course.chapter_id.in_(active) & Course.chapter_id.in_(readable)
         )
     published = (Course.status == PUBLISHED) & published
-    organized = chapter_access.organized_chapter_ids(db, user_id)
-    if organized is None:
+    if is_platform_admin(db, user_id):
         return true()
-    return published | Course.chapter_id.in_(organized)
+    return published
 
 
 def _managed_clause(db: Session, user_id: UserId):
-    """WHERE clause: courses the user manages. Only platform staff manage
-    the app-wide catalogue."""
-    organized = chapter_access.organized_chapter_ids(db, user_id)
-    if organized is None:
-        return true()
-    return Course.chapter_id.in_(organized)
+    """WHERE clause: courses the user manages (every course for admins)."""
+    return true() if is_platform_admin(db, user_id) else false()
 
 
 # Reading
@@ -356,12 +343,7 @@ def create_course(db: Session, user_id: UserId, data: CourseCreate) -> CourseRea
     if data.chapter_id is not None:
         chapter_access.get_active_chapter(db, data.chapter_id)
     if not _can_manage(db, user_id, data.chapter_id):
-        raise Forbidden(
-            "insufficient_role",
-            "Only the Chapter's Coordinator and app moderators or admins add its courses."
-            if data.chapter_id
-            else "Only app moderators and admins add to the app-wide catalogue.",
-        )
+        raise Forbidden("insufficient_role", "Only admins add courses.")
     course = Course(
         chapter_id=data.chapter_id,
         created_by=user_id,

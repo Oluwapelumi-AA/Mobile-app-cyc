@@ -83,7 +83,7 @@ def chapter_feed(
 
 
 # ---------------------------------------------------------------------------
-# Staff: one Coordinator and any number of Moderators per Chapter
+# Staff: one Coordinator per Chapter
 # ---------------------------------------------------------------------------
 
 
@@ -94,7 +94,7 @@ def chapter_staff(
     db: DbSession,
     role: ChapterStaffRole | None = None,
 ):
-    """The Coordinator first, then Moderators."""
+    """The Chapter's Coordinator."""
     return service.list_staff(db, user_id, chapter_id, role)
 
 
@@ -106,8 +106,7 @@ def assign_chapter_staff(
     user_id: CurrentUserId,
     db: DbSession,
 ):
-    """Make someone the Coordinator or a Moderator, or change their role.
-    Platform Admins only."""
+    """Make someone the Coordinator. Platform Admins only."""
     return service.assign_staff(db, user_id, chapter_id, target_id, data.role)
 
 
@@ -151,12 +150,11 @@ def _staff_routes(path: str, role: ChapterStaffRole) -> None:
 
 
 _staff_routes("coordinators", ChapterStaffRole.COORDINATOR)
-_staff_routes("moderators", ChapterStaffRole.MODERATOR)
 
 
 @router.get("/me/chapter-staff", response_model=list[MyStaffRoleRead])
 def my_staff_roles(user_id: CurrentUserId, db: DbSession):
-    """The Chapters you coordinate or moderate."""
+    """The Chapters you coordinate."""
     return service.list_my_staff_roles(db, user_id)
 
 

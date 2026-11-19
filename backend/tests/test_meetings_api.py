@@ -36,7 +36,7 @@ def video(api):
 
 @pytest.fixture
 def world(api, video):
-    """A Chapter whose Coordinator ("mod") hosts, a Chapter Moderator
+    """A Chapter whose Coordinator ("mod") hosts, a plain Member
     ("owner"), two Members, an outsider from another Chapter and an app
     moderator ("staff")."""
     ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "outsider")}
@@ -44,7 +44,8 @@ def world(api, video):
     cid = api.add_chapter("Abuja")
     other = api.add_chapter("Lagos")
     api.add_staff(ids["mod"], cid, "coordinator")
-    api.add_staff(ids["owner"], cid, "moderator")
+    # "owner" is a plain Member: only Coordinators and app staff organize.
+    api.add_member(ids["owner"], cid, "Owner")
     for name in ("alice", "bob"):
         api.add_member(ids[name], cid, name.title())
     api.add_member(ids["outsider"], other, "Outsider")

@@ -51,13 +51,12 @@ def world(api):
         "member": api.add_user("chapter-member"),
         "other_member": api.add_user("other-member"),
         "coordinator": api.add_user("chapter-coordinator"),
-        "moderator": api.add_user("chapter-moderator"),
         "other_coordinator": api.add_user("other-coordinator"),
         "guest": api.add_user("guest"),
         "admin": api.add_user("chapter-admin", AccountRole.ADMIN),
         "app_mod": api.add_user("app-moderator", AccountRole.MODERATOR),
     }
-    for key in ("member", "other_member", "coordinator", "moderator", "guest"):
+    for key in ("member", "other_member", "coordinator", "guest"):
         api.act_as(ids[key])
         assert api.client.post(
             PROFILE, json={"display_name": key.replace("_", " ").title()}
@@ -75,9 +74,6 @@ def world(api):
     assert api.client.post(
         f"{CHAPTERS}/{ids['abuja']}/coordinators",
         json={"user_id": str(ids["other_coordinator"])},
-    ).status_code == 201
-    assert api.client.post(
-        f"{CHAPTERS}/{ids['lagos']}/moderators", json={"user_id": str(ids["moderator"])}
     ).status_code == 201
     return ids
 
@@ -116,7 +112,7 @@ def test_duplicate_slug_conflicts(api, world):
 
 def test_chapter_shows_my_role_and_member_count(api, world):
     roles = {}
-    for key in ("member", "coordinator", "moderator", "guest", "admin", "app_mod"):
+    for key in ("member", "coordinator", "guest", "admin", "app_mod"):
         api.act_as(world[key])
         chapter = api.client.get(f"{CHAPTERS}/{world['lagos']}").json()
         roles[key] = chapter["my_role"]
@@ -124,7 +120,6 @@ def test_chapter_shows_my_role_and_member_count(api, world):
     assert roles == {
         "member": "member",
         "coordinator": "coordinator",
-        "moderator": "moderator",
         "guest": None,
         "admin": "platform_admin",
         "app_mod": "platform_moderator",
@@ -138,24 +133,29 @@ def test_chapter_shows_my_role_and_member_count(api, world):
 
 def test_only_admins_assign_staff(api, world):
     api.act_as(world["coordinator"])
-    response = api.client.post(
-        f"{CHAPTERS}/{world['lagos']}/moderators", json={"user_id": str(world["member"])}
+    response = api.client.put(
+        f"{CHAPTERS}/{world['abuja']}/staff/{world['member']}", json={"role": "coordinator"}
     )
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "admin_only"
 
 
-def test_staff_list_puts_coordinator_first(api, world):
+def test_chapter_moderator_role_is_gone(api, world):
+    api.act_as(world["admin"])
+    assert api.client.get(f"{CHAPTERS}/{world['lagos']}/moderators").status_code == 404
+    response = api.client.put(
+        f"{CHAPTERS}/{world['lagos']}/staff/{world['member']}", json={"role": "moderator"}
+    )
+    assert response.status_code == 422
+
+
+def test_staff_list_shows_the_coordinator(api, world):
     api.act_as(world["member"])
     staff = api.client.get(f"{CHAPTERS}/{world['lagos']}/staff").json()
     assert [(row["user_id"], row["role"]) for row in staff] == [
         (str(world["coordinator"]), "coordinator"),
-        (str(world["moderator"]), "moderator"),
     ]
     assert staff[0]["display_name"] == "Coordinator"
-
-    moderators = api.client.get(f"{CHAPTERS}/{world['lagos']}/moderators").json()
-    assert [row["user_id"] for row in moderators] == [str(world["moderator"])]
 
     # Someone outside the Chapter can't see its staff.
     api.act_as(world["other_member"])
@@ -178,29 +178,24 @@ def test_one_coordinator_per_chapter(api, world):
     ).status_code == 201
 
 
-def test_admin_promotes_moderator_and_removes_staff(api, world):
+def test_admin_replaces_and_removes_the_coordinator(api, world):
     api.act_as(world["admin"])
     assert api.client.delete(
         f"{CHAPTERS}/{world['lagos']}/coordinators/{world['coordinator']}"
     ).status_code == 204
     response = api.client.put(
-        f"{CHAPTERS}/{world['lagos']}/staff/{world['moderator']}", json={"role": "coordinator"}
+        f"{CHAPTERS}/{world['lagos']}/staff/{world['member']}", json={"role": "coordinator"}
     )
     assert response.status_code == 200
     assert response.json()["role"] == "coordinator"
-
-    # Removing through the wrong role's route is a 404.
     assert api.client.delete(
-        f"{CHAPTERS}/{world['lagos']}/moderators/{world['moderator']}"
-    ).status_code == 404
-    assert api.client.delete(
-        f"{CHAPTERS}/{world['lagos']}/staff/{world['moderator']}"
+        f"{CHAPTERS}/{world['lagos']}/staff/{world['member']}"
     ).status_code == 204
 
     # The person is told about each change.
-    api.act_as(world["moderator"])
+    api.act_as(world["member"])
     types = [n["type"] for n in api.client.get("/api/v1/notifications").json()["items"]]
-    assert types.count("chapter_role_changed") == 3
+    assert types.count("chapter_role_changed") == 2
 
 
 def test_my_staff_roles(api, world):
@@ -208,8 +203,6 @@ def test_my_staff_roles(api, world):
     assert api.client.get("/api/v1/me/chapter-staff").json() == [
         {"chapter_id": world["lagos"], "chapter_name": "CYC Lagos", "role": "coordinator"}
     ]
-    api.act_as(world["moderator"])
-    assert api.client.get("/api/v1/me/chapter-staff").json()[0]["role"] == "moderator"
     api.act_as(world["member"])
     assert api.client.get("/api/v1/me/chapter-staff").json() == []
 
@@ -218,7 +211,7 @@ def test_my_staff_roles(api, world):
 
 
 def test_staff_list_only_their_chapter_members(api, world):
-    for key in ("coordinator", "moderator"):
+    for key in ("coordinator",):
         api.act_as(world[key])
         response = api.client.get(f"{CHAPTERS}/{world['lagos']}/members")
         assert response.status_code == 200, response.text
@@ -271,8 +264,8 @@ def test_coordinator_edits_profile_only_in_own_chapter(api, world):
         json={"display_name": "Cross Chapter"},
     ).status_code == 403
 
-    # Moderators don't edit profiles.
-    api.act_as(world["moderator"])
+    # Members don't edit other people's profiles.
+    api.act_as(world["member"])
     assert api.client.patch(
         f"{CHAPTERS}/{world['lagos']}/members/{world['member']}/profile",
         json={"display_name": "Nope"},
@@ -339,7 +332,7 @@ def test_guests_read_only_granted_posts(api, world):
     ).status_code == 403
 
 
-def test_moderators_and_coordinators_remove_posts(api, world):
+def test_coordinators_and_app_moderators_remove_posts(api, world):
     api.act_as(world["member"])
     first = api.client.post(f"{CHAPTERS}/{world['lagos']}/posts", json={"body": "One"}).json()
     second = api.client.post(f"{CHAPTERS}/{world['lagos']}/posts", json={"body": "Two"}).json()
@@ -347,7 +340,7 @@ def test_moderators_and_coordinators_remove_posts(api, world):
     api.act_as(world["other_coordinator"])
     assert api.client.delete(f"/api/v1/posts/{first['id']}").status_code == 404
 
-    api.act_as(world["moderator"])
+    api.act_as(world["app_mod"])
     assert api.client.delete(f"/api/v1/posts/{first['id']}").status_code == 204
     api.act_as(world["coordinator"])
     assert api.client.delete(f"/api/v1/posts/{second['id']}").status_code == 204
@@ -366,8 +359,8 @@ def test_moderators_and_coordinators_remove_posts(api, world):
 # Bans
 
 
-def test_moderator_bans_member_from_participating(api, world):
-    api.act_as(world["moderator"])
+def test_coordinator_bans_member_from_participating(api, world):
+    api.act_as(world["coordinator"])
     response = api.client.put(
         f"{CHAPTERS}/{world['lagos']}/bans/{world['member']}", json={"reason": "Spam"}
     )
@@ -385,7 +378,6 @@ def test_moderator_bans_member_from_participating(api, world):
     members = api.client.get(f"{CHAPTERS}/{world['lagos']}/members").json()
     assert members[0]["is_banned"] is True
 
-    api.act_as(world["moderator"])
     assert api.client.delete(
         f"{CHAPTERS}/{world['lagos']}/bans/{world['member']}"
     ).status_code == 204
@@ -396,11 +388,7 @@ def test_moderator_bans_member_from_participating(api, world):
 
 
 def test_bans_respect_chapter_roles(api, world):
-    # Moderators can't ban the Coordinator; nobody bans app staff.
-    api.act_as(world["moderator"])
-    assert api.client.put(
-        f"{CHAPTERS}/{world['lagos']}/bans/{world['coordinator']}"
-    ).status_code == 403
+    # Nobody bans app staff.
     api.act_as(world["coordinator"])
     assert api.client.put(
         f"{CHAPTERS}/{world['lagos']}/bans/{world['app_mod']}"
@@ -411,11 +399,7 @@ def test_bans_respect_chapter_roles(api, world):
         assert api.client.put(
             f"{CHAPTERS}/{world['lagos']}/bans/{world['guest']}"
         ).status_code == 403
-    # A Coordinator can ban a Moderator; app moderators ban anywhere.
-    api.act_as(world["coordinator"])
-    assert api.client.put(
-        f"{CHAPTERS}/{world['lagos']}/bans/{world['moderator']}"
-    ).status_code == 201
+    # App moderators ban anywhere.
     api.act_as(world["app_mod"])
     assert api.client.put(
         f"{CHAPTERS}/{world['abuja']}/bans/{world['other_member']}"
@@ -442,10 +426,10 @@ def test_coordinator_announces_to_own_chapter_only(api, world):
         json={"title": "Update", "body": "Wrong chapter"},
     ).status_code == 403
 
-    api.act_as(world["moderator"])
+    api.act_as(world["app_mod"])
     assert api.client.post(
         f"{CHAPTERS}/{world['lagos']}/announcements",
-        json={"title": "Update", "body": "Moderators can't"},
+        json={"title": "Update", "body": "App moderators can't"},
     ).status_code == 403
 
     api.act_as(world["member"])
@@ -457,15 +441,15 @@ def test_dashboard_for_staff(api, world):
     api.act_as(world["member"])
     api.client.post(f"{CHAPTERS}/{world['lagos']}/posts", json={"body": "One"})
 
-    api.act_as(world["moderator"])
+    api.act_as(world["coordinator"])
     dashboard = api.client.get(f"{CHAPTERS}/{world['lagos']}/dashboard")
     assert dashboard.status_code == 200, dashboard.text
     body = dashboard.json()
     assert body["member_count"] == 1
     assert body["coordinator_count"] == 1
-    assert body["moderator_count"] == 1
+    assert "moderator_count" not in body
     assert body["post_count"] == 1
-    assert body["my_role"] == "moderator"
+    assert body["my_role"] == "coordinator"
     assert body["is_platform_admin"] is False
 
     api.act_as(world["member"])

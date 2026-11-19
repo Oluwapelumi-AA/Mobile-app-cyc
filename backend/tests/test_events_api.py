@@ -12,15 +12,16 @@ EVENTS = "/api/v1/events"
 
 @pytest.fixture
 def world(api):
-    """A Chapter whose Coordinator ("mod") organizes events, a Chapter
-    Moderator ("owner"), two Members, an outsider from another Chapter and
+    """A Chapter whose Coordinator ("mod") organizes events, a plain
+    Member ("owner"), two Members, an outsider from another Chapter and
     an app moderator ("staff")."""
     ids = {name: api.add_user(name) for name in ("owner", "mod", "alice", "bob", "outsider")}
     ids["staff"] = api.add_user("staff", AccountRole.MODERATOR)
     cid = api.add_chapter("Abuja")
     other = api.add_chapter("Lagos")
     api.add_staff(ids["mod"], cid, "coordinator")
-    api.add_staff(ids["owner"], cid, "moderator")
+    # "owner" is a plain Member: only Coordinators and app staff organize.
+    api.add_member(ids["owner"], cid, "Owner")
     for name in ("alice", "bob"):
         api.add_member(ids[name], cid, name.title())
     api.add_member(ids["outsider"], other, "Outsider")
@@ -477,7 +478,7 @@ def test_guest_cannot_register_for_chapter_event(api, world):
 
 def test_banned_member_cannot_register(api, world):
     event = create_event(api, world["mod"], world)
-    api.act_as(world["owner"])
+    api.act_as(world["mod"])  # the Coordinator bans
     assert api.client.put(
         f"{CHAPTERS}/{world['chapter_id']}/bans/{world['alice']}"
     ).status_code == 201

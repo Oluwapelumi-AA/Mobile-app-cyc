@@ -421,7 +421,7 @@ export type ApiStaff = {
   id: string;
   chapter_id: string;
   user_id: string;
-  role: "coordinator" | "moderator";
+  role: "coordinator";
   email: string | null;
   display_name: string | null;
   created_at: string;
@@ -435,7 +435,7 @@ export type ApiChapterMember = {
   is_active: boolean;
   department_id: string | null;
   department_name: string | null;
-  staff_role: "coordinator" | "moderator" | null;
+  staff_role: "coordinator" | null;
   is_banned: boolean;
   joined_at: string;
 };
@@ -446,7 +446,6 @@ export type ApiChapterDashboard = {
   is_active: boolean;
   member_count: number;
   coordinator_count: number;
-  moderator_count: number;
   post_count: number;
   upcoming_event_count: number;
   published_resource_count: number;

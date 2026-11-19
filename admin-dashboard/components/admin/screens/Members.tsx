@@ -34,7 +34,7 @@ type ApiMember = {
   avatar_url: string | null;
   is_active: boolean;
   department_name: string | null;
-  staff_role: "coordinator" | "moderator" | null;
+  staff_role: "coordinator" | null;
   is_banned: boolean;
   joined_at: string;
 };
@@ -44,8 +44,8 @@ type TabKey = "all" | "staff" | "banned";
 const nameOf = (m: ApiMember) => m.display_name?.trim() || m.email.split("@")[0];
 
 /**
- * The chapter's official Members. Moderators can ban and reinstate;
- * Coordinators can also edit a member's public profile. Adding or removing
+ * The chapter's official Members. The Coordinator can ban, reinstate and
+ * edit a member's public profile. Adding or removing
  * members is done by platform admins.
  */
 export default function Members() {
@@ -202,9 +202,7 @@ export default function Members() {
                   <Td>{m.department_name ?? <span className="text-muted">—</span>}</Td>
                   <Td>
                     {m.staff_role ? (
-                      <Badge tone={m.staff_role === "coordinator" ? "red" : "blue"}>
-                        {m.staff_role === "coordinator" ? "Coordinator" : "Moderator"}
-                      </Badge>
+                      <Badge tone="red">Coordinator</Badge>
                     ) : (
                       "Member"
                     )}

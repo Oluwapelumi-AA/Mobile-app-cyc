@@ -49,7 +49,7 @@ const ALLOWED: Record<Method, RegExp[]> = {
     // Chapters and everything inside them.
     /^chapters$/,
     id("^chapters/{id}$"),
-    id("^chapters/{id}/(posts|staff|coordinators|moderators|members|department-members|dashboard|bans|access-requests|access-grants)$"),
+    id("^chapters/{id}/(posts|staff|coordinators|members|department-members|dashboard|bans|access-requests|access-grants)$"),
     /^me\/chapter-staff$/,
     /^me\/chapter-access-requests$/,
 
@@ -84,7 +84,7 @@ const ALLOWED: Record<Method, RegExp[]> = {
   POST: [
     /^chapters$/,
     id("^chapters/{id}/(archive|restore)$"),
-    id("^chapters/{id}/(coordinators|moderators)$"),
+    id("^chapters/{id}/coordinators$"),
     id("^chapters/{id}/posts$"),
     id("^chapters/{id}/announcements$"),
     id("^chapters/{id}/access-grants$"),
@@ -130,7 +130,7 @@ const ALLOWED: Record<Method, RegExp[]> = {
 
   DELETE: [
     id("^admin/(coordinators|platform-staff)/{id}$"),
-    id("^chapters/{id}/(staff|coordinators|moderators|members|bans)/{id}$"),
+    id("^chapters/{id}/(staff|coordinators|members|bans)/{id}$"),
     id("^posts/{id}$"),
     id("^comments/{id}$"),
     id("^departments/{id}$"),

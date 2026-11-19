@@ -218,14 +218,14 @@ def test_public_profile(api, world):
     ada = onboard(api, "ada", world["lagos"])
     api.client.put(f"{V1}/me/department", json={"department_id": world["music"]})
     api.client.patch(f"{V1}/profiles/me", json={"bio": "Singer"})
-    api.add_staff(ada, world["lagos"], "moderator")
+    api.add_staff(ada, world["lagos"], "coordinator")
 
     viewer = onboard(api, "bayo")
     profile = api.client.get(f"{V1}/profiles/{ada}").json()
     assert profile["display_name"] == "Ada"
     assert profile["bio"] == "Singer"
     assert (profile["chapter_name"], profile["department_name"]) == ("Lagos", "Music")
-    assert [(r["chapter_name"], r["role"]) for r in profile["staff_roles"]] == [("Lagos", "moderator")]
+    assert [(r["chapter_name"], r["role"]) for r in profile["staff_roles"]] == [("Lagos", "coordinator")]
     assert profile["is_deleted"] is False
     # Your own profile still comes from /profiles/me.
     assert api.client.get(f"{V1}/profiles/me").json()["user_id"] == str(viewer)

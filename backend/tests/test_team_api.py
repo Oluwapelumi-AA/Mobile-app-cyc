@@ -59,10 +59,9 @@ def test_existing_user_becomes_coordinator(api, world):
     assert coordinators(api) == {("Ibadan", "tolu@example.com")}
 
 
-def test_a_moderator_is_promoted(api, world):
+def test_a_member_of_the_chapter_is_promoted(api, world):
     user = api.add_user("tolu")
     api.add_member(user, world["lagos"], "Tolu")
-    api.add_staff(user, world["lagos"], "moderator")
     assert add_coordinator(api, world["lagos"], user_id=str(user)).status_code == 201
     roles = [s["role"] for s in team(api)["chapter_staff"]]
     assert roles == ["coordinator"]

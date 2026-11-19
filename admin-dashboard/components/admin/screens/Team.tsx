@@ -43,13 +43,13 @@ type ChapterStaff = Person & {
   chapter_id: string;
   chapter_name: string;
   chapter_active: boolean;
-  role: "coordinator" | "moderator";
+  role: "coordinator";
   assigned_at: string;
 };
 type TeamData = { platform: PlatformStaff[]; chapter_staff: ChapterStaff[] };
 type ChangeResult = { user_id: string; email: string; display_name: string | null; temporary_password: string | null };
 
-type TabKey = "coordinators" | "moderators" | "platform";
+type TabKey = "coordinators" | "platform";
 
 const nameOf = (p: { display_name: string | null; email: string }) => p.display_name?.trim() || p.email.split("@")[0];
 
@@ -83,7 +83,6 @@ export default function Team() {
 
   const staff = useMemo(() => data?.chapter_staff ?? [], [data]);
   const coordinators = staff.filter((s) => s.role === "coordinator");
-  const moderators = staff.filter((s) => s.role === "moderator");
   const platform = data?.platform ?? [];
   const coordinated = new Set(coordinators.map((c) => c.chapter_id));
   const uncovered = chapters.filter((c) => c.active && !coordinated.has(c.id));
@@ -175,7 +174,6 @@ export default function Team() {
               onChange={setTab}
               tabs={[
                 { key: "coordinators", label: "Coordinators", count: coordinators.length },
-                { key: "moderators", label: "Chapter moderators", count: moderators.length },
                 { key: "platform", label: "Admins", count: platform.length },
               ]}
             />
@@ -223,7 +221,7 @@ export default function Team() {
               <Table minWidth={760}>
                 <thead>
                   <tr>
-                    <Th>{tab === "coordinators" ? "Coordinator" : "Moderator"}</Th>
+                    <Th>Coordinator</Th>
                     <Th>Chapter</Th>
                     <Th>Since</Th>
                     <Th>Last signed in</Th>
@@ -232,7 +230,7 @@ export default function Team() {
                 </thead>
                 <tbody>
                   {data === null ? <LoadingRows cols={5} rows={3} /> : null}
-                  {(tab === "coordinators" ? coordinators : moderators)
+                  {coordinators
                     .filter((s) => matches(q, nameOf(s), s.email, s.chapter_name))
                     .map((s) => (
                       <tr key={s.id} className="hover:bg-canvas/40">
@@ -245,28 +243,17 @@ export default function Team() {
                         <Td className="whitespace-nowrap">{s.last_login_at ? timeAgo(s.last_login_at) : <span className="text-muted">Never</span>}</Td>
                         <Td className="text-center">
                           <RowMenu
-                            actions={
-                              tab === "coordinators"
-                                ? [
-                                    { label: "Replace coordinator", icon: "refresh", onSelect: () => setWizard({ chapterId: s.chapter_id, replace: true }) },
-                                    { label: "Reset password", icon: "lock", onSelect: () => resetPassword(s) },
-                                    { label: "Remove as coordinator", icon: "x", danger: true, onSelect: () => removeCoordinator(s) },
-                                  ]
-                                : [
-                                    { label: "Make coordinator", icon: "star", onSelect: () => setWizard({ chapterId: s.chapter_id }) },
-                                    { label: "Reset password", icon: "lock", onSelect: () => resetPassword(s) },
-                                  ]
-                            }
+                            actions={[
+                              { label: "Replace coordinator", icon: "refresh", onSelect: () => setWizard({ chapterId: s.chapter_id, replace: true }) },
+                              { label: "Reset password", icon: "lock", onSelect: () => resetPassword(s) },
+                              { label: "Remove as coordinator", icon: "x", danger: true, onSelect: () => removeCoordinator(s) },
+                            ]}
                           />
                         </Td>
                       </tr>
                     ))}
-                  {data !== null && (tab === "coordinators" ? coordinators : moderators).length === 0 ? (
-                    <EmptyRow
-                      cols={5}
-                      title={tab === "coordinators" ? "No coordinators yet" : "No chapter moderators"}
-                      hint={tab === "coordinators" ? "Add one, and choose their chapter in the same step." : "Add chapter moderators from Chapters → Manage → Staff."}
-                    />
+                  {data !== null && coordinators.length === 0 ? (
+                    <EmptyRow cols={5} title="No coordinators yet" hint="Add one, and choose their chapter in the same step." />
                   ) : null}
                 </tbody>
               </Table>

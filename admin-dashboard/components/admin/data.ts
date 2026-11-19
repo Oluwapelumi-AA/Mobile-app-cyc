@@ -48,11 +48,11 @@ export type AdminOverview = {
   guests: number;
 };
 
-/** The chapter a Coordinator or Moderator is working in. */
+/** The chapter a Coordinator is working in. */
 export type ChapterScope = {
   id: string;
   name: string;
-  role: "coordinator" | "moderator";
+  role: "coordinator";
 };
 
 export type AdminContextValue = {

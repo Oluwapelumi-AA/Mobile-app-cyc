@@ -101,7 +101,6 @@ class ChapterDashboard(BaseModel):
     is_active: bool
     member_count: int
     coordinator_count: int
-    moderator_count: int
     post_count: int
     upcoming_event_count: int
     published_resource_count: int
