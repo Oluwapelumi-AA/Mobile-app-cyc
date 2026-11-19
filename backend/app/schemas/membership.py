@@ -4,7 +4,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.user import MembershipStatus
+from app.models.chapter_management import ChapterStaffRole
+from app.models.user import AccountRole, MembershipStatus
+from app.schemas.common import UtcDatetime
 
 
 class ChapterChoice(BaseModel):
@@ -43,3 +45,27 @@ class DepartmentMemberRead(BaseModel):
     avatar_url: str | None
     chapter_id: UUID | None
     chapter_name: str | None
+
+
+class StaffRole(BaseModel):
+    chapter_id: UUID
+    chapter_name: str
+    role: ChapterStaffRole
+
+
+class PublicProfileRead(BaseModel):
+    """What any signed-in user can see about someone else."""
+
+    user_id: UUID
+    display_name: str
+    avatar_url: str | None
+    bio: str | None
+    membership_status: MembershipStatus
+    chapter_id: UUID | None
+    chapter_name: str | None
+    department_name: str | None
+    # App-wide role, shown as a badge; "user" for everyone else.
+    account_role: AccountRole
+    staff_roles: list[StaffRole]
+    is_deleted: bool
+    member_since: UtcDatetime

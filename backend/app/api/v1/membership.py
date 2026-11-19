@@ -9,18 +9,28 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user_id
 from app.core.identity import UserId
 from app.db.session import get_db
+from app.schemas.home import HomeRead
 from app.schemas.membership import (
     ChapterChoice,
     DepartmentChoice,
     DepartmentMemberRead,
     MyMembershipRead,
+    PublicProfileRead,
 )
-from app.services import membership
+from app.services import home, membership
 
 router = APIRouter(tags=["Membership"])
 
 CurrentUserId = Annotated[UserId, Depends(get_current_user_id)]
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+@router.get("/me/home", response_model=HomeRead)
+def get_home(user_id: CurrentUserId, db: DbSession):
+    """The app's home screen in one request: your Chapter, unread count,
+    live sessions, upcoming events, recent Chapter posts, new resources and
+    courses to continue."""
+    return home.home(db, user_id)
 
 
 @router.get("/me/membership", response_model=MyMembershipRead)
@@ -74,3 +84,10 @@ def remove_department_member(
     """Admins only."""
     membership.remove_from_department(db, user_id, department_id, target_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/profiles/{target_id}", response_model=PublicProfileRead)
+def get_public_profile(target_id: UUID, user_id: CurrentUserId, db: DbSession):
+    """Someone's public profile: name, photo, bio, Chapter, department and
+    roles. For tapping on a name in the app."""
+    return membership.public_profile(db, user_id, target_id)

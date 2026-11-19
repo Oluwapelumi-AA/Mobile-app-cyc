@@ -286,7 +286,11 @@ export default function Team() {
                   </button>
                 </li>
               ))}
-              {uncovered.length === 0 ? <li className="py-2.5 text-sm text-muted">Every active chapter has a coordinator.</li> : null}
+              {uncovered.length === 0 ? (
+                <li className="py-2.5 text-sm text-muted">
+                  {chapters.some((c) => c.active) ? "Every active chapter has a coordinator." : "No chapters yet. Create one on the Chapters page."}
+                </li>
+              ) : null}
             </ul>
           </Card>
           <Card className="p-5">

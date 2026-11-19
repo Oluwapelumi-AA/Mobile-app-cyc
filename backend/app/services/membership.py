@@ -24,10 +24,15 @@ from app.models.chapter_access_request import (
     ChapterAccessRequest,
     ChapterAccessRequestStatus,
 )
-from app.models.chapter_management import Department
+from app.models.chapter_management import ChapterStaff, Department
 from app.models.user import MembershipStatus, User
 from app.models.user_profile import UserProfile
-from app.schemas.membership import DepartmentMemberRead, MyMembershipRead
+from app.schemas.membership import (
+    DepartmentMemberRead,
+    MyMembershipRead,
+    PublicProfileRead,
+    StaffRole,
+)
 from app.services import audit
 from app.services.chapter_access import is_platform_admin
 from app.services.errors import Conflict, Forbidden, NotFound
@@ -275,3 +280,40 @@ def remove_from_department(
         raise NotFound("not_in_department", "That member isn't in this department.")
     _set_department(db, actor_id, user, profile, None)
     db.commit()
+
+
+# Public profiles
+
+
+def public_profile(db: Session, viewer_id: UserId, user_id: uuid.UUID) -> PublicProfileRead:
+    """Any signed-in user can view another person's public profile."""
+    user = db.get(User, user_id)
+    profile = db.get(UserProfile, user_id)
+    if user is None or profile is None:
+        raise NotFound("profile_not_found", "Profile not found.")
+    deleted = not user.is_active and user.email.endswith("@deleted.invalid")
+    member = user.membership_status == MembershipStatus.MEMBER
+    chapter = db.get(Chapter, profile.chapter_id) if member and profile.chapter_id else None
+    department = (
+        db.get(Department, profile.department_id) if member and profile.department_id else None
+    )
+    roles = db.execute(
+        select(ChapterStaff.chapter_id, Chapter.name, ChapterStaff.role)
+        .join(Chapter, Chapter.id == ChapterStaff.chapter_id)
+        .where(ChapterStaff.user_id == user.id, Chapter.is_active.is_(True))
+        .order_by(Chapter.name)
+    ).all()
+    return PublicProfileRead(
+        user_id=user.id,
+        display_name=profile.display_name,
+        avatar_url=None if deleted else profile.avatar_url,
+        bio=None if deleted else profile.bio,
+        membership_status=user.membership_status,
+        chapter_id=chapter.id if chapter and chapter.is_active else None,
+        chapter_name=chapter.name if chapter and chapter.is_active else None,
+        department_name=department.name if department else None,
+        account_role=user.account_role,
+        staff_roles=[StaffRole(chapter_id=c, chapter_name=n, role=r) for c, n, r in roles],
+        is_deleted=deleted,
+        member_since=profile.created_at,
+    )

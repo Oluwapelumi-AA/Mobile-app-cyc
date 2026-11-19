@@ -51,10 +51,13 @@ class Settings(BaseSettings):
     # Largest audio, video or document file for the resource library.
     resource_max_upload_bytes: int = 500 * 1024 * 1024
 
-    # Push notifications. "fake" records sends for development and tests;
-    # "none" turns push off. Real providers plug in through
-    # app/services/push_provider.py.
+    # Push notifications: "fake" (development and tests), "none" or "expo"
+    # (Expo Push Service, for the Expo mobile app). Other providers plug in
+    # through app/services/push_provider.py.
     push_provider: str = "fake"
+    # Optional: only needed if "enhanced push security" is on in Expo.
+    expo_access_token: str | None = None
+    expo_push_url: str = "https://exp.host/--/api/v2/push/send"
     # Notification emails: "fake" (development and tests), "none" or "smtp".
     email_backend: str = "fake"
     email_from: str = "The Light App <no-reply@thelightapp.invalid>"

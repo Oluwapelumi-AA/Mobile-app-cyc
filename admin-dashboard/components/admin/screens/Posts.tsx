@@ -127,7 +127,7 @@ export default function Posts() {
             <SearchField className="col-span-2 md:min-w-[150px] md:flex-1" value={search} onChange={setSearch} placeholder="Search posts or authors..." />
           </div>
 
-          {data.mode === "empty" && data.error && data.error !== "The API returned no records yet." ? (
+          {selectedChapter && data.mode === "empty" && data.error && data.error !== "The API returned no records yet." ? (
             <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{data.error}</p>
           ) : null}
 
