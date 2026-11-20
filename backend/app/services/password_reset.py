@@ -23,7 +23,8 @@ from app.core.security import hash_password
 from app.models.password_reset import PasswordResetCode
 from app.models.refresh_session import RefreshSession
 from app.models.user import User
-from app.services.email_sender import EmailMessage, EmailUnavailable, get_email_sender
+from app.emails import templates
+from app.services import mailer
 from app.services.errors import InvalidInput
 
 log = logging.getLogger(__name__)
@@ -88,22 +89,8 @@ def request_code(db: Session, email: str) -> None:
     )
     db.commit()
 
-    try:
-        get_email_sender().send(
-            EmailMessage(
-                to=user.email,
-                subject="Your password reset code",
-                text=(
-                    f"Your code to reset your password is {code}.\n\n"
-                    "It expires in 15 minutes. If you didn't ask for this, you can "
-                    "ignore this email; your password hasn't changed."
-                ),
-            )
-        )
-    except EmailUnavailable:
-        log.warning("Password reset requested but email is not configured")
-    except Exception:
-        log.exception("Password reset email failed")
+    mailer.send(db, user.email, templates.password_reset(code), "password_reset")
+    db.commit()
 
 
 def reset_password(db: Session, email: str, code: str, new_password: str) -> None:
@@ -128,13 +115,17 @@ def reset_password(db: Session, email: str, code: str, new_password: str) -> Non
 
     row.used_at = now
     user.password_hash = hash_password(new_password)
+    user.has_password = True
     user.is_verified = True
+    user.failed_login_count = 0
+    user.locked_until = None
     for session in db.scalars(
         select(RefreshSession).where(
             RefreshSession.user_id == user.id, RefreshSession.revoked_at.is_(None)
         )
     ):
         session.revoked_at = now
+    mailer.send(db, user.email, templates.password_changed(None), "password_changed")
     db.commit()
 
 

@@ -1,6 +1,6 @@
 """Course endpoints: the catalogue, lessons, quizzes, enrolment and grading."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -24,12 +24,16 @@ from app.schemas.course import (
     CourseSummary,
     CourseUpdate,
     LessonCreate,
+    LessonFileConfirm,
+    LessonFileUploadRequest,
     LessonUpdate,
     QuizCreate,
     QuizRead,
     QuizUpdate,
 )
+from app.schemas.resource import FileUploadIntent
 from app.services import courses
+from app.services.object_storage import ObjectStorage, get_object_storage
 from app.services.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 
 router = APIRouter(prefix="/courses", tags=["Courses"])
@@ -40,6 +44,7 @@ certificates_router = APIRouter(prefix="/certificates", tags=["Courses"])
 CurrentUserId = Annotated[UserId, Depends(get_current_user_id)]
 ViewerId = Annotated[UserId, Depends(get_viewer_id)]
 DbSession = Annotated[Session, Depends(get_db)]
+Storage = Annotated[ObjectStorage, Depends(get_object_storage)]
 Limit = Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)]
 Cursor = Annotated[str | None, Query(max_length=200)]
 
@@ -112,8 +117,8 @@ def list_certificates(
 
 
 @router.get("/{course_id}", response_model=CourseRead)
-def get_course(course_id: UUID, user_id: ViewerId, db: DbSession):
-    return courses.get_course(db, user_id, course_id)
+def get_course(course_id: UUID, user_id: ViewerId, db: DbSession, storage: Storage):
+    return courses.get_course(db, user_id, course_id, storage)
 
 
 @router.patch("/{course_id}", response_model=CourseRead)
@@ -170,6 +175,30 @@ def update_lesson(lesson_id: UUID, data: LessonUpdate, user_id: CurrentUserId, d
 @lessons_router.delete("/{lesson_id}", response_model=CourseRead)
 def delete_lesson(lesson_id: UUID, user_id: CurrentUserId, db: DbSession):
     return courses.delete_lesson(db, user_id, lesson_id)
+
+
+@lessons_router.post("/{lesson_id}/files/upload-intent", response_model=FileUploadIntent)
+def lesson_upload_intent(
+    lesson_id: UUID, data: LessonFileUploadRequest, user_id: CurrentUserId, db: DbSession, storage: Storage
+):
+    """Get a link to upload a lesson video (MP4, MOV or WebM, up to 2 GB by
+    default) or notes PDF straight to storage, then confirm it with
+    ``/files/confirm``."""
+    return courses.lesson_upload_intent(db, user_id, lesson_id, data, storage)
+
+
+@lessons_router.post("/{lesson_id}/files/confirm", response_model=CourseRead)
+def lesson_confirm_upload(
+    lesson_id: UUID, data: LessonFileConfirm, user_id: CurrentUserId, db: DbSession, storage: Storage
+):
+    return courses.lesson_confirm_upload(db, user_id, lesson_id, data, storage)
+
+
+@lessons_router.delete("/{lesson_id}/files/{kind}", response_model=CourseRead)
+def lesson_remove_file(
+    lesson_id: UUID, kind: Literal["video", "notes"], user_id: CurrentUserId, db: DbSession, storage: Storage
+):
+    return courses.lesson_remove_file(db, user_id, lesson_id, kind, storage)
 
 
 @lessons_router.put("/{lesson_id}/completion", response_model=CourseRead)

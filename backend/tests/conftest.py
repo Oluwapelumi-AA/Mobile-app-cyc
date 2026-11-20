@@ -8,6 +8,11 @@ os.environ["VIDEO_PROVIDER"] = "fake"
 os.environ["STORAGE_BACKEND"] = "none"
 os.environ["PUSH_PROVIDER"] = "fake"
 os.environ["EMAIL_BACKEND"] = "fake"
+# Most tests sign in directly; the sign-in protections have their own tests
+# (tests/test_auth_security.py), which switch these back on.
+os.environ["RATE_LIMIT_ENABLED"] = "false"
+os.environ["REQUIRE_EMAIL_VERIFICATION"] = "false"
+os.environ["REQUIRE_ADMIN_MFA"] = "false"
 
 
 from uuid import uuid4  # noqa: E402

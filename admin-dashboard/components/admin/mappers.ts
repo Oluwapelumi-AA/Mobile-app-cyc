@@ -319,6 +319,8 @@ export type ApiLesson = {
   scripture_reference?: string | null;
   scripture_text?: string | null;
   notes_url?: string | null;
+  has_video_file?: boolean;
+  has_notes_file?: boolean;
 };
 
 export type ApiQuiz = {

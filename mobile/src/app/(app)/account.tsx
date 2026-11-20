@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
 
+import { GoogleButton } from "@/components/GoogleButton";
 import { Alert, Dialog, Field, Header, ListGroup, ListRow, Screen, SectionHeader, T } from "@/components/ui";
 import { api, clearTokens, errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -17,12 +18,14 @@ export default function Account() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const remove = async () => {
-    if (!password) return setError("Enter your password to confirm.");
+  const googleOnly = user?.has_password === false;
+
+  const remove = async (googleIdToken?: string) => {
+    if (!googleIdToken && !password) return setError(googleOnly ? "Confirm with Google." : "Enter your password to confirm.");
     setBusy(true);
     setError("");
     try {
-      await api("/auth/delete-account", { method: "POST", body: { password } });
+      await api("/auth/delete-account", { method: "POST", body: googleIdToken ? { google_id_token: googleIdToken } : { password } });
       await clearTokens();
       await signOut();
     } catch (err) {
@@ -38,7 +41,13 @@ export default function Account() {
       <SectionHeader title="Sign-in" style={{ marginTop: 4 }} />
       <ListGroup>
         <ListRow icon="mail" iconCircle label="Email" sublabel={user?.email} chevron={false} />
-        <ListRow icon="lock" iconCircle label="Password" sublabel="Change your password" onPress={() => router.push("/settings/password")} />
+        <ListRow
+          icon="shield"
+          iconCircle
+          label="Sign-in & security"
+          sublabel={[user?.google_linked ? "Google" : null, user?.mfa_enabled ? "Two-step on" : "Password, two-step sign-in"].filter(Boolean).join(" · ")}
+          onPress={() => router.push("/settings/security")}
+        />
       </ListGroup>
 
       <SectionHeader title="Membership" />
@@ -84,14 +93,23 @@ export default function Account() {
         title="Delete your account?"
         confirm="Delete"
         busy={busy}
-        onConfirm={remove}
+        onConfirm={() => remove()}
         onCancel={() => (setDeleting(false), setPassword(""), setError(""))}
       >
         <Alert tone="error" text="This permanently deletes your profile, progress, certificates and saved items. Your posts stay, shown as “Deleted user”. This can’t be undone." />
-        <Field label="Password" icon="lock" secure value={password} onChangeText={setPassword} error={error || undefined} />
-        <T variant="bodySmall" color={t.textMuted}>
-          Enter your password to confirm.
-        </T>
+        {googleOnly ? (
+          <>
+            <GoogleButton label="Confirm with Google" disabled={busy} onError={setError} onIdToken={(token) => remove(token)} />
+            {error ? <T variant="bodySmall" color={t.c.error}>{error}</T> : null}
+          </>
+        ) : (
+          <>
+            <Field label="Password" icon="lock" secure value={password} onChangeText={setPassword} error={error || undefined} />
+            <T variant="bodySmall" color={t.textMuted}>
+              Enter your password to confirm.
+            </T>
+          </>
+        )}
       </Dialog>
     </Screen>
   );

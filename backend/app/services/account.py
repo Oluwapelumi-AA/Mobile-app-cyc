@@ -39,11 +39,13 @@ def deleted_email(user_id: uuid.UUID) -> str:
     return f"deleted-{user_id.hex}@deleted.invalid"
 
 
-def delete_account(db: Session, user_id: uuid.UUID, password: str) -> None:
+def delete_account(db: Session, user_id: uuid.UUID, password: str | None) -> None:
+    """Delete an account. ``password`` is checked when given; pass None when
+    the caller has already confirmed it's really them (e.g. with Google)."""
     user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise NotFound("user_not_found", "Account not found.")
-    if not verify_password(password, user.password_hash):
+    if password is not None and not verify_password(password, user.password_hash):
         raise InvalidInput("wrong_password", "Your password is wrong.")
     if user.account_role == AccountRole.ADMIN:
         other_admin = db.scalar(
@@ -67,6 +69,10 @@ def delete_account(db: Session, user_id: uuid.UUID, password: str) -> None:
     user.password_hash = hash_password(secrets.token_urlsafe(32))
     user.is_active = False
     user.is_verified = False
+    user.has_password = False
+    user.google_sub = None
+    user.mfa_secret = None
+    user.mfa_enabled_at = None
     user.account_role = AccountRole.USER
     user.membership_status = MembershipStatus.GUEST
 

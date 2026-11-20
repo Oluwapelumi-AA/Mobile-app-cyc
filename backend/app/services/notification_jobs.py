@@ -33,6 +33,7 @@ from app.models.notification import (
 )
 from app.models.user import User
 from app.services import notifications
+from app.emails import templates
 from app.services.email_sender import (
     EmailMessage,
     EmailSender,
@@ -130,9 +131,12 @@ def _send_email(db: Session, notification: Notification, sender: EmailSender) ->
         text += "\n\n" + notification.body
     language = notifications.languages_for(db, [notification.user_id])[notification.user_id]
     try:
+        rendered = templates.notification(
+            notification.title, notification.body, email_footer(language)
+        )
         sender.send(
             EmailMessage(
-                to=email, subject=notification.title, text=text + email_footer(language)
+                to=email, subject=notification.title, text=text + email_footer(language), html=rendered.html
             )
         )
     except EmailUnavailable:

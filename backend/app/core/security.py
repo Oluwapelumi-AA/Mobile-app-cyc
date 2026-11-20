@@ -13,6 +13,9 @@ from app.core.config import settings
 password_hash = PasswordHash.recommended()
 
 ALGORITHM = "HS256"
+ISSUER = "cyc-api"
+AUDIENCE = "cyc-app"
+TokenType = Literal["access", "refresh", "mfa"]
 
 
 def hash_password(password: str) -> str:
@@ -62,6 +65,9 @@ def create_access_token(subject: str) -> str:
         "sub": subject,
         "type": "access",
         "exp": expires_at,
+        "iat": datetime.now(timezone.utc),
+        "iss": ISSUER,
+        "aud": AUDIENCE,
     }
 
     return jwt.encode(
@@ -90,6 +96,9 @@ def create_refresh_token(
         "type": "refresh",
         "sid": str(session_id),
         "exp": expires_at,
+        "iat": datetime.now(timezone.utc),
+        "iss": ISSUER,
+        "aud": AUDIENCE,
     }
 
     return jwt.encode(
@@ -99,9 +108,26 @@ def create_refresh_token(
     )
 
 
+def create_mfa_token(subject: str, purpose: Literal["verify", "setup"]) -> str:
+    """A short-lived token between a correct password and the two-step code.
+    It can't be used for anything else."""
+    _validate_secret_key()
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": subject,
+        "type": "mfa",
+        "purpose": purpose,
+        "exp": now + timedelta(minutes=10),
+        "iat": now,
+        "iss": ISSUER,
+        "aud": AUDIENCE,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+
+
 def decode_token(
     token: str,
-    expected_type: Literal["access", "refresh"],
+    expected_type: TokenType,
 ) -> dict:
     """Verify a token's signature, expiry, subject and token type."""
     _validate_secret_key()
@@ -110,7 +136,9 @@ def decode_token(
         token,
         settings.secret_key,
         algorithms=[ALGORITHM],
-        options={"require": ["exp", "sub", "type"]},
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        options={"require": ["exp", "sub", "type", "iss", "aud"]},
     )
 
     subject = payload.get("sub")

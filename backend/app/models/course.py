@@ -124,6 +124,9 @@ class CourseLesson(Base):
     scripture_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
     scripture_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Files uploaded to storage (S3). They take priority over the links.
+    video_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
 

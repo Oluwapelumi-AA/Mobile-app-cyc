@@ -526,6 +526,29 @@ def _ensure_open(event: Event) -> None:
 
 
 
+def _registration_email(db: Session, user_id: UserId, event: Event) -> None:
+    from zoneinfo import ZoneInfo
+
+    from app.emails import templates
+    from app.models.user import User
+    from app.services import email_codes, mailer
+
+    user = db.get(User, user_id)
+    if user is None:
+        return
+    starts = event.starts_at if event.starts_at.tzinfo else event.starts_at.replace(tzinfo=UTC)
+    zone = getattr(event, "timezone", None) or "UTC"
+    try:
+        local = starts.astimezone(ZoneInfo(zone))
+    except Exception:  # noqa: BLE001
+        local, zone = starts, "UTC"
+    when = local.strftime("%a %d %b %Y, %H:%M") + f" ({zone})"
+    where = event.location or ("Online" if event.online_url else None)
+    mailer.send(
+        db, user.email, templates.event_registered(email_codes.display_name(db, user_id), event.title, when, where), "event_registered"
+    )
+
+
 def register(
     db: Session,
     user_id: UserId,
@@ -572,6 +595,9 @@ def register(
     )
 
     db.add(registration)
+
+    if not full:
+        _registration_email(db, user_id, event)
 
     try:
         db.commit()

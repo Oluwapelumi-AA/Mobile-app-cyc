@@ -1,5 +1,6 @@
 "use client";
 
+import { GoogleSignInButton, readSignIn, TwoStepPanel, type SignInResult } from "@/components/admin/SignInExtras";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
@@ -82,11 +83,6 @@ function pageFromHash(): PageKey {
   return isPageKey(hash) ? hash : "overview";
 }
 
-async function readError(response: Response, fallback: string): Promise<string> {
-  const body = await response.json().catch(() => null);
-  return typeof body?.detail === "string" ? body.detail : fallback;
-}
-
 type Me = {
   name: string;
   email: string;
@@ -144,6 +140,7 @@ export default function Home() {
   const [signedIn, setSignedIn] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [twoStep, setTwoStep] = useState<{ token: string; setup: boolean } | null>(null);
   const [page, setPage] = useState<PageKey>(pageFromHash);
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -265,11 +262,12 @@ export default function Home() {
         body: JSON.stringify({ email: email.trim(), password }),
       });
 
-      if (!response.ok) {
-        throw new Error(await readError(response, "Unable to sign in. Check your credentials."));
-      }
-
+      const result = await readSignIn(response, "Unable to sign in. Check your credentials.");
       setPassword("");
+      if (result.kind === "mfa") {
+        setTwoStep({ token: result.token, setup: result.setup });
+        return;
+      }
       await loadSession();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in. Please try again.");
@@ -277,6 +275,15 @@ export default function Home() {
       setSigningIn(false);
     }
   }
+
+  const onGoogleResult = useCallback(
+    (result: SignInResult) => {
+      setError("");
+      if (result.kind === "mfa") setTwoStep({ token: result.token, setup: result.setup });
+      else void loadSession();
+    },
+    [loadSession],
+  );
 
   async function signOut() {
     try {
@@ -399,6 +406,18 @@ export default function Home() {
                 Sign in to the CYC management dashboard
               </p>
 
+              {twoStep ? (
+                <TwoStepPanel
+                  token={twoStep.token}
+                  setup={twoStep.setup}
+                  onCancel={() => setTwoStep(null)}
+                  onDone={() => {
+                    setTwoStep(null);
+                    void loadSession();
+                  }}
+                />
+              ) : (
+              <>
               <form onSubmit={handleLogin} className="mt-7 space-y-3">
                 <label className="relative block">
                   <span className="sr-only">Email address</span>
@@ -462,6 +481,9 @@ export default function Home() {
                   {signingIn ? "Signing in..." : "Sign in"}
                 </button>
               </form>
+              <GoogleSignInButton onResult={onGoogleResult} onError={setError} />
+              </>
+              )}
 
               <p className="mt-10 text-center text-[11px] leading-5 text-white/45">
                 Forgot password? <span className="text-[#e05a4f]">Ask another admin</span> to reset it.

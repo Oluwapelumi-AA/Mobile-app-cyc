@@ -6,14 +6,16 @@ import { KeyboardAvoidingView, Platform, Text, View } from "react-native";
 import { StepHeader } from "@/components/StepIndicator";
 import { Alert, Button, Field, Screen, T } from "@/components/ui";
 import { errorText } from "@/lib/api";
+import { GoogleButton, OrDivider } from "@/components/GoogleButton";
 import { useAuth } from "@/lib/auth";
+import { goToStep } from "@/lib/authFlow";
 import { ABOUT } from "@/lib/content";
 import { type, useTheme } from "@/lib/theme";
 
 /** Onboarding step 1 of 5: Create account. */
 export default function SignUp() {
   const t = useTheme();
-  const { signUp } = useAuth();
+  const { signUp, signInWithGoogle } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,7 +33,9 @@ export default function SignUp() {
     setBusy(true);
     setError("");
     try {
-      await signUp(name, email, password);
+      const step = await signUp(name, email, password);
+      if (step.kind !== "done") setBusy(false);
+      goToStep(step);
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
@@ -64,6 +68,20 @@ export default function SignUp() {
         <T variant="bodyLarge" muted style={{ marginTop: 4, marginBottom: 20 }}>
           It&apos;s free and takes a minute.
         </T>
+        <GoogleButton
+          label="Sign up with Google"
+          disabled={busy}
+          onError={setError}
+          onIdToken={async (idToken) => {
+            setError("");
+            try {
+              goToStep(await signInWithGoogle(idToken));
+            } catch (err) {
+              setError(errorText(err));
+            }
+          }}
+        />
+        <OrDivider />
         <Field label="Full name" icon="user" value={name} onChangeText={setName} placeholder="Ada Okafor" autoComplete="name" autoCapitalize="words" error={nameError} />
         <Field
           label="Email address"

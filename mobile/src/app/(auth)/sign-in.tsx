@@ -4,11 +4,13 @@ import { KeyboardAvoidingView, Platform, View } from "react-native";
 
 import { Button, Field, Header, LoadingBar, Screen, T, TextButton } from "@/components/ui";
 import { ApiError, errorText } from "@/lib/api";
+import { GoogleButton, OrDivider } from "@/components/GoogleButton";
 import { useAuth } from "@/lib/auth";
+import { goToStep } from "@/lib/authFlow";
 
 /** Sign in (Figma: Sign in – empty / details entered / signing in / error). */
 export default function SignIn() {
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -22,9 +24,12 @@ export default function SignIn() {
     setError("");
     setWrongDetails(false);
     try {
-      await signIn(email, password);
+      const step = await signIn(email, password);
+      if (step.kind !== "done") setBusy(false);
+      goToStep(step);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) setWrongDetails(true);
+      else if (err instanceof ApiError && err.code === "account_locked") setError(err.message);
       else setError(errorText(err));
       setBusy(false);
     }
@@ -51,6 +56,19 @@ export default function SignIn() {
         <T variant="bodyLarge" muted style={{ marginTop: 4, marginBottom: 24 }}>
           Sign in to pick up where you left off.
         </T>
+        <GoogleButton
+          disabled={busy}
+          onError={setError}
+          onIdToken={async (idToken) => {
+            setError("");
+            try {
+              goToStep(await signInWithGoogle(idToken));
+            } catch (err) {
+              setError(errorText(err));
+            }
+          }}
+        />
+        <OrDivider />
         <Field
           label="Email address"
           icon="mail"

@@ -9,6 +9,10 @@ export type User = {
   is_verified: boolean;
   account_role: "admin" | "moderator" | "user";
   created_at: string;
+  has_password?: boolean;
+  google_linked?: boolean;
+  mfa_enabled?: boolean;
+  mfa_required?: boolean;
 };
 
 export type Profile = {

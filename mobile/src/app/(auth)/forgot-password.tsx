@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { Alert, Button, Field, Header, IconTile, Screen, T, TextButton } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { goToStep } from "@/lib/authFlow";
 
 type Step = "email" | "sent" | "password" | "done";
 
@@ -81,7 +82,7 @@ export default function ForgotPassword() {
                 loading={busy}
                 onPress={() =>
                   run(async () => {
-                    await signIn(email, password);
+                    goToStep(await signIn(email, password), true);
                   })
                 }
               />

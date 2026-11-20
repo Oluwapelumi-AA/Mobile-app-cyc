@@ -44,9 +44,10 @@ def test_s3_needs_a_bucket():
 
 def test_fake_video_is_refused_in_production():
     with pytest.raises(ValidationError):
-        Settings(environment="production", secret_key="x" * 40, video_provider="fake")
+        Settings(environment="production", secret_key="x" * 40, video_provider="fake", rate_limit_enabled=True)
     production = Settings(
         environment="production",
+        rate_limit_enabled=True,
         secret_key="x" * 40,
         video_provider="none",
         push_provider="none",

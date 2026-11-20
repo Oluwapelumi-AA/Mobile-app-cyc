@@ -222,6 +222,12 @@ def suspend_user(
         user.id,
         data={"reason": data.reason, "sessions_revoked": revoked},
     )
+    from app.emails import templates
+    from app.services import email_codes, mailer
+
+    mailer.send(
+        db, user.email, templates.account_suspended(email_codes.display_name(db, user.id), data.reason), "account_suspended"
+    )
     db.commit()
     return _read_one(db, user)
 
@@ -236,6 +242,12 @@ def reinstate_user(
         raise Conflict("not_suspended", "This account is active.")
     user.is_active = True
     audit.record(db, user_id, "user.reinstated", "user", user.id, data={"note": data.note})
+    user.failed_login_count = 0
+    user.locked_until = None
+    from app.emails import templates
+    from app.services import email_codes, mailer
+
+    mailer.send(db, user.email, templates.account_reinstated(email_codes.display_name(db, user.id)), "account_reinstated")
     db.commit()
     return _read_one(db, user)
 

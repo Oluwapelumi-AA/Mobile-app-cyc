@@ -378,6 +378,7 @@ def test_worker_round(api, world, senders):
     push, email = senders
     result = run_once(push, email, session_factory=api.session_factory)
     assert result == {
+        "emails": 0,
         "reminded": 0,
         # Comment: push. Cancellation: push and email.
         "sent": 3,

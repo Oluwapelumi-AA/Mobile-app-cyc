@@ -24,6 +24,31 @@ class Settings(BaseSettings):
         "http://localhost:8081",
     ]
 
+    # Hosts the API answers to (Host header). ["*"] allows any; set your
+    # domain(s) in production, e.g. ["api.cyc.org"].
+    allowed_hosts: list[str] = ["*"]
+    # Show /docs and /openapi.json. Off by default in production.
+    enable_docs: bool | None = None
+    # Largest JSON request body. Files go straight to storage, not the API.
+    max_request_bytes: int = 1024 * 1024
+
+    # Sign-in protection
+    rate_limit_enabled: bool = True
+    # Wrong passwords in a row before the account is locked for a while.
+    login_max_failures: int = 5
+    login_lock_minutes: int = 15
+    # New email sign-ups confirm a 6-digit code before they can sign in.
+    require_email_verification: bool = True
+    # Admins must use two-step sign-in (an authenticator app code).
+    require_admin_mfa: bool = True
+    # Name shown in authenticator apps.
+    mfa_issuer: str = "CYC"
+    # Google sign-in: the OAuth client IDs whose ID tokens are accepted
+    # (web, iOS and Android clients). Empty turns Google sign-in off.
+    google_client_ids: list[str] = []
+    # Links in emails (certificate check, app). Your website or app link.
+    public_app_url: str = "https://cyc.org"
+
     # Video provider for meetings and livestreams. "fake" is a built-in
     # stand-in for development and tests (it signs its own join tokens and
     # webhooks); "none" turns video off. Real providers plug in through
@@ -51,6 +76,22 @@ class Settings(BaseSettings):
     storage_presign_ttl_seconds: int = 900
     # Largest audio, video or document file for the resource library.
     resource_max_upload_bytes: int = 500 * 1024 * 1024
+    # Largest course lesson video, and lesson notes PDF.
+    course_video_max_upload_bytes: int = 2 * 1024 * 1024 * 1024
+    course_notes_max_upload_bytes: int = 50 * 1024 * 1024
+    # CloudFront in front of the private bucket. "none" serves files with
+    # S3 presigned links; "cloudfront" with CloudFront signed URLs.
+    cdn_provider: str = "none"
+    # e.g. d1234abcd.cloudfront.net or media.cyc.org
+    cloudfront_domain: str = ""
+    # The public key ID from the CloudFront key group.
+    cloudfront_key_id: str = ""
+    # The matching private key (PEM). Either the text (\n for line breaks)
+    # or a path to the .pem file.
+    cloudfront_private_key: str = ""
+    cloudfront_private_key_path: str = ""
+    # How long a signed media link works. Long enough to watch a full video.
+    cloudfront_url_ttl_seconds: int = 4 * 60 * 60
 
     # Push notifications: "fake" (development and tests), "none" or "expo"
     # (Expo Push Service, for the Expo mobile app). Other providers plug in
@@ -123,6 +164,23 @@ class Settings(BaseSettings):
         if self.default_language not in self.supported_languages:
             raise ValueError("DEFAULT_LANGUAGE must be one of SUPPORTED_LANGUAGES")
 
+        if self.cdn_provider not in {"none", "cloudfront"}:
+            raise ValueError("CDN_PROVIDER must be none or cloudfront")
+
+        if self.cdn_provider == "cloudfront" and not (
+            self.cloudfront_domain
+            and self.cloudfront_key_id
+            and (self.cloudfront_private_key or self.cloudfront_private_key_path)
+        ):
+            raise ValueError(
+                "CDN_PROVIDER=cloudfront needs CLOUDFRONT_DOMAIN, CLOUDFRONT_KEY_ID "
+                "and CLOUDFRONT_PRIVATE_KEY (or CLOUDFRONT_PRIVATE_KEY_PATH)"
+            )
+
+        for name in ("login_max_failures", "login_lock_minutes", "max_request_bytes", "cloudfront_url_ttl_seconds"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name.upper()} must be positive")
+
         if self.storage_backend == "s3" and not self.storage_bucket:
             raise ValueError("STORAGE_BUCKET is required when STORAGE_BACKEND=s3")
 
@@ -145,6 +203,12 @@ class Settings(BaseSettings):
                     "use smtp or none in production"
                 )
 
+            if "*" in self.cors_origins:
+                raise ValueError("CORS_ORIGINS can't be * in production")
+
+            if not self.rate_limit_enabled:
+                raise ValueError("RATE_LIMIT_ENABLED must stay on in production")
+
             if len(self.secret_key) < 32:
                 raise ValueError(
                     "SECRET_KEY must contain at least 32 characters "
@@ -158,6 +222,14 @@ class Settings(BaseSettings):
                 )
 
         return self
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() in {"production", "prod"}
+
+    @property
+    def docs_enabled(self) -> bool:
+        return (not self.is_production) if self.enable_docs is None else self.enable_docs
 
     model_config = SettingsConfigDict(
         env_file=".env",

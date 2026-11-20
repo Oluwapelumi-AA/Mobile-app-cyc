@@ -45,7 +45,11 @@ from app.schemas.course import (
     CourseRead,
     CourseSummary,
     CourseUpdate,
+    LESSON_NOTES_TYPES,
+    LESSON_VIDEO_TYPES,
     LessonCreate,
+    LessonFileConfirm,
+    LessonFileUploadRequest,
     LessonRead,
     LessonUpdate,
     QuestionRead,
@@ -55,7 +59,10 @@ from app.schemas.course import (
 )
 from app.services import chapter_access, pagination
 from app.services.chapter_access import is_platform_admin
-from app.services.errors import Conflict, Forbidden, InvalidInput, NotFound
+from app.services.errors import Conflict, Forbidden, InvalidInput, NotFound, ServiceUnavailable
+from app.services.object_storage import ObjectStorage, StorageUnavailable, get_object_storage
+from app.core.config import settings
+from app.schemas.resource import FileUploadIntent
 
 COURSE_NOT_FOUND = NotFound("course_not_found", "Course not found.")
 LESSON_NOT_FOUND = NotFound("lesson_not_found", "Lesson not found.")
@@ -254,7 +261,18 @@ def _quiz_read(
     )
 
 
-def _course_read(db: Session, user_id: UserId, course: Course, can_manage: bool) -> CourseRead:
+def _signed(storage: ObjectStorage | None, key: str | None) -> str | None:
+    if not key or storage is None:
+        return None
+    try:
+        return storage.presign_download(key, settings.storage_presign_ttl_seconds)
+    except StorageUnavailable:
+        return None
+
+
+def _course_read(
+    db: Session, user_id: UserId, course: Course, can_manage: bool, storage: ObjectStorage | None = None
+) -> CourseRead:
     lessons = _lessons(db, course.id)
     done = set(
         db.scalars(
@@ -277,6 +295,8 @@ def _course_read(db: Session, user_id: UserId, course: Course, can_manage: bool)
         .where(CourseEnrollment.course_id == course.id)
     )
     enrollment = _enrollment(db, user_id, course.id)
+    # Uploaded files are only signed for learners and managers.
+    files = (storage or get_object_storage()) if (can_manage or enrollment is not None) else None
     return CourseRead.model_validate(
         {
             **_summary_fields(
@@ -290,12 +310,14 @@ def _course_read(db: Session, user_id: UserId, course: Course, can_manage: bool)
                     position=lesson.position,
                     title=lesson.title,
                     body=lesson.body,
-                    video_url=lesson.video_url,
+                    video_url=_signed(files, lesson.video_key) or lesson.video_url,
                     duration_minutes=lesson.duration_minutes,
                     module_title=lesson.module_title,
                     scripture_reference=lesson.scripture_reference,
                     scripture_text=lesson.scripture_text,
-                    notes_url=lesson.notes_url,
+                    notes_url=_signed(files, lesson.notes_key) or lesson.notes_url,
+                    has_video_file=lesson.video_key is not None,
+                    has_notes_file=lesson.notes_key is not None,
                     completed=lesson.id in done,
                     created_at=lesson.created_at,
                     updated_at=lesson.updated_at,
@@ -340,9 +362,11 @@ def list_courses(
     return Page(items=_summaries(db, user_id, rows), next_cursor=next_cursor)
 
 
-def get_course(db: Session, user_id: UserId, course_id: uuid.UUID) -> CourseRead:
+def get_course(
+    db: Session, user_id: UserId, course_id: uuid.UUID, storage: ObjectStorage | None = None
+) -> CourseRead:
     course, can_manage = _visible_course(db, user_id, course_id)
-    return _course_read(db, user_id, course, can_manage)
+    return _course_read(db, user_id, course, can_manage, storage)
 
 
 # Managing courses
@@ -476,9 +500,106 @@ def update_lesson(
 def delete_lesson(db: Session, user_id: UserId, lesson_id: uuid.UUID) -> CourseRead:
     lesson = _managed_lesson(db, user_id, lesson_id)
     course = db.get(Course, lesson.course_id)
+    for key in (lesson.video_key, lesson.notes_key):
+        _delete_stored(get_object_storage(), key)
     db.delete(lesson)
     db.commit()
     return _course_read(db, user_id, course, True)
+
+
+# Lesson files (videos and notes in storage)
+
+STORAGE_UNAVAILABLE = ServiceUnavailable("storage_unavailable", "File storage is not available right now.")
+
+
+def _delete_stored(storage: ObjectStorage, key: str | None) -> None:
+    if not key:
+        return
+    try:
+        storage.delete(key)
+    except StorageUnavailable:
+        pass
+
+
+def _lesson_file_rules(kind: str) -> tuple[tuple[str, ...], int]:
+    if kind == "video":
+        return LESSON_VIDEO_TYPES, settings.course_video_max_upload_bytes
+    return LESSON_NOTES_TYPES, settings.course_notes_max_upload_bytes
+
+
+_LESSON_EXTENSIONS = {"video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm", "application/pdf": "pdf"}
+
+
+def lesson_key_prefix(lesson: CourseLesson, kind: str) -> str:
+    return f"courses/{lesson.course_id}/lessons/{lesson.id}/{kind}/"
+
+
+def lesson_upload_intent(
+    db: Session, user_id: UserId, lesson_id: uuid.UUID, data: LessonFileUploadRequest, storage: ObjectStorage
+) -> FileUploadIntent:
+    lesson = _managed_lesson(db, user_id, lesson_id)
+    allowed, max_size = _lesson_file_rules(data.kind)
+    if data.content_type not in allowed:
+        raise InvalidInput("unsupported_file_type", f"Lesson {data.kind} takes {', '.join(allowed)}.")
+    if data.size_bytes > max_size:
+        raise InvalidInput("file_too_large", f"The file is too large (most {max_size // (1024 * 1024)} MB).")
+    key = f"{lesson_key_prefix(lesson, data.kind)}{uuid.uuid4().hex}.{_LESSON_EXTENSIONS[data.content_type]}"
+    try:
+        upload = storage.presign_upload(key, data.content_type, settings.storage_presign_ttl_seconds)
+    except StorageUnavailable:
+        raise STORAGE_UNAVAILABLE from None
+    return FileUploadIntent(
+        upload_url=upload.url,
+        method="PUT",
+        headers=upload.headers,
+        object_key=key,
+        expires_at=upload.expires_at,
+        max_size_bytes=max_size,
+    )
+
+
+def lesson_confirm_upload(
+    db: Session, user_id: UserId, lesson_id: uuid.UUID, data: LessonFileConfirm, storage: ObjectStorage
+) -> CourseRead:
+    """Attach an uploaded video or notes file, replacing any earlier one."""
+    lesson = _managed_lesson(db, user_id, lesson_id)
+    allowed, max_size = _lesson_file_rules(data.kind)
+    invalid = InvalidInput("invalid_upload", "The uploaded file was not found.")
+    key = data.object_key.strip()
+    if not key.startswith(lesson_key_prefix(lesson, data.kind)) or ".." in key:
+        raise invalid
+    try:
+        stored = storage.head(key)
+    except StorageUnavailable:
+        raise STORAGE_UNAVAILABLE from None
+    if stored is None:
+        raise invalid
+    if stored.content_type not in allowed or stored.size_bytes > max_size:
+        _delete_stored(storage, key)
+        raise InvalidInput("unsupported_file_type", "That file type or size isn't allowed.")
+    field = "video_key" if data.kind == "video" else "notes_key"
+    old = getattr(lesson, field)
+    if old and old != key:
+        _delete_stored(storage, old)
+    setattr(lesson, field, key)
+    db.commit()
+    course = db.get(Course, lesson.course_id)
+    return _course_read(db, user_id, course, True, storage)
+
+
+def lesson_remove_file(
+    db: Session, user_id: UserId, lesson_id: uuid.UUID, kind: str, storage: ObjectStorage
+) -> CourseRead:
+    lesson = _managed_lesson(db, user_id, lesson_id)
+    field = "video_key" if kind == "video" else "notes_key"
+    key = getattr(lesson, field)
+    if key is None:
+        raise NotFound("file_not_found", f"This lesson has no uploaded {kind}.")
+    setattr(lesson, field, None)
+    db.commit()
+    _delete_stored(storage, key)
+    course = db.get(Course, lesson.course_id)
+    return _course_read(db, user_id, course, True, storage)
 
 
 # Quizzes
@@ -587,6 +708,19 @@ def unenroll(db: Session, user_id: UserId, course_id: uuid.UUID) -> None:
         db.commit()
 
 
+def _certificate_email(db: Session, user_id: UserId, course_id: uuid.UUID, number: str) -> None:
+    from app.emails import templates
+    from app.models.user import User
+    from app.services import email_codes, mailer
+
+    user = db.get(User, user_id)
+    course = db.get(Course, course_id)
+    if user is not None and course is not None:
+        mailer.send(
+            db, user.email, templates.certificate_earned(email_codes.display_name(db, user_id), course.title, number), "certificate"
+        )
+
+
 def _refresh_completion(db: Session, user_id: UserId, course_id: uuid.UUID) -> None:
     enrollment = _enrollment(db, user_id, course_id)
     if enrollment is None:
@@ -605,6 +739,7 @@ def _refresh_completion(db: Session, user_id: UserId, course_id: uuid.UUID) -> N
         enrollment.completed_at = _now()
         if enrollment.certificate_number is None:
             enrollment.certificate_number = new_certificate_number(db, enrollment.completed_at)
+            _certificate_email(db, user_id, course_id, enrollment.certificate_number)
     elif not finished:
         enrollment.completed_at = None
     db.commit()

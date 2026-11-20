@@ -1,6 +1,6 @@
 """Request and response schemas for courses, lessons and quizzes."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import (
@@ -97,6 +97,11 @@ class LessonRead(BaseModel):
     scripture_reference: str | None = None
     scripture_text: str | None = None
     notes_url: str | None = None
+    # An uploaded video or notes file (served from storage). When set,
+    # ``video_url`` / ``notes_url`` are short-lived signed links to it, given
+    # to people enrolled in the course and to its managers.
+    has_video_file: bool = False
+    has_notes_file: bool = False
     completed: bool
     created_at: UtcDatetime
     updated_at: UtcDatetime
@@ -271,3 +276,24 @@ class CertificateVerification(BaseModel):
     course_title: str | None = None
     completed_at: UtcDatetime | None = None
     issued_by: str = "Christ Youth Club (CYC)"
+
+
+LESSON_VIDEO_TYPES = ("video/mp4", "video/quicktime", "video/webm")
+LESSON_NOTES_TYPES = ("application/pdf",)
+
+
+class LessonFileUploadRequest(BaseModel):
+    """Declare a lesson video or notes PDF before uploading it to storage."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["video", "notes"]
+    content_type: Literal["video/mp4", "video/quicktime", "video/webm", "application/pdf"]
+    size_bytes: int = Field(gt=0)
+
+
+class LessonFileConfirm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["video", "notes"]
+    object_key: str = Field(min_length=1, max_length=255)
