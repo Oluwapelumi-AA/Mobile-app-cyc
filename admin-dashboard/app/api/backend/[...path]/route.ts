@@ -77,6 +77,7 @@ const ALLOWED: Record<Method, RegExp[]> = {
 
     /^search(\/[a-z]+)?$/,
     /^auth\/me$/,
+    /^auth\/mfa$/,
     /^profiles\/me$/,
     /^health$/,
   ],
@@ -107,6 +108,9 @@ const ALLOWED: Record<Method, RegExp[]> = {
     id("^resources/{id}/file/(upload-intent|confirm)$"),
     /^courses$/,
     id("^courses/{id}/(publish|unpublish|lessons|quizzes)$"),
+    id("^course-lessons/{id}/files/(upload-intent|confirm)$"),
+    /^auth\/mfa\/(setup|enable|disable|recovery-codes)$/,
+    /^auth\/(change-password|logout-everywhere)$/,
   ],
 
   PUT: [
@@ -138,6 +142,7 @@ const ALLOWED: Record<Method, RegExp[]> = {
     id("^resources/{id}$"),
     id("^courses/{id}$"),
     id("^course-lessons/{id}$"),
+    id("^course-lessons/{id}/files/(video|notes)$"),
     id("^course-quizzes/{id}$"),
   ],
 };
@@ -155,7 +160,7 @@ function unauthorized(clearCookies = false) {
   if (clearCookies) {
     response.cookies.set("light_access_token", "", {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 0,
@@ -163,7 +168,7 @@ function unauthorized(clearCookies = false) {
 
     response.cookies.set("light_refresh_token", "", {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 0,
@@ -182,7 +187,7 @@ function applyAuthCookies(
 
   response.cookies.set("light_access_token", accessToken, {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "strict",
     secure,
     path: "/",
     maxAge: 15 * 60,
@@ -190,10 +195,10 @@ function applyAuthCookies(
 
   response.cookies.set("light_refresh_token", refreshToken, {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "strict",
     secure,
     path: "/",
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 7 * 24 * 60 * 60,
   });
 
   return response;

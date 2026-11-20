@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user_id
+from app.api.deps import get_current_user_id, get_viewer_id
 from app.core.identity import UserId
 from app.db.session import get_db
 from app.models.resource import ResourceKind
@@ -37,6 +37,7 @@ router = APIRouter(prefix="/resources", tags=["Resources"])
 categories_router = APIRouter(prefix="/resource-categories", tags=["Resources"])
 
 CurrentUserId = Annotated[UserId, Depends(get_current_user_id)]
+ViewerId = Annotated[UserId, Depends(get_viewer_id)]
 DbSession = Annotated[Session, Depends(get_db)]
 Storage = Annotated[ObjectStorage, Depends(get_object_storage)]
 Limit = Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)]
@@ -47,7 +48,7 @@ Cursor = Annotated[str | None, Query(max_length=200)]
 
 
 @categories_router.get("", response_model=list[CategoryRead])
-def list_categories(user_id: CurrentUserId, db: DbSession):
+def list_categories(user_id: ViewerId, db: DbSession):
     """Every category, in display order."""
     return resources.list_categories(db)
 
@@ -82,7 +83,7 @@ def create_resource(data: ResourceCreate, user_id: CurrentUserId, db: DbSession)
 
 @router.get("", response_model=Page[ResourceSummary])
 def list_resources(
-    user_id: CurrentUserId,
+    user_id: ViewerId,
     db: DbSession,
     limit: Limit = DEFAULT_PAGE_SIZE,
     cursor: Cursor = None,
@@ -144,7 +145,7 @@ def list_in_progress(
 
 
 @router.get("/{resource_id}", response_model=ResourceRead)
-def get_resource(resource_id: UUID, user_id: CurrentUserId, db: DbSession, storage: Storage):
+def get_resource(resource_id: UUID, user_id: ViewerId, db: DbSession, storage: Storage):
     """Includes the article body and a short-lived ``file_url``."""
     return resources.get_resource(db, user_id, resource_id, storage)
 

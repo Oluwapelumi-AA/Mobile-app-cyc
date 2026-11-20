@@ -26,6 +26,7 @@ _PROFILE_FIELDS = (
     "language_code",
     "country_code",
     "city",
+    "phone",
     "timezone",
     "preferred_chapter_id",
     "chapter_id",
@@ -46,6 +47,7 @@ class ProfileRecord:
     language_code: str | None = None
     country_code: str | None = None
     city: str | None = None
+    phone: str | None = None
     timezone: str | None = None
 
     # Preferred Chapter does not grant official membership.

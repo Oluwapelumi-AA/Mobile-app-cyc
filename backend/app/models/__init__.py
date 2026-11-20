@@ -1,4 +1,5 @@
 from app.db.session import Base
+from app.models.auth_security import EmailCode, MfaRecoveryCode, OutboundEmail
 from app.models.chapter import Chapter
 from app.models.chapter_coverage import ChapterCoverageArea
 from app.models.chapter_management import (
@@ -74,6 +75,9 @@ from app.models.user_profile import UserProfile
 
 __all__ = [
     "Base",
+    "EmailCode",
+    "MfaRecoveryCode",
+    "OutboundEmail",
     "AccountRole",
     "AuditLog",
     "Chapter",

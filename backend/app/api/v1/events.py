@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user_id
+from app.api.deps import get_current_user_id, get_viewer_id
 from app.core.identity import UserId
 from app.db.session import get_db
 from app.models.event import RegistrationStatus
@@ -25,6 +25,7 @@ from app.services.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 router = APIRouter(prefix="/events", tags=["Events"])
 
 CurrentUserId = Annotated[UserId, Depends(get_current_user_id)]
+ViewerId = Annotated[UserId, Depends(get_viewer_id)]
 DbSession = Annotated[Session, Depends(get_db)]
 Limit = Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)]
 Cursor = Annotated[str | None, Query(max_length=200)]
@@ -37,7 +38,7 @@ def create_event(data: EventCreate, user_id: CurrentUserId, db: DbSession):
 
 @router.get("", response_model=Page[EventRead])
 def list_events(
-    user_id: CurrentUserId,
+    user_id: ViewerId,
     db: DbSession,
     limit: Limit = DEFAULT_PAGE_SIZE,
     cursor: Cursor = None,
@@ -65,7 +66,7 @@ def list_events(
 
 
 @router.get("/{event_id}", response_model=EventRead)
-def get_event(event_id: UUID, user_id: CurrentUserId, db: DbSession):
+def get_event(event_id: UUID, user_id: ViewerId, db: DbSession):
     return events.get_event(db, user_id, event_id)
 
 

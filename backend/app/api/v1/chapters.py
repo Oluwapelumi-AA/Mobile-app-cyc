@@ -7,10 +7,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user_id
+from app.api.deps import get_current_user_id, get_viewer_id
 from app.core.identity import UserId
 from app.db.session import get_db
-from app.schemas.chapter import ChapterCreate, ChapterRead, ChapterUpdate
+from app.schemas.chapter import ChapterCreate, ChapterLeader, ChapterRead, ChapterUpdate
 from app.services import chapters as service
 
 
@@ -23,6 +23,7 @@ CurrentUserId = Annotated[
     UserId,
     Depends(get_current_user_id),
 ]
+ViewerId = Annotated[UserId, Depends(get_viewer_id)]
 
 DbSession = Annotated[
     Session,
@@ -32,7 +33,7 @@ DbSession = Annotated[
 
 @router.get("", response_model=list[ChapterRead])
 def list_chapters(
-    user_id: CurrentUserId,
+    user_id: ViewerId,
     db: DbSession,
     q: Annotated[str | None, Query(max_length=100)] = None,
     country_code: Annotated[
@@ -66,7 +67,7 @@ def create_chapter(
 @router.get("/{chapter_id}", response_model=ChapterRead)
 def get_chapter(
     chapter_id: UUID,
-    user_id: CurrentUserId,
+    user_id: ViewerId,
     db: DbSession,
 ):
     return service.get_chapter(db, user_id, chapter_id)
@@ -119,3 +120,10 @@ def restore_chapter(
         chapter_id,
         archived=False,
     )
+
+
+@router.get("/{chapter_id}/leaders", response_model=list[ChapterLeader])
+def chapter_leaders(chapter_id: UUID, user_id: ViewerId, db: DbSession):
+    """Who leads the Chapter: names and roles only. Anyone can see this,
+    so people can get to know a Chapter before joining."""
+    return service.chapter_leaders(db, chapter_id)

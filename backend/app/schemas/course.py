@@ -1,6 +1,6 @@
 """Request and response schemas for courses, lessons and quizzes."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import (
@@ -27,6 +27,9 @@ Position = Annotated[int, Field(ge=0, le=10_000)]
 PassMark = Annotated[int, Field(ge=1, le=100)]
 OptionText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 PromptText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=1000)]
+ModuleTitle = Annotated[str, StringConstraints(strip_whitespace=True, max_length=150)]
+Scripture = Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)]
+Explanation = Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)]
 
 
 # Courses
@@ -90,6 +93,15 @@ class LessonRead(BaseModel):
     body: str | None
     video_url: str | None
     duration_minutes: int | None
+    module_title: str | None = None
+    scripture_reference: str | None = None
+    scripture_text: str | None = None
+    notes_url: str | None = None
+    # An uploaded video or notes file (served from storage). When set,
+    # ``video_url`` / ``notes_url`` are short-lived signed links to it, given
+    # to people enrolled in the course and to its managers.
+    has_video_file: bool = False
+    has_notes_file: bool = False
     completed: bool
     created_at: UtcDatetime
     updated_at: UtcDatetime
@@ -98,6 +110,8 @@ class LessonRead(BaseModel):
 class QuestionRead(BaseModel):
     prompt: str
     options: list[str]
+    # Shown after answering. Learners get it from the check endpoint.
+    explanation: str | None = None
     # Only sent to people who manage the course.
     correct_index: int | None = None
 
@@ -136,6 +150,10 @@ class LessonCreate(BaseModel):
     video_url: VideoUrl | None = None
     duration_minutes: Minutes | None = None
     position: Position | None = None
+    module_title: ModuleTitle | None = None
+    scripture_reference: Scripture | None = None
+    scripture_text: LongText | None = None
+    notes_url: VideoUrl | None = None
 
 
 class LessonUpdate(BaseModel):
@@ -146,6 +164,10 @@ class LessonUpdate(BaseModel):
     video_url: VideoUrl | None = None
     duration_minutes: Minutes | None = None
     position: Position | None = None
+    module_title: ModuleTitle | None = None
+    scripture_reference: Scripture | None = None
+    scripture_text: LongText | None = None
+    notes_url: VideoUrl | None = None
 
 
 # Quizzes
@@ -157,6 +179,7 @@ class QuestionWrite(BaseModel):
     prompt: PromptText
     options: list[OptionText] = Field(min_length=2, max_length=8)
     correct_index: int = Field(ge=0)
+    explanation: Explanation | None = None
 
     @model_validator(mode="after")
     def _correct_is_an_option(self):
@@ -215,6 +238,7 @@ class CertificateRead(BaseModel):
     # Their best score across the course's quizzes; null if they took none.
     best_score: int | None
     completed_at: UtcDatetime
+    certificate_number: str | None = None
 
 
 class CourseOverview(BaseModel):
@@ -226,3 +250,50 @@ class CourseOverview(BaseModel):
     quizzes: int
     certificates: int
     recent_attempts: list[AttemptRead]
+
+
+class AnswerCheck(BaseModel):
+    """Check one answer before submitting the whole quiz."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question_index: int = Field(ge=0)
+    answer: int = Field(ge=0)
+
+
+class AnswerResult(BaseModel):
+    correct: bool
+    correct_index: int
+    explanation: str | None
+
+
+class CertificateVerification(BaseModel):
+    """Public: what anyone sees when checking a certificate number."""
+
+    valid: bool
+    certificate_number: str
+    recipient_name: str | None = None
+    course_title: str | None = None
+    completed_at: UtcDatetime | None = None
+    issued_by: str = "Christ Youth Club (CYC)"
+
+
+LESSON_VIDEO_TYPES = ("video/mp4", "video/quicktime", "video/webm")
+LESSON_NOTES_TYPES = ("application/pdf",)
+
+
+class LessonFileUploadRequest(BaseModel):
+    """Declare a lesson video or notes PDF before uploading it to storage."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["video", "notes"]
+    content_type: Literal["video/mp4", "video/quicktime", "video/webm", "application/pdf"]
+    size_bytes: int = Field(gt=0)
+
+
+class LessonFileConfirm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["video", "notes"]
+    object_key: str = Field(min_length=1, max_length=255)

@@ -68,6 +68,27 @@ def get_current_user_id(
     return current_user.id
 
 
+#: Who a visitor without an account is. No user has this ID, so every
+#: permission check treats them as someone outside every Chapter: they see
+#: app-wide, published content only.
+GUEST_ID: UserId = uuid.UUID(int=0)
+
+
+def get_viewer_id(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> UserId:
+    """The signed-in user's ID, or ``GUEST_ID`` when no token is sent.
+
+    Used by the read-only endpoints guests can browse (chapters, app-wide
+    events, sermons and resources, courses). A token that is sent but
+    invalid or expired still gets 401, so the app refreshes it.
+    """
+    if credentials is None:
+        return GUEST_ID
+    return get_current_user(credentials, db).id
+
+
 def get_profile_repository(db: Session = Depends(get_db)) -> ProfileRepository:
     """Provide the database-backed profile repository to API dependencies."""
     return SqlAlchemyProfileRepository(db)

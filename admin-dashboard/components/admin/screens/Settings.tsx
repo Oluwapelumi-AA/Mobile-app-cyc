@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, useAdmin } from "../data";
+import SecurityPanel from "./SecurityPanel";
 import { useConfirm, useToast } from "../dialogs";
 import { CycLogo, Icon, type IconName } from "../icons";
 import {
@@ -42,7 +43,6 @@ const TABS: { key: TabKey; label: string }[] = [
 
 const APP_SETTINGS: { key: string; title: string; hint: string; on: boolean }[] = [
   { key: "registrations", title: "Allow new user registrations", hint: "Let new users create accounts on the platform.", on: true },
-  { key: "emailVerification", title: "Email verification", hint: "Require email verification for new accounts.", on: true },
   { key: "moderatePosts", title: "Moderate new posts", hint: "Require approval for new posts and comments.", on: false },
   { key: "live", title: "Enable live streaming", hint: "Allow users to create and join live sessions.", on: true },
   { key: "courses", title: "Enable courses and quizzes", hint: "Allow access to courses, quizzes and certificates.", on: true },
@@ -258,6 +258,8 @@ export default function Settings() {
                 </ul>
               </Card>
             </div>
+          ) : tab === "security" ? (
+            <SecurityPanel />
           ) : (
             <Card className="mt-4 p-8 text-center">
               <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-brand"><Icon name="settings" size={26} /></span>

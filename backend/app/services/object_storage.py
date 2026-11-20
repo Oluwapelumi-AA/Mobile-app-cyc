@@ -12,6 +12,11 @@ bucket.
 - ``s3``: any S3-compatible service (AWS S3, Cloudflare R2, MinIO,
   DigitalOcean Spaces, ...), configured by the ``STORAGE_*`` settings.
 
+With ``CDN_PROVIDER=cloudfront`` the bucket stays private and private files
+(sermon audio and video, course videos, notes, replays) are served through
+CloudFront with signed URLs instead of S3 presigned links: faster playback
+worldwide and cheaper data transfer. Uploads still go straight to S3.
+
 ``InMemoryObjectStorage`` is for tests.
 """
 
@@ -82,6 +87,38 @@ class UnconfiguredObjectStorage:
         raise StorageUnavailable("object storage is not configured")
 
 
+class CloudFrontSigner:
+    """Signed CloudFront URLs (canned policy) with a key from a key group."""
+
+    def __init__(self, config: Settings) -> None:
+        from botocore.signers import CloudFrontSigner as _Signer
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding
+
+        pem = config.cloudfront_private_key.replace("\\n", "\n")
+        if not pem and config.cloudfront_private_key_path:
+            with open(config.cloudfront_private_key_path, encoding="utf-8") as handle:
+                pem = handle.read()
+        key = serialization.load_pem_private_key(pem.encode(), password=None)
+
+        def rsa_signer(message: bytes) -> bytes:
+            # CloudFront requires RSA with SHA-1 for signed URLs.
+            return key.sign(message, padding.PKCS1v15(), hashes.SHA1())  # noqa: S303
+
+        self.domain = config.cloudfront_domain.removeprefix("https://").rstrip("/")
+        self.min_ttl = config.cloudfront_url_ttl_seconds
+        self._signer = _Signer(config.cloudfront_key_id, rsa_signer)
+
+    def url(self, key: str) -> str:
+        from urllib.parse import quote
+
+        return f"https://{self.domain}/{quote(key)}"
+
+    def sign(self, key: str, expires_in: int) -> str:
+        expires = datetime.now(UTC) + timedelta(seconds=max(expires_in, self.min_ttl))
+        return self._signer.generate_presigned_url(self.url(key), date_less_than=expires)
+
+
 class S3ObjectStorage:
     """Any S3-compatible service, through boto3."""
 
@@ -100,21 +137,28 @@ class S3ObjectStorage:
             aws_secret_access_key=config.storage_secret_access_key or None,
             config=Config(signature_version="s3v4"),
         )
+        # Files are encrypted at rest. Off for S3-compatible services that
+        # don't support it (STORAGE_ENDPOINT_URL set).
+        self.encrypt = not config.storage_endpoint_url
+        self.cdn = CloudFrontSigner(config) if config.cdn_provider == "cloudfront" else None
 
     def presign_upload(self, key: str, content_type: str, expires_in: int) -> PresignedUpload:
-        url = self.client.generate_presigned_url(
-            "put_object",
-            Params={"Bucket": self.bucket, "Key": key, "ContentType": content_type},
-            ExpiresIn=expires_in,
-        )
+        params = {"Bucket": self.bucket, "Key": key, "ContentType": content_type}
+        headers = {"Content-Type": content_type}
+        if self.encrypt:
+            params["ServerSideEncryption"] = "AES256"
+            headers["x-amz-server-side-encryption"] = "AES256"
+        url = self.client.generate_presigned_url("put_object", Params=params, ExpiresIn=expires_in)
         return PresignedUpload(
             url=url,
             method="PUT",
-            headers={"Content-Type": content_type},
+            headers=headers,
             expires_at=_expires_at(expires_in),
         )
 
     def presign_download(self, key: str, expires_in: int) -> str:
+        if self.cdn is not None:
+            return self.cdn.sign(key, expires_in)
         return self.client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.bucket, "Key": key},
@@ -122,6 +166,10 @@ class S3ObjectStorage:
         )
 
     def public_url(self, key: str) -> str:
+        if self.public_base_url:
+            return f"{self.public_base_url}/{key}"
+        if self.cdn is not None:
+            return self.cdn.url(key)
         if self.public_base_url:
             return f"{self.public_base_url}/{key}"
         endpoint = self.client.meta.endpoint_url.rstrip("/")

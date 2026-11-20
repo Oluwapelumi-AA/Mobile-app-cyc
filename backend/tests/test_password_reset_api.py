@@ -31,7 +31,10 @@ def ask(api, email="ada@example.com"):
 
 
 def code_from(outbox):
-    return re.search(r"\b(\d{6})\b", outbox[-1].text).group(1)
+    """The code in the latest reset email (a "password changed" email may
+    have come after it)."""
+    latest = [m for m in outbox if "reset code" in m.subject][-1]
+    return re.search(r"\b(\d{6})\b", latest.text).group(1)
 
 
 def confirm(api, code, email="ada@example.com", password=NEW):

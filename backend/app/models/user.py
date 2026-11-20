@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from sqlalchemy import Boolean, DateTime, Enum as SQLAlchemyEnum
-from sqlalchemy import String
+from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -95,4 +95,28 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    # Sign-in methods. Accounts made with Google have no password of their
+    # own (``has_password`` false) until they set one.
+    has_password: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
+    google_sub: Mapped[str | None] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
+
+    # Wrong passwords in a row, and when a temporary lock ends.
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Two-step sign-in (authenticator app). The secret is stored encrypted;
+    # it only counts once ``mfa_enabled_at`` is set.
+    mfa_secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    mfa_enabled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

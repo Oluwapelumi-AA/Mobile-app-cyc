@@ -285,6 +285,14 @@ type FormState = {
   language_code: string;
   contact_email: string;
   description: string;
+  contact_phone: string;
+  state: string;
+  venue: string;
+  address: string;
+  meeting_schedule: string;
+  meeting_time: string;
+  latitude: string;
+  longitude: string;
 };
 
 const EMPTY_FORM: FormState = {
@@ -295,6 +303,14 @@ const EMPTY_FORM: FormState = {
   language_code: "en",
   contact_email: "",
   description: "",
+  contact_phone: "",
+  state: "",
+  venue: "",
+  address: "",
+  meeting_schedule: "",
+  meeting_time: "",
+  latitude: "",
+  longitude: "",
 };
 
 function ChapterForm({
@@ -329,6 +345,14 @@ function ChapterForm({
             language_code: chapter.language ?? "",
             contact_email: chapter.contact === "—" ? "" : chapter.contact,
             description: chapter.description,
+            contact_phone: chapter.details?.contact_phone ?? "",
+            state: chapter.details?.state ?? "",
+            venue: chapter.details?.venue ?? "",
+            address: chapter.details?.address ?? "",
+            meeting_schedule: chapter.details?.meeting_schedule ?? "",
+            meeting_time: chapter.details?.meeting_time ?? "",
+            latitude: chapter.details?.latitude?.toString() ?? "",
+            longitude: chapter.details?.longitude?.toString() ?? "",
           },
     );
   }, [chapter]);
@@ -352,6 +376,14 @@ function ChapterForm({
         language_code: form.language_code.trim() || null,
         contact_email: form.contact_email.trim() || null,
         description: form.description.trim() || null,
+        contact_phone: form.contact_phone.trim() || null,
+        state: form.state.trim() || null,
+        venue: form.venue.trim() || null,
+        address: form.address.trim() || null,
+        meeting_schedule: form.meeting_schedule.trim() || null,
+        meeting_time: form.meeting_time.trim() || null,
+        latitude: form.latitude.trim() ? Number(form.latitude) : null,
+        longitude: form.longitude.trim() ? Number(form.longitude) : null,
       };
       const saved = await api<ApiChapter>(isNew ? "chapters" : `chapters/${(chapter as ChapterRow).id}`, {
         method: isNew ? "POST" : "PATCH",
@@ -387,7 +419,15 @@ function ChapterForm({
         <Field label="Country code" required value={form.country_code} onChange={set("country_code")} placeholder="NG" />
         <Field label="Time zone" required value={form.timezone} onChange={set("timezone")} placeholder="Africa/Lagos" />
         <Field label="Language" value={form.language_code} onChange={set("language_code")} placeholder="en-NG" />
+        <Field label="State or region" value={form.state} onChange={set("state")} placeholder="Lagos State" />
+        <Field label="Contact phone" value={form.contact_phone} onChange={set("contact_phone")} placeholder="+234 800 000 0000" />
         <Field label="Contact email" className="sm:col-span-2" value={form.contact_email} onChange={set("contact_email")} placeholder="lagos@cyc.org" />
+        <Field label="Meeting day" value={form.meeting_schedule} onChange={set("meeting_schedule")} placeholder="Sundays" />
+        <Field label="Meeting time" value={form.meeting_time} onChange={set("meeting_time")} placeholder="2:00 pm – 4:00 pm" />
+        <Field label="Venue" value={form.venue} onChange={set("venue")} placeholder="Chapter hall" />
+        <Field label="Street address" value={form.address} onChange={set("address")} placeholder="12 Wuse Road" />
+        <Field label="Latitude (for “near you”)" value={form.latitude} onChange={set("latitude")} placeholder="9.0765" />
+        <Field label="Longitude" value={form.longitude} onChange={set("longitude")} placeholder="7.3986" />
         <label className="block sm:col-span-2">
           <span className="mb-1.5 block text-sm font-medium text-ink">Description</span>
           <textarea

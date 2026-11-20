@@ -36,6 +36,7 @@ class EmailMessage:
     to: str
     subject: str
     text: str
+    html: str | None = None
 
 
 class EmailSender(Protocol):
@@ -99,6 +100,8 @@ class SmtpEmailSender:
         mime["To"] = message.to
         mime["Subject"] = message.subject
         mime.set_content(message.text)
+        if message.html:
+            mime.add_alternative(message.html, subtype="html")
         try:
             with self._connect() as client:
                 if self.username:

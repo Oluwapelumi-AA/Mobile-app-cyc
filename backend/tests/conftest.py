@@ -8,6 +8,11 @@ os.environ["VIDEO_PROVIDER"] = "fake"
 os.environ["STORAGE_BACKEND"] = "none"
 os.environ["PUSH_PROVIDER"] = "fake"
 os.environ["EMAIL_BACKEND"] = "fake"
+# Most tests sign in directly; the sign-in protections have their own tests
+# (tests/test_auth_security.py), which switch these back on.
+os.environ["RATE_LIMIT_ENABLED"] = "false"
+os.environ["REQUIRE_EMAIL_VERIFICATION"] = "false"
+os.environ["REQUIRE_ADMIN_MFA"] = "false"
 
 
 from uuid import uuid4  # noqa: E402
@@ -31,7 +36,7 @@ def api(tmp_path):
     ``api.add_user("name")`` creates a user and returns its id;
     ``api.act_as(user_id)`` makes later requests come from that user.
     """
-    from app.api.deps import get_current_user_id
+    from app.api.deps import GUEST_ID, get_current_user_id, get_viewer_id
     from app.db.session import Base, get_db
     from app.main import app
     from app.models import AccountRole, User
@@ -146,6 +151,7 @@ def api(tmp_path):
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user_id] = lambda: context.current_user_id
+    app.dependency_overrides[get_viewer_id] = lambda: context.current_user_id or GUEST_ID
     try:
         with TestClient(app) as client:
             context.client = client
@@ -153,4 +159,5 @@ def api(tmp_path):
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user_id, None)
+        app.dependency_overrides.pop(get_viewer_id, None)
         engine.dispose()

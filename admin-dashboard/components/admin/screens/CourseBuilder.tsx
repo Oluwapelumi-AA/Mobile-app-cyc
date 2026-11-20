@@ -217,7 +217,7 @@ function DetailsTab({
 /* Lessons                                                             */
 /* ------------------------------------------------------------------ */
 
-const emptyLesson = { title: "", body: "", video_url: "", duration_minutes: "" };
+const emptyLesson = { title: "", body: "", video_url: "", duration_minutes: "", module_title: "", scripture_reference: "", scripture_text: "", notes_url: "" };
 
 function LessonsTab({
   course,
@@ -239,8 +239,13 @@ function LessonsTab({
         ? {
             title: lesson.title,
             body: lesson.body ?? "",
-            video_url: lesson.video_url ?? "",
+            // Uploaded files come back as short-lived signed links; only links typed here are edited.
+            video_url: lesson.has_video_file ? "" : lesson.video_url ?? "",
             duration_minutes: lesson.duration_minutes ? String(lesson.duration_minutes) : "",
+            module_title: lesson.module_title ?? "",
+            scripture_reference: lesson.scripture_reference ?? "",
+            scripture_text: lesson.scripture_text ?? "",
+            notes_url: lesson.has_notes_file ? "" : lesson.notes_url ?? "",
           }
         : emptyLesson,
     );
@@ -249,11 +254,16 @@ function LessonsTab({
   const save = () =>
     run(async () => {
       if (form.title.trim().length < 3) throw new Error("Give the lesson a title of at least 3 characters.");
+      const current = course.lessons.find((l) => l.id === editing);
       const body = JSON.stringify({
         title: form.title.trim(),
         body: orNull(form.body),
-        video_url: orNull(form.video_url),
+        ...(current?.has_video_file ? {} : { video_url: orNull(form.video_url) }),
         duration_minutes: form.duration_minutes ? Number(form.duration_minutes) : null,
+        module_title: orNull(form.module_title),
+        scripture_reference: orNull(form.scripture_reference),
+        scripture_text: orNull(form.scripture_text),
+        ...(current?.has_notes_file ? {} : { notes_url: orNull(form.notes_url) }),
       });
       const next =
         editing === "new"
@@ -298,7 +308,7 @@ function LessonsTab({
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-ink">{lesson.title}</p>
                 <p className="truncate text-xs text-muted">
-                  {[lesson.video_url ? "Video" : null, lesson.body ? "Reading" : null, lesson.duration_minutes ? `${lesson.duration_minutes} min` : null].filter(Boolean).join(" · ") || "No content yet"}
+                  {[lesson.has_video_file ? "Video file" : lesson.video_url ? "Video link" : null, lesson.has_notes_file ? "Notes PDF" : null, lesson.body ? "Reading" : null, lesson.duration_minutes ? `${lesson.duration_minutes} min` : null].filter(Boolean).join(" · ") || "No content yet"}
                 </p>
               </div>
               <IconButton label="Move up" icon="arrowUp" disabled={busy || i === 0} onClick={() => move(i, -1)} />
@@ -306,7 +316,12 @@ function LessonsTab({
               <IconButton label="Edit lesson" icon="edit" disabled={busy} onClick={() => startEdit(lesson)} />
               <IconButton label="Delete lesson" icon="trash" disabled={busy} onClick={() => remove(lesson)} />
             </div>
-            {editing === lesson.id ? <LessonFields form={form} set={set} busy={busy} onSave={save} onCancel={() => setEditing(null)} /> : null}
+            {editing === lesson.id ? (
+              <>
+                <LessonFiles lesson={lesson} onUpdated={onUpdated} />
+                <LessonFields form={form} set={set} busy={busy} onSave={save} onCancel={() => setEditing(null)} />
+              </>
+            ) : null}
           </li>
         ))}
       </ol>
@@ -323,6 +338,90 @@ function LessonsTab({
           Add lesson
         </SecondaryButton>
       )}
+      <FormError message={error} />
+    </div>
+  );
+}
+
+const VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
+
+/** Upload a lesson video or notes PDF straight to storage (S3), with progress. */
+function LessonFiles({ lesson, onUpdated }: { lesson: ApiLesson; onUpdated: (course: ApiCourseDetail, message?: string) => void }) {
+  const [progress, setProgress] = useState<{ kind: string; pct: number } | null>(null);
+  const [error, setError] = useState("");
+
+  const upload = async (kind: "video" | "notes", file: File) => {
+    setError("");
+    const allowed = kind === "video" ? VIDEO_TYPES : ["application/pdf"];
+    if (!allowed.includes(file.type)) {
+      setError(kind === "video" ? "Choose an MP4, MOV or WebM video." : "Choose a PDF file.");
+      return;
+    }
+    try {
+      setProgress({ kind, pct: 0 });
+      const intent = await api<{ upload_url: string; method: "PUT" | "POST"; headers: Record<string, string>; object_key: string }>(
+        `course-lessons/${lesson.id}/files/upload-intent`,
+        { method: "POST", body: JSON.stringify({ kind, content_type: file.type, size_bytes: file.size }) },
+      );
+      // XMLHttpRequest, so large videos show upload progress.
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(intent.method, intent.upload_url);
+        Object.entries(intent.headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+        xhr.upload.onprogress = (e) => e.lengthComputable && setProgress({ kind, pct: Math.round((e.loaded / e.total) * 100) });
+        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status}).`)));
+        xhr.onerror = () => reject(new Error("Upload failed. Check the storage CORS settings."));
+        xhr.send(file);
+      });
+      const next = await api<ApiCourseDetail>(`course-lessons/${lesson.id}/files/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ kind, object_key: intent.object_key }),
+      });
+      onUpdated(next, kind === "video" ? "Video uploaded." : "Notes uploaded.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  const remove = async (kind: "video" | "notes") => {
+    if (!window.confirm(kind === "video" ? "Remove the uploaded video?" : "Remove the uploaded notes?")) return;
+    try {
+      onUpdated(await api<ApiCourseDetail>(`course-lessons/${lesson.id}/files/${kind}`, { method: "DELETE" }), "File removed.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't remove the file.");
+    }
+  };
+
+  const slot = (kind: "video" | "notes", label: string, has: boolean | undefined, accept: string) => (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-line px-3 py-2">
+      <span className="text-sm font-medium text-ink">{label}</span>
+      <span className="text-xs text-muted">{has ? "Uploaded" : "None"}</span>
+      <span className="flex-1" />
+      {progress?.kind === kind ? (
+        <span className="text-xs font-semibold text-brand">Uploading {progress.pct}%</span>
+      ) : (
+        <>
+          <label className="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs font-medium hover:bg-canvas">
+            {has ? "Replace" : "Upload"}
+            <input type="file" accept={accept} className="hidden" disabled={progress !== null} onChange={(e) => e.target.files?.[0] && upload(kind, e.target.files[0])} />
+          </label>
+          {has ? (
+            <button type="button" className="rounded-lg px-2 py-1.5 text-xs text-brand hover:bg-brand-soft" onClick={() => remove(kind)}>
+              Remove
+            </button>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-2 border-t border-line px-3.5 pt-3">
+      {slot("video", "Lesson video", lesson.has_video_file, VIDEO_TYPES.join(","))}
+      {slot("notes", "Notes PDF", lesson.has_notes_file, "application/pdf")}
+      <p className="text-[11.5px] text-muted">Uploaded files are stored privately (Amazon S3) and play through CloudFront. They replace the links below.</p>
       <FormError message={error} />
     </div>
   );
@@ -345,8 +444,12 @@ function LessonFields({
     <div className="grid grid-cols-1 gap-3 border-t border-line p-3.5 sm:grid-cols-[1fr_140px]">
       <TextInput label="Lesson title" required value={form.title} onChange={set("title")} placeholder="Who is Jesus?" />
       <TextInput label="Minutes" type="number" min={1} value={form.duration_minutes} onChange={set("duration_minutes")} placeholder="15" />
+      <TextInput label="Module" className="sm:col-span-2" value={form.module_title} onChange={set("module_title")} placeholder="Module 1 · Knowing Jesus (lessons with the same module are grouped)" />
       <TextInput label="Video link" type="url" className="sm:col-span-2" value={form.video_url} onChange={set("video_url")} placeholder="https://youtube.com/…" />
       <TextArea label="Lesson content" rows={5} className="sm:col-span-2" value={form.body} onChange={set("body")} placeholder="Notes, scripture and reflection questions." />
+      <TextInput label="Scripture reference" value={form.scripture_reference} onChange={set("scripture_reference")} placeholder="John 3:16" />
+      <TextInput label="Lesson notes (PDF link)" type="url" value={form.notes_url} onChange={set("notes_url")} placeholder="https://…/notes.pdf" />
+      <TextArea label="Scripture text" rows={2} className="sm:col-span-2" value={form.scripture_text} onChange={set("scripture_text")} placeholder="For God so loved the world…" />
       <div className="flex justify-end gap-2 sm:col-span-2">
         {onCancel ? <SecondaryButton onClick={onCancel}>Cancel</SecondaryButton> : null}
         <PrimaryButton icon="check" disabled={busy} onClick={onSave}>
@@ -376,9 +479,9 @@ function IconButton({ label, icon, onClick, disabled }: { label: string; icon: "
 /* Quizzes                                                             */
 /* ------------------------------------------------------------------ */
 
-type QuestionDraft = { prompt: string; options: string[]; correct_index: number };
+type QuestionDraft = { prompt: string; options: string[]; correct_index: number; explanation: string };
 
-const emptyQuestion = (): QuestionDraft => ({ prompt: "", options: ["", ""], correct_index: 0 });
+const emptyQuestion = (): QuestionDraft => ({ prompt: "", options: ["", ""], correct_index: 0, explanation: "" });
 
 function QuizzesTab({
   course,
@@ -461,7 +564,7 @@ function QuizEditor({
   const [passMark, setPassMark] = useState(String(quiz?.pass_mark ?? 70));
   const [questions, setQuestions] = useState<QuestionDraft[]>(
     quiz?.questions.length
-      ? quiz.questions.map((q) => ({ prompt: q.prompt, options: [...q.options], correct_index: q.correct_index ?? 0 }))
+      ? quiz.questions.map((q) => ({ prompt: q.prompt, options: [...q.options], correct_index: q.correct_index ?? 0, explanation: q.explanation ?? "" }))
       : [emptyQuestion()],
   );
   const { busy, error, run } = useSubmit();
@@ -491,7 +594,7 @@ function QuizEditor({
         const options = q.options.map((o) => o.trim());
         if (q.prompt.trim().length < 3) throw new Error(`Question ${i + 1} needs a question of at least 3 characters.`);
         if (options.length < 2 || options.some((o) => !o)) throw new Error(`Question ${i + 1} needs at least two filled-in answers.`);
-        return { prompt: q.prompt.trim(), options, correct_index: q.correct_index };
+        return { prompt: q.prompt.trim(), options, correct_index: q.correct_index, explanation: q.explanation.trim() || null };
       });
       const body = JSON.stringify({ title: title.trim(), lesson_id: lessonId || null, pass_mark: mark, questions: cleaned });
       if (quiz) await api(`course-quizzes/${quiz.id}`, { method: "PATCH", body });
@@ -553,6 +656,13 @@ function QuizEditor({
                 + Add answer
               </button>
             ) : null}
+            <TextInput
+              label="Why this is the right answer (shown after answering)"
+              className="mt-3"
+              value={q.explanation}
+              onChange={(v) => patch(qi, { explanation: v })}
+              placeholder="Matthew, Mark, Luke and John tell the story of Jesus' life."
+            />
           </li>
         ))}
       </ol>

@@ -111,6 +111,13 @@ def _make_member(
         chapter_id=chapter_id,
         data={"how": how},
     )
+    chapter = db.get(Chapter, chapter_id)
+    if chapter is not None:
+        from app.emails import templates
+        from app.services import mailer
+
+        first = profile.display_name.split(" ")[0] if profile.display_name else None
+        mailer.send(db, user.email, templates.chapter_joined(first, chapter.name), "chapter_joined")
 
 
 # Chapters

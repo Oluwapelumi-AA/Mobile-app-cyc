@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services import notification_jobs
 from app.services.email_sender import EmailSender, get_email_sender
+from app.services import mailer
 from app.services.push_provider import PushProvider, get_push_provider
 
 logger = logging.getLogger("app.workers.notifications")
@@ -39,7 +40,13 @@ def run_once(
             if batch.handled < notification_jobs.DEFAULT_BATCH_SIZE:
                 break
         pruned = notification_jobs.prune_notifications(db) if prune else 0
+        # Account and event emails that failed on the first try.
+        emails = mailer.deliver_pending(db, email)
+        if prune:
+            mailer.purge_old(db)
+            db.commit()
     return {
+        "emails": emails,
         "reminded": reminded,
         "sent": stats.sent,
         "skipped": stats.skipped,

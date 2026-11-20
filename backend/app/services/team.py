@@ -181,6 +181,14 @@ def _person(
     return user, profile, None
 
 
+def _role_email(db: Session, user: User, profile: UserProfile, role: str, place: str | None, password: str | None) -> None:
+    from app.emails import templates
+    from app.services import mailer
+
+    first = profile.display_name.split(" ")[0] if profile.display_name else None
+    mailer.send(db, user.email, templates.staff_role(first, role, place, password), "staff_role")
+
+
 def _commit(db: Session) -> None:
     try:
         db.commit()
@@ -283,6 +291,7 @@ def add_coordinator(db: Session, actor_id: UserId, data: CoordinatorCreate) -> T
         chapter_id=chapter.id, data={"from": previous_role, "to": "coordinator"},
     )
     notifications.staff_role_changed(db, chapter.id, user.id, "coordinator", actor_id)
+    _role_email(db, user, profile, "Chapter Coordinator", chapter.name, password)
     _commit(db)
     return _result(user, profile, password, replaced)
 
@@ -324,6 +333,8 @@ def add_platform_staff(db: Session, actor_id: UserId, data: AdminCreate) -> Team
         db, actor_id, "user.role_changed", "user", user.id,
         data={"from": old_role, "to": data.account_role},
     )
+    role_name = "an Admin" if data.account_role == AccountRole.ADMIN else "a Moderator"
+    _role_email(db, user, profile, role_name, None, password)
     _commit(db)
     return _result(user, profile, password)
 

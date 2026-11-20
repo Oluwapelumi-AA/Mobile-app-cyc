@@ -337,6 +337,19 @@ export type ChapterRow = {
   contact: string;
   active: boolean;
   createdAt: string;
+  /** Where and when it meets, shown on the chapter page in the app. */
+  details?: ChapterDetails;
+};
+
+export type ChapterDetails = {
+  contact_phone: string | null;
+  state: string | null;
+  venue: string | null;
+  address: string | null;
+  meeting_schedule: string | null;
+  meeting_time: string | null;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 export const sampleChapters: ChapterRow[] = [

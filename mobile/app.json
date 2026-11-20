@@ -1,25 +1,65 @@
 {
   "expo": {
-    "name": "mobile-app-temp",
-    "slug": "mobile-app-temp",
+    "name": "CYC",
+    "slug": "cyc",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "org.cyc.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#990000",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "org.cyc.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true
+        }
+      ],
+      "expo-video",
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/cyc-crest.png",
+          "imageWidth": 160,
+          "backgroundColor": "#990000"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#990000"
+        }
+      ],
+      "expo-asset",
+      "expo-sharing"
+    ],
+    "scheme": "cyc",
+    "splash": {
+      "image": "./assets/cyc-crest.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#990000"
+    },
+    "experiments": {
+      "typedRoutes": false
     }
   }
 }
