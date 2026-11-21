@@ -14,12 +14,15 @@ What protects CYC accounts and data, and the settings behind it.
   client IDs (`GOOGLE_CLIENT_IDS`).
 - **Two-step sign-in** (authenticator app, RFC 6238): required for admins
   (`REQUIRE_ADMIN_MFA`), optional for everyone else. 10 one-time recovery
-  codes. Secrets are encrypted at rest; a code can't be reused.
+  codes. Secrets are encrypted at rest; a code can't be reused (the last
+  accepted code is saved in the database).
 - **Lockout**: 5 wrong passwords (or two-step codes) lock the account for
   15 minutes and email the owner (`LOGIN_MAX_FAILURES`, `LOGIN_LOCK_MINUTES`).
 - **Rate limits** per IP: sign-in 10/min, sign-up 5/min, Google 10/min, codes
-  10/min, resend 3/min, password reset 3/min (`RATE_LIMIT_ENABLED`). Behind a
-  proxy run uvicorn with `--proxy-headers` so real IPs are used.
+  10/min, resend 3/min, password reset 3/min (`RATE_LIMIT_ENABLED`). Counts
+  are shared through Redis/Valkey (`REDIS_URL`, required in production) so
+  they hold across several API servers. Behind a proxy run uvicorn with
+  `--proxy-headers` so real IPs are used.
 - **Same answers** for unknown and known emails on reset and resend, and
   equal timing on sign-in, so the API can't be used to find members.
 
