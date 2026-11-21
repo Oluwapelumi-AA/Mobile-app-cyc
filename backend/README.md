@@ -38,8 +38,10 @@ Detailed setup commands will be added as the implementation progresses.
 
 ## Notification worker
 
-Push notifications, notification emails and event reminders are sent by a
-separate process that runs next to the API with the same settings:
+Push notifications, event reminders and **every email** (sign-up codes,
+password resets, notifications…) are sent by a separate process that runs
+next to the API with the same settings. Without it, no email goes out. See
+`docs/gmail-smtp.md`.
 
 ```bash
 python -m app.workers.notifications          # keeps running

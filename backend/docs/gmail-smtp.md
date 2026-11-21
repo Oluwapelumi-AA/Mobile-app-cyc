@@ -6,10 +6,32 @@ linked, two-step sign-in on/off, account suspended/reinstated/deleted, staff
 role given, chapter joined, event registration, certificate earned, and
 notification emails. Emails are branded HTML with a plain-text version.
 
-Emails are queued in the `outbound_emails` table and sent straight after
-each request. If Gmail is unreachable, the notification worker retries them
-with growing waits (`python -m app.workers.notifications`), so keep the
-worker running in production.
+## How emails go out
+
+The API never talks to Gmail during a request. Each email is saved in the
+`outbound_emails` table, and the **notification worker** sends it:
+
+```
+python -m app.workers.notifications
+```
+
+- **The worker must be running, or no email goes out at all**, including
+  sign-up codes and password reset codes. The emails wait in the table and
+  go out as soon as the worker starts.
+- The worker checks every `NOTIFICATION_WORKER_INTERVAL_SECONDS` (15 by
+  default), so a code can take up to about 15 seconds to arrive. Lower it
+  (e.g. 5) if that feels slow.
+- If Gmail is unreachable, the worker retries with growing waits (2, 4, 8…
+  minutes, 6 tries), then marks the email `failed`.
+- With PostgreSQL, each email is locked while it is sent, so running more
+  than one worker is safe.
+
+On Render, add the worker as a **Background Worker** with the same
+environment variables as the API and the start command above.
+
+With `EMAIL_BACKEND=fake` (development) nothing is sent: emails are marked
+sent at once, and you can read them, including codes, in the
+`outbound_emails` table.
 
 ## 1. Prepare the Gmail account
 
@@ -37,11 +59,25 @@ PUBLIC_APP_URL=https://cyc.org
 `EMAIL_FROM` must use the same address as `SMTP_USERNAME`, or Gmail rewrites
 it. Port 465 with `SMTP_SECURITY=ssl` also works.
 
+With `EMAIL_BACKEND=smtp` the API won't start unless `SMTP_HOST`,
+`SMTP_USERNAME` and `SMTP_PASSWORD` are set and `EMAIL_FROM` is a real
+address.
+
+Run the worker with the same `.env` as the API (second terminal locally):
+
+```
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m app.workers.notifications
+```
+
 ## 3. Check it
 
-Start the API and ask for a password reset for your own account, or create a
-new account. Look in the inbox (and spam the first time; mark it "Not spam").
-Failures are recorded in `outbound_emails.last_error`.
+Start the API **and the worker**, then ask for a password reset for your own
+account, or create a new account. Look in the inbox (and spam the first
+time; mark it "Not spam"). If nothing arrives, check the email's row in
+`outbound_emails`: `status` stays `pending` while the worker isn't running,
+and `last_error` shows why Gmail refused it (usually a wrong App Password).
 
 ## Limits
 
