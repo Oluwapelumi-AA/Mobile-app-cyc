@@ -1,8 +1,8 @@
-"""Per-IP request limits for sign-in and other abuse-prone endpoints.
 
-Limits live in memory, per API process. Behind a proxy or load balancer,
-run uvicorn with ``--proxy-headers --forwarded-allow-ips=<proxy IP>`` so the
-client's real IP is used.
+"""Shared per-IP request limits for abuse-prone endpoints.
+
+Production uses Redis-compatible storage (Render Valkey).
+Local development and tests use in-memory storage.
 """
 
 from fastapi import Request
@@ -13,10 +13,23 @@ from slowapi.util import get_remote_address
 
 from app.core.config import settings
 
-limiter = Limiter(key_func=get_remote_address, enabled=settings.rate_limit_enabled, headers_enabled=False)
+
+# Use shared Redis-compatible storage when configured.
+# Otherwise, use in-memory storage for local development and tests.
+storage_uri = settings.redis_url or "memory://"
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=storage_uri,
+    enabled=settings.rate_limit_enabled,
+    headers_enabled=False,
+)
 
 
-def rate_limited(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+def rate_limited(
+    request: Request,
+    exc: RateLimitExceeded,
+) -> JSONResponse:
     return JSONResponse(
         status_code=429,
         content={

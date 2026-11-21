@@ -34,8 +34,14 @@ class Settings(BaseSettings):
 
     # Sign-in protection
     rate_limit_enabled: bool = True
+
+    # Shared rate-limit storage (Render Valkey / Redis-compatible).
+    # Empty uses in-memory storage for local development and tests.
+    redis_url: str = ""
+
     # Wrong passwords in a row before the account is locked for a while.
     login_max_failures: int = 5
+
     login_lock_minutes: int = 15
     # New email sign-ups confirm a 6-digit code before they can sign in.
     require_email_verification: bool = True
@@ -158,8 +164,35 @@ class Settings(BaseSettings):
         if self.smtp_security not in {"starttls", "ssl", "none"}:
             raise ValueError("SMTP_SECURITY must be starttls, ssl or none")
 
-        if self.email_backend == "smtp" and not self.smtp_host:
-            raise ValueError("SMTP_HOST is required when EMAIL_BACKEND=smtp")
+        if self.email_backend not in {"fake", "none", "smtp"}:
+            raise ValueError("EMAIL_BACKEND must be fake, none or smtp")
+
+        if self.email_backend == "smtp":
+            if not self.smtp_host.strip():
+                raise ValueError(
+                    "SMTP_HOST is required when EMAIL_BACKEND=smtp"
+                )
+
+            if not self.smtp_username.strip():
+                raise ValueError(
+                    "SMTP_USERNAME is required when EMAIL_BACKEND=smtp"
+                )
+
+            if not self.smtp_password.strip():
+                raise ValueError(
+                    "SMTP_PASSWORD is required when EMAIL_BACKEND=smtp"
+                )
+
+            if not 1 <= self.smtp_port <= 65535:
+                raise ValueError(
+                    "SMTP_PORT must be between 1 and 65535"
+                )
+
+            if self.email_from.endswith(".invalid>"):
+                raise ValueError(
+                    "EMAIL_FROM must be a real sender address "
+                    "when EMAIL_BACKEND=smtp"
+                )
 
         if self.default_language not in self.supported_languages:
             raise ValueError("DEFAULT_LANGUAGE must be one of SUPPORTED_LANGUAGES")
@@ -208,6 +241,8 @@ class Settings(BaseSettings):
 
             if not self.rate_limit_enabled:
                 raise ValueError("RATE_LIMIT_ENABLED must stay on in production")
+            if not self.redis_url:
+                raise ValueError("REDIS_URL is required for shared rate limiting in production")
 
             if len(self.secret_key) < 32:
                 raise ValueError(

@@ -1,3 +1,4 @@
+
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -44,7 +45,14 @@ def test_s3_needs_a_bucket():
 
 def test_fake_video_is_refused_in_production():
     with pytest.raises(ValidationError):
-        Settings(environment="production", secret_key="x" * 40, video_provider="fake", rate_limit_enabled=True)
+        Settings(
+            environment="production",
+            secret_key="x" * 40,
+            video_provider="fake",
+            rate_limit_enabled=True,
+            redis_url="redis://localhost:6379/0",
+        )
+
     production = Settings(
         environment="production",
         rate_limit_enabled=True,
@@ -52,7 +60,9 @@ def test_fake_video_is_refused_in_production():
         video_provider="none",
         push_provider="none",
         email_backend="none",
+        redis_url="redis://localhost:6379/0",
     )
+
     assert isinstance(build_video_provider(production), UnconfiguredVideoProvider)
     assert isinstance(build_video_provider(Settings()), FakeVideoProvider)
 

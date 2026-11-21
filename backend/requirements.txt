@@ -11,3 +11,4 @@ boto3
 slowapi
 pytest
 httpx
+redis>=5.0,<7.0
