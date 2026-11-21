@@ -34,26 +34,31 @@ class User(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
+
     email: Mapped[str] = mapped_column(
         String(320),
         unique=True,
         index=True,
         nullable=False,
     )
+
     password_hash: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
     )
+
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
         nullable=False,
     )
+
     is_verified: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
         nullable=False,
     )
+
     account_role: Mapped[AccountRole] = mapped_column(
         SQLAlchemyEnum(
             AccountRole,
@@ -67,6 +72,7 @@ class User(Base):
         default=AccountRole.USER,
         nullable=False,
     )
+
     membership_status: Mapped[MembershipStatus] = mapped_column(
         SQLAlchemyEnum(
             MembershipStatus,
@@ -78,45 +84,72 @@ class User(Base):
             ],
         ),
         default=MembershipStatus.GUEST,
-	server_default="guest",
-	nullable=False,
+        server_default="guest",
+        nullable=False,
     )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
         nullable=False,
     )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
         onupdate=utc_now,
         nullable=False,
     )
+
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
 
-    # Sign-in methods. Accounts made with Google have no password of their
-    # own (``has_password`` false) until they set one.
+    # Sign-in methods. Google accounts can initially exist
+    # without a password until the user sets one.
     has_password: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="1", nullable=False
+        Boolean,
+        default=True,
+        server_default="1",
+        nullable=False,
     )
+
     google_sub: Mapped[str | None] = mapped_column(
-        String(255), unique=True, index=True, nullable=True
+        String(255),
+        unique=True,
+        index=True,
+        nullable=True,
     )
 
-    # Wrong passwords in a row, and when a temporary lock ends.
+    # Failed login attempts and temporary account lock.
     failed_login_count: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", nullable=False
-    )
-    locked_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False,
     )
 
-    # Two-step sign-in (authenticator app). The secret is stored encrypted;
-    # it only counts once ``mfa_enabled_at`` is set.
-    mfa_secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Two-step sign-in (authenticator app).
+    # The secret is stored encrypted.
+    mfa_secret: Mapped[str | None] = mapped_column(
+        String(512),
+        nullable=True,
+    )
+
     mfa_enabled_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Persistent replay protection for authenticator codes.
+    # Stores the last successfully accepted TOTP time step.
+    mfa_last_accepted_step: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
     )

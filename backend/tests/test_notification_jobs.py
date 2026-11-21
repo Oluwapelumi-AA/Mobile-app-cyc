@@ -300,7 +300,15 @@ def test_smtp_errors_become_retryable(monkeypatch):
         raise ConnectionRefusedError("no server")
 
     monkeypatch.setattr(smtplib, "SMTP", refuse)
-    sender = SmtpEmailSender(Settings(email_backend="smtp", smtp_host="localhost"))
+    sender = SmtpEmailSender(
+        Settings(
+            email_backend="smtp",
+            smtp_host="localhost",
+            smtp_username="test@example.com",
+            smtp_password="test-password",
+            email_from="CYC <test@example.com>",
+        )
+    )
     with pytest.raises(EmailError):
         sender.send(EmailMessage(to="a@example.com", subject="Hi", text="Hi"))
 
